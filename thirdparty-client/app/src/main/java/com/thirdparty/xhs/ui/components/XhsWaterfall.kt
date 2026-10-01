@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -102,13 +103,15 @@ fun XhsWaterfallGrid(
 }
 
 /**
- * Masonry cell. Height varies by a stable hash of the id so columns stagger
- * naturally (avoids the rigid alternating look).
+ * Masonry cell.
+ *
+ * The cell is sized from the cover's real aspect ratio (`note_cover_size`) so
+ * the columns stagger authentically and images are not oddly cropped. The ratio
+ * is clamped because a few covers are extreme (e.g. "375*210").
  */
 @Composable
 fun WaterfallCard(item: NoteItem, onClick: () -> Unit) {
-    val heights = intArrayOf(150, 180, 210, 165, 195)
-    val cellHeight = heights[(item.noteId.hashCode() and 0x7FFFFFFF) % heights.size]
+    val ratio = item.coverRatio.coerceIn(0.55f, 1.6f)
     Surface(
         onClick = onClick,
         shape = MaterialTheme.shapes.medium,
@@ -120,7 +123,7 @@ fun WaterfallCard(item: NoteItem, onClick: () -> Unit) {
                 XhsAsyncImage(
                     url = item.cover.ifEmpty { item.thumbnail },
                     contentDescription = item.title,
-                    modifier = Modifier.fillMaxWidth().height(cellHeight.dp)
+                    modifier = Modifier.fillMaxWidth().aspectRatio(ratio)
                 )
                 FeeBadge(item, compact = true, modifier = Modifier.align(Alignment.TopEnd).padding(Spacing.xs))
             }

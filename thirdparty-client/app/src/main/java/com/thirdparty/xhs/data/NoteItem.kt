@@ -4,6 +4,20 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
+ * Parse a "1080*720"-style size string into a width/height ratio.
+ * Returns [fallback] when the field is missing or malformed.
+ */
+internal fun parseRatio(size: String?, fallback: Float): Float {
+    if (size.isNullOrBlank()) return fallback
+    val parts = size.split('*')
+    if (parts.size != 2) return fallback
+    val w = parts[0].trim().toFloatOrNull() ?: return fallback
+    val h = parts[1].trim().toFloatOrNull() ?: return fallback
+    if (w <= 0f || h <= 0f) return fallback
+    return w / h
+}
+
+/**
  * One image of a photo post. [ratio] is width/height taken from the backend's
  * `image_size` field ("1080*720"), so the viewer can render it at its true
  * proportions instead of stretching or cropping.
@@ -38,6 +52,12 @@ data class NoteItem(
     val images: List<NoteImage> = emptyList(),
     /** canonical web link for this note (`share_url`), used by the share action */
     val shareUrl: String = "",
+    /**
+     * Cover width/height, from `note_cover_size` (e.g. "375*489"). The masonry
+     * grid sizes each cell with this so proportions match the real content
+     * instead of a synthetic height. Falls back to portrait when absent.
+     */
+    val coverRatio: Float = DEFAULT_COVER_RATIO,
     val rawJson: String = ""
 ) {
     /** Whether this work is paid (has a coin price). */
@@ -60,6 +80,7 @@ data class NoteItem(
         mediaUrl = o.optString("note_media_url"),
         images = NoteItem.parseImages(o),
         shareUrl = o.optString("share_url"),
+        coverRatio = parseRatio(o.optString("note_cover_size"), DEFAULT_COVER_RATIO),
         rawJson = o.toString()
     )
 
@@ -67,7 +88,11 @@ data class NoteItem(
         get() = mediaUrl.isNotEmpty()
 
     companion object {
-        private fun parseImages(o: JSONObject): List<NoteImage> {            val list = o.optJSONArray("note_image_list") ?: JSONArray()
+        /** portrait-ish default used when the backend omits `note_cover_size` */
+        const val DEFAULT_COVER_RATIO = 3f / 4f
+
+        private fun parseImages(o: JSONObject): List<NoteImage> {
+            val list = o.optJSONArray("note_image_list") ?: JSONArray()
             val out = mutableListOf<NoteImage>()
             for (i in 0 until list.length()) {
                 val obj = list.optJSONObject(i) ?: continue
