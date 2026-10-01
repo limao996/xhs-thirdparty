@@ -58,14 +58,9 @@ fun MediaPlayer(
     onAspect: ((Float) -> Unit)? = null
 ) {
     val context = LocalContext.current.applicationContext
-    val player = remember(url) {
-        ExoPlayer.Builder(context).build().apply {
-            repeatMode = Player.REPEAT_MODE_ONE
-            setMediaItem(MediaItem.fromUri(url))
-            prepare()
-            playWhenReady = true
-        }
-    }
+    val player = remember(url) { buildVideoPlayer(context, url) }
+    // stop playback/audio when the app leaves the foreground
+    PauseWhenNotStarted(player)
     // report the natural aspect ratio so callers can size the container
     DisposableEffect(player, onAspect) {
         val listener = if (onAspect == null) null else object : Player.Listener {

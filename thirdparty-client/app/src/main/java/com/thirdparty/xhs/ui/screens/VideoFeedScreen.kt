@@ -52,8 +52,10 @@ import com.thirdparty.xhs.common.RepoViewModelFactory
 import com.thirdparty.xhs.data.NoteItem
 import com.thirdparty.xhs.ui.components.EmptyState
 import com.thirdparty.xhs.ui.components.FeeBadge
+import com.thirdparty.xhs.ui.components.PauseWhenNotStarted
 import com.thirdparty.xhs.ui.components.PlayerView
 import com.thirdparty.xhs.ui.components.XhsAsyncImage
+import com.thirdparty.xhs.ui.components.buildVideoPlayer
 import com.thirdparty.xhs.ui.theme.Scrim
 import com.thirdparty.xhs.ui.theme.Spacing
 import com.thirdparty.xhs.ui.viewmodel.VideoFeedViewModel
@@ -240,13 +242,10 @@ private fun rememberActivePlayer(
     val aspect by rememberUpdatedState(onAspect)
     val player = remember(url, active) {
         if (url.isBlank() || !active) null
-        else ExoPlayer.Builder(context).build().apply {
-            repeatMode = Player.REPEAT_MODE_ONE
-            setMediaItem(MediaItem.fromUri(url))
-            prepare()
-            playWhenReady = true
-        }
+        else buildVideoPlayer(context, url)
     }
+    // stop playback/audio when the app leaves the foreground
+    PauseWhenNotStarted(player)
     DisposableEffect(player) {
         val p = player
         val listener = if (p == null) null else object : Player.Listener {
