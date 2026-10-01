@@ -32,30 +32,14 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
         const val RETRY_BACKOFF_MS = 350L
     }
 
-    /** The identity sent in the User-Id header before the first guest login. */
-    private fun deviceUserId(): String {
-        // The backend only serves account endpoints (mine/user-info etc.) for
-        // *established* guest device ids; every other id returns "用戶ID錯誤".
-        // So the identity must stay stable across launches. Only the session
-        // token rotates — the guest ACCOUNT cannot be changed (verified by
-        // probing other device ids, other suffixes and extra login params; all
-        // either fail or merely echo the device id back as user_hash).
-        credentialStore.deviceId.let { if (it.isNotEmpty()) return it + "889X" }
-        // seed from android_id when possible, so each install is stable
-        val mac = macLikeId()
-        credentialStore.saveDevice(mac)
-        return mac + "889X"
-    }
-
-    private fun macLikeId(): String {
-        val androidId = android.provider.Settings.Secure.getString(
-            context.contentResolver, android.provider.Settings.Secure.ANDROID_ID
-        ) ?: "0"
-        val hex = androidId.filter { it.isDigit() || it.lowercaseChar() in 'a'..'f' }
-        if (hex.length >= 12) return hex.take(12).uppercase()
-        val seed = (androidId.hashCode().toLong() and 0xFFFFFFFFL).toString(16)
-        return (seed + "abcdef" + androidId.length.toString(16) + "13579bdf").take(12).uppercase()
-    }
+    /**
+     * The identity sent in the `User-Id` header for the guest login.
+     *
+     * The backend does not create accounts, so this must be one of the ids in
+     * [CredentialStore.DEVICE_POOL] — anything else answers `result=-1
+     * 用戶ID錯誤`. `CredentialStore` owns which pool entry is current.
+     */
+    private fun deviceUserId(): String = credentialStore.deviceId + "889X"
 
     /** Perform a POST to an API path with the given business params. */
     fun call(path: String, params: Map<String, Any> = emptyMap()): JSONObject {
@@ -187,7 +171,20 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
      * guest account credential (server issues a new user_token each time),
      * which mirrors "每次启动都更换新的游客账号".
      */
-    fun loginAsGuest(): JSONObject {
+    /**
+     * Log in as a guest.
+     *
+     * When [advanceDevice] is true the app first moves to the next identity in
+     * [CredentialStore.DEVICE_POOL], so consecutive launches use different guest
+     * accounts. The stored `user_hash` must be cleared at the same time —
+     * `getUserId()` prefers it over the device identity, and a stale hash would
+     * pin us to the previous account.
+     */
+    fun loginAsGuest(advanceDevice: Boolean = true): JSONObject {
+        if (advanceDevice) {
+            credentialStore.nextDevice()
+            credentialStore.userHash = ""
+        }
         val res = call("v2/user/login-with-guest", emptyMap())
         if (res.optInt("result") == 1) {
             val data = res.optJSONObject("data") ?: JSONObject()

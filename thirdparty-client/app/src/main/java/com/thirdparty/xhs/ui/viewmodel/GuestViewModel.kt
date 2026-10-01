@@ -32,9 +32,9 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
     val applied: StateFlow<Boolean> = _applied.asStateFlow()
 
     /**
-     * Called once on cold start: fetch a fresh guest session token.
-     * Deliberately silent — a new session token is not user-visible news, and
-     * the account itself does not change.
+     * Called once on cold start: move to the next pooled guest account and log
+     * in. This genuinely switches accounts now (see CredentialStore.DEVICE_POOL),
+     * so the caller may show a toast.
      */
     fun ensureFreshGuest() {
         if (_applied.value) return
@@ -48,7 +48,7 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
         }
     }
 
-    /** Manual session refresh triggered from the 我的 screen. */
+    /** Manual account switch triggered from the 我的 screen. */
     fun rotate(onToast: (String) -> Unit = {}) {
         // guard against parallel logins from repeated taps
         if (_rotating.value) return
@@ -57,7 +57,7 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
             val ok = runCatching { repo.rotateGuest() }
                 .getOrNull()?.optInt("result") == 1
             _rotating.value = false
-            onToast(if (ok) "已刷新游客会话" else "刷新失败，沿用当前会话")
+            onToast(if (ok) "已切换游客账号" else "切换失败，沿用当前账号")
             refreshLabel()
         }
     }
