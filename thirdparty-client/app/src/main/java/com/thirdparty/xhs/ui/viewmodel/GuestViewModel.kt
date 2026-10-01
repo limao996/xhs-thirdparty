@@ -38,8 +38,10 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
         }
     }
 
-    /** Manual rotate triggered from the top bar. */
+    /** Manual rotate triggered from the 我的 screen. */
     fun rotate(onToast: (String) -> Unit = {}) {
+        // guard against parallel logins from repeated taps
+        if (_rotating.value) return
         viewModelScope.launch {
             _rotating.value = true
             val ok = runCatching { repo.rotateGuest() }

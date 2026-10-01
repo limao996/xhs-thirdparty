@@ -97,6 +97,10 @@ fun DetailScreen(
     var fullscreen by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     val view = LocalView.current
+
+    // In fullscreen the app bar is hidden, so the system back gesture must leave
+    // fullscreen first instead of popping the whole detail screen.
+    androidx.activity.compose.BackHandler(enabled = fullscreen) { fullscreen = false }
     // 真全屏：隐藏状态/导航栏（不强制方向，横竖都行）
     val window = (LocalContext.current as? android.app.Activity)?.window
     DisposableEffect(fullscreen, window) {
