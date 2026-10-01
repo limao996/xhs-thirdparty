@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -58,6 +59,7 @@ import com.thirdparty.xhs.App
 import com.thirdparty.xhs.data.CommentItem
 import com.thirdparty.xhs.data.CommentReply
 import com.thirdparty.xhs.data.NoteImage
+import com.thirdparty.xhs.data.NoteItem
 import com.thirdparty.xhs.ui.components.FeeBadge
 import com.thirdparty.xhs.ui.components.ImageGallery
 import com.thirdparty.xhs.ui.components.MediaPlayer
@@ -93,6 +95,7 @@ fun DetailScreen(
 ) {
     val state by viewModel.ui.collectAsStateWithLifecycle()
     var fullscreen by rememberSaveable { mutableStateOf(false) }
+    val context = LocalContext.current
     val view = LocalView.current
     // 真全屏：隐藏状态/导航栏（不强制方向，横竖都行）
     val window = (LocalContext.current as? android.app.Activity)?.window
@@ -123,6 +126,9 @@ fun DetailScreen(
                         }
                     },
                     actions = {
+                        IconButton(onClick = { shareNote(context, state.item) }) {
+                            Icon(Icons.Filled.Share, contentDescription = "分享")
+                        }
                         IconButton(onClick = { viewModel.toggleSave() }) {
                             Icon(
                                 if (state.saved) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
@@ -375,6 +381,36 @@ private fun ReplyRow(r: CommentReply) {
 
 private fun timeStr(ms: Long): String =
     SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(ms))
+
+/**
+ * Share the note through the system sheet, falling back to copying the link
+ * when the backend did not provide a `share_url`.
+ */
+private fun shareNote(context: android.content.Context, item: NoteItem?) {
+    if (item == null) return
+    val link = item.shareUrl.ifBlank { "https://${com.thirdparty.xhs.net.CredentialStore.DEFAULT_HOST}" }
+    val text = buildString {
+        if (item.title.isNotBlank()) append(item.title).append('\n')
+        append(link)
+    }
+    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(android.content.Intent.EXTRA_SUBJECT, item.title)
+        putExtra(android.content.Intent.EXTRA_TEXT, text)
+    }
+    runCatching {
+        context.startActivity(
+            android.content.Intent.createChooser(send, "分享到").apply {
+                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        )
+    }.onFailure {
+        val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+            as? android.content.ClipboardManager
+        cm?.setPrimaryClip(android.content.ClipData.newPlainText("link", link))
+        android.widget.Toast.makeText(context, "已复制链接", android.widget.Toast.LENGTH_SHORT).show()
+    }
+}
 
 private fun com.thirdparty.xhs.data.NoteItem.detailTopic(): String =
     runCatching { org.json.JSONObject(rawJson).optString("topic_title") }.getOrDefault("")

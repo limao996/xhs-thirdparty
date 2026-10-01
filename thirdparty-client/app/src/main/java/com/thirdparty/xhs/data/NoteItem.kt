@@ -36,6 +36,8 @@ data class NoteItem(
     val content: String = "",
     val mediaUrl: String = "",
     val images: List<NoteImage> = emptyList(),
+    /** canonical web link for this note (`share_url`), used by the share action */
+    val shareUrl: String = "",
     val rawJson: String = ""
 ) {
     /** Whether this work is paid (has a coin price). */
@@ -57,6 +59,7 @@ data class NoteItem(
         content = o.optString("note_content"),
         mediaUrl = o.optString("note_media_url"),
         images = NoteItem.parseImages(o),
+        shareUrl = o.optString("share_url"),
         rawJson = o.toString()
     )
 
