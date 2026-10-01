@@ -55,9 +55,16 @@ import androidx.compose.ui.input.pointer.pointerInput
 
 /**
  * Detail page player: media3 surface + custom controller.
- * - controller auto-hides after 3s, tap to show/hide
+ * - controller auto-hides after 3s, tap to show/hide ([controlsHiddenInitially]
+ *   starts it hidden, which is what the windowed player wants)
  * - full controls: play/pause, seek, time, replay, fullscreen (横/竖 皆可)
- * - releases on dispose so no residual frame on exit
+ * - releases on dispose so no residual frame on exit — **unless** the player was
+ *   passed in via [externalPlayer], in which case the caller owns its lifetime
+ *
+ * [externalPlayer] exists so the windowed and fullscreen layouts can render the
+ * SAME ExoPlayer. They are separate composables in separate branches, so without
+ * this each branch built and released its own player and entering/leaving
+ * fullscreen restarted the video from zero.
  */
 @Composable
 fun MediaPlayer(
@@ -66,23 +73,31 @@ fun MediaPlayer(
     fullscreen: Boolean = false,
     onToggleFullscreen: () -> Unit = {},
     /** Reports the video's real width/height ratio once known. */
-    onAspect: ((Float) -> Unit)? = null
+    onAspect: ((Float) -> Unit)? = null,
+    /** an externally owned player to render instead of building a new one */
+    externalPlayer: ExoPlayer? = null,
+    /** start with the control bar hidden; a tap reveals it */
+    controlsHiddenInitially: Boolean = false
 ) {
     val context = LocalContext.current.applicationContext
+    val ownsPlayer = externalPlayer == null
     // Rotating the device recreates the Activity (verified: WindowManager logs a
     // "relaunch"), which rebuilds this composition and therefore the player. The
     // playback position must survive that or the video jumps back to the start.
     // rememberSaveable is what carries it across the configuration change.
     var resumeMs by rememberSaveable(url) { androidx.compose.runtime.mutableLongStateOf(0L) }
-    val player = remember(url) { buildVideoPlayer(context, url) }
+    val player = externalPlayer ?: remember(url) { buildVideoPlayer(context, url) }
 
-    // pick up where the previous instance left off (a no-op on first entry)
+    // pick up where the previous instance left off (a no-op on first entry).
+    // Skipped for a shared player: the owner keeps the position itself, so
+    // seeking here would fight it.
     LaunchedEffect(player) {
-        if (resumeMs > 0L) player.seekTo(resumeMs)
+        if (ownsPlayer && resumeMs > 0L) player.seekTo(resumeMs)
     }
     // keep the saved position fresh without touching composition state: the read
     // and write both happen in a coroutine, so nothing recomposes every tick
     LaunchedEffect(player) {
+        if (!ownsPlayer) return@LaunchedEffect
         while (true) {
             if (player.isPlaying) resumeMs = player.currentPosition
             delay(500)
@@ -104,6 +119,7 @@ fun MediaPlayer(
     }
     DisposableEffect(player) {
         onDispose {
+            if (!ownsPlayer) return@onDispose
             player.stop()
             player.clearMediaItems()
             player.release()
@@ -119,7 +135,7 @@ fun MediaPlayer(
             resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT,
             modifier = Modifier.fillMaxSize()
         )
-        AutoHideController(player, fullscreen, onToggleFullscreen)
+        AutoHideController(player, fullscreen, onToggleFullscreen, controlsHiddenInitially)
         // buffering feedback
         BufferingIndicator(player, modifier = Modifier.fillMaxSize())
         // a dead stream must not fail silently
@@ -135,10 +151,11 @@ fun MediaPlayer(
 private fun AutoHideController(
     player: Player,
     fullscreen: Boolean,
-    onToggleFullscreen: () -> Unit
+    onToggleFullscreen: () -> Unit,
+    startHidden: Boolean = false
 ) {
     val scope = rememberCoroutineScope()
-    var visible by remember(player) { mutableStateOf(true) }
+    var visible by remember(player) { mutableStateOf(!startHidden) }
     var playing by remember(player) { mutableStateOf(player.isPlaying) }
     var duration by remember(player) { mutableFloatStateOf(0f) }
     var position by remember(player) { mutableFloatStateOf(0f) }

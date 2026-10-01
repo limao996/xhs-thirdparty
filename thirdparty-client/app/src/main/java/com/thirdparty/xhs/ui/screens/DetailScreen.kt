@@ -73,6 +73,10 @@ import com.thirdparty.xhs.ui.viewmodel.DetailViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.thirdparty.xhs.ui.components.buildVideoPlayer
+import kotlinx.coroutines.delay
 
 /**
  * 详情页：视频播放器 + 标题 + 作者 + 介绍 + 标签 + 评论区。
@@ -159,18 +163,52 @@ fun DetailScreen(
             else -> {
                 val item = state.item!!
                 val isVideo = item.isVideo && item.mediaUrl.isNotEmpty()
+                // ONE player for both layouts. The windowed and fullscreen branches
+                // are different composables, so if each built its own player then
+                // toggling fullscreen would tear one down and start the other from
+                // zero — the video appeared to restart every time.
+                val sharedPlayer = if (isVideo) {
+                    remember(item.mediaUrl) {
+                        buildVideoPlayer(
+                            context = context.applicationContext,
+                            url = item.mediaUrl
+                        )
+                    }
+                } else null
+                // survive the Activity relaunch that an orientation change causes
+                var resumeMs by rememberSaveable(item.mediaUrl) {
+                    androidx.compose.runtime.mutableLongStateOf(0L)
+                }
+                LaunchedEffect(sharedPlayer) {
+                    if (sharedPlayer != null && resumeMs > 0L) sharedPlayer.seekTo(resumeMs)
+                }
+                LaunchedEffect(sharedPlayer) {
+                    if (sharedPlayer == null) return@LaunchedEffect
+                    while (true) {
+                        if (sharedPlayer.isPlaying) resumeMs = sharedPlayer.currentPosition
+                        delay(500)
+                    }
+                }
+                DisposableEffect(sharedPlayer) {
+                    onDispose {
+                        sharedPlayer?.stop()
+                        sharedPlayer?.clearMediaItems()
+                        sharedPlayer?.release()
+                    }
+                }
                 if (fullscreen && isVideo) {
                     // 真全屏：视频铺满整屏
                     Box(Modifier.fillMaxSize()) {
                         MediaPlayer(
                             url = item.mediaUrl,
+                            externalPlayer = sharedPlayer,
                             fullscreen = true,
                             onToggleFullscreen = { fullscreen = !fullscreen },
                             modifier = Modifier.fillMaxSize()
                         )
                     }
                 } else {
-                    DetailContent(state, viewModel, onOpenAuthor, pad, isVideo, onEnterFullscreen = { fullscreen = true })
+                    DetailContent(state, viewModel, onOpenAuthor, pad, isVideo, onEnterFullscreen = { fullscreen = true }, sharedPlayer = sharedPlayer)
                 }
             }
         }
@@ -185,7 +223,8 @@ private fun DetailContent(
     onOpenAuthor: (Int) -> Unit,
     pad: androidx.compose.foundation.layout.PaddingValues,
     isVideo: Boolean,
-    onEnterFullscreen: () -> Unit = {}
+    onEnterFullscreen: () -> Unit = {},
+    sharedPlayer: androidx.media3.exoplayer.ExoPlayer? = null
 ) {
     val item = state.item!!
     // Single scrolling column: media on top, then all the content BELOW it.
@@ -205,18 +244,29 @@ private fun DetailContent(
             val landscape = config.orientation ==
                 android.content.res.Configuration.ORIENTATION_LANDSCAPE
             val maxVideoHeight = (config.screenHeightDp * 0.92f).dp
+            // Windowed player must never take more than half the screen, otherwise
+            // a portrait video pushes the title/author/actions off-screen and the
+            // page reads as "just a video". Height is computed from the real width
+            // and the video's own ratio, then clamped to that half-screen cap.
+            val halfScreen = (config.screenHeightDp * 0.5f).dp
+            val naturalHeight = (config.screenWidthDp / videoAspect).dp
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                 MediaPlayer(
                     url = item.mediaUrl,
+                    externalPlayer = sharedPlayer,
                     fullscreen = false,
                     // without this the in-player fullscreen button is inert:
                     // MediaPlayer defaults the callback to a no-op
                     onToggleFullscreen = onEnterFullscreen,
                     onAspect = { r -> if (r > 0f) videoAspect = r },
+                    // windowed playback starts with the bar hidden; a tap reveals it
+                    controlsHiddenInitially = true,
                     modifier = if (landscape) {
-                        Modifier.height(maxVideoHeight).aspectRatio(videoAspect)
+                        Modifier.height(minOf(maxVideoHeight, halfScreen))
+                            .aspectRatio(videoAspect)
                     } else {
-                        Modifier.fillMaxWidth().aspectRatio(videoAspect)
+                        Modifier.fillMaxWidth()
+                            .height(if (naturalHeight > halfScreen) halfScreen else naturalHeight)
                     }
                 )
             }
