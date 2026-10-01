@@ -31,6 +31,7 @@ import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -107,11 +108,17 @@ fun SearchScreen(
             }
 
             if (state.results.isEmpty() && state.users.isEmpty() && state.history.isNotEmpty()) {
-                Text(
-                    "最近搜索",
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
-                )
+                Row(
+                    Modifier.fillMaxWidth().padding(start = Spacing.l, end = Spacing.s, top = Spacing.xs),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "最近搜索",
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = { viewModel.clearHistory() }) { Text("清空") }
+                }
                 // wrap layout (not horizontal scroll)
                 FlowRow(
                     maxItemsInEachRow = Int.MAX_VALUE,

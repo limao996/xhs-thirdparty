@@ -323,4 +323,10 @@ class XhsRepository(context: Context) {
         val list = (listOf(q) + searchHistory().filter { it != q }).take(10)
         s.edit().putString("history", list.joinToString("\n")).apply()
     }
+
+    /** Wipe the locally stored search history. */
+    fun clearSearchHistory() {
+        appContext.getSharedPreferences("search_history", android.content.Context.MODE_PRIVATE)
+            .edit().remove("history").apply()
+    }
 }

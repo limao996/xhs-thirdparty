@@ -139,6 +139,12 @@ class SearchViewModel(private val repo: XhsRepository) : ViewModel() {
         _ui.value = _ui.value.copy(history = repo.searchHistory())
     }
 
+    /** Clear the local search history (from the "最近搜索" header). */
+    fun clearHistory() {
+        repo.clearSearchHistory()
+        refreshHistory()
+    }
+
     private fun addHistory(q: String) {
         repo.saveSearchHistory(q)
         refreshHistory()
