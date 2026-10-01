@@ -1,0 +1,64 @@
+package com.thirdparty.xhs.ui.viewmodel
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.thirdparty.xhs.data.NoteItem
+import com.thirdparty.xhs.data.XhsRepository
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
+/** UI state for the immersive short-video feed. */
+data class VideoFeedUiState(
+    val items: List<NoteItem> = emptyList(),
+    val firstLoading: Boolean = false,
+    val error: Boolean = false,
+    val savedIds: Set<Long> = emptySet()
+)
+
+class VideoFeedViewModel(private val repo: XhsRepository) : ViewModel() {
+
+    private val _ui = MutableStateFlow(VideoFeedUiState())
+    val ui: StateFlow<VideoFeedUiState> = _ui.asStateFlow()
+
+    private var page = 0
+    private var loading = false
+
+    fun loadMore(forceRefresh: Boolean = false) {
+        if (loading) return
+        if (forceRefresh) {
+            page = 0
+            _ui.update { it.copy(items = emptyList(), firstLoading = true) }
+        }
+        loading = true
+        _ui.update { it.copy(firstLoading = it.items.isEmpty(), error = false) }
+        viewModelScope.launch {
+            try {
+                val list = repo.videoFeedPage(page + 1)
+                page++
+                val saved = repo.savedIds()
+                _ui.update { s ->
+                    s.copy(
+                        items = s.items + list,
+                        firstLoading = false,
+                        savedIds = saved,
+                        error = false
+                    )
+                }
+            } catch (e: Exception) {
+                _ui.update { it.copy(firstLoading = false, error = it.items.isEmpty()) }
+            } finally {
+                loading = false
+            }
+        }
+    }
+
+    /** Refresh the feed from page 1 (bottom-nav re-tap or swipe). */
+    fun refresh() = loadMore(forceRefresh = true)
+
+    fun onSavedChanged(noteId: Long, nowSaved: Boolean) {
+        _ui.update { it.copy(savedIds = if (nowSaved) it.savedIds + noteId else it.savedIds - noteId) }
+    }
+}

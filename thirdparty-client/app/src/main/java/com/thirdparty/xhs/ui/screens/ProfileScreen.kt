@@ -1,0 +1,171 @@
+package com.thirdparty.xhs.ui.screens
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.SwitchAccount
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.thirdparty.xhs.App
+import com.thirdparty.xhs.common.RepoViewModelFactory
+import com.thirdparty.xhs.ui.theme.Corners
+import com.thirdparty.xhs.ui.theme.Spacing
+import com.thirdparty.xhs.ui.theme.ThemeMode
+import com.thirdparty.xhs.ui.viewmodel.ProfileViewModel
+
+/**
+ * 我的：账号信息（用户名/ID/VIP）+ 收藏 / 最近浏览 / 我关注的作者 / 切换游客 / 外观主题。
+ * 全部使用 Material3 令牌（无硬编码颜色）。
+ */
+@Composable
+fun ProfileScreen(
+    onOpenSaved: () -> Unit,
+    onOpenHistory: () -> Unit,
+    onOpenFollowed: () -> Unit,
+    onRotateGuest: (() -> Unit)? = null,
+    rotating: Boolean = false,
+    viewModel: ProfileViewModel = viewModel(factory = RepoViewModelFactory())
+) {
+    val state by viewModel.ui.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { viewModel.load() }
+
+    if (state.loading && state.profile == null) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+        return
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        // account header
+        Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
+            Column(Modifier.fillMaxWidth().padding(Spacing.l)) {
+                Text(
+                    state.profile?.userName ?: "游客",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(Modifier.height(Spacing.xs))
+                Text(
+                    "游客 ID：${state.profile?.userId ?: 0}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(Spacing.m))
+                val vip = state.profile?.isVip == true
+                Surface(
+                    shape = Corners.small,
+                    color = if (vip) MaterialTheme.colorScheme.tertiaryContainer
+                    else MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = if (vip) MaterialTheme.colorScheme.onTertiaryContainer
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+                ) {
+                    Text(
+                        if (vip) "会员 VIP" else "普通用户",
+                        Modifier.padding(horizontal = Spacing.m, vertical = Spacing.xs),
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
+            }
+        }
+        HorizontalDivider()
+
+        ProfileEntry(Icons.Filled.Favorite, "我的收藏", "${state.savedCount} 条", onOpenSaved)
+        ProfileEntry(Icons.Filled.History, "最近浏览", "${state.historyCount} 条", onOpenHistory)
+        ProfileEntry(Icons.Filled.Group, "我关注的作者", "${state.followedCount} 位", onOpenFollowed)
+
+        if (onRotateGuest != null) {
+            HorizontalDivider()
+            ListItem(
+                headlineContent = { Text("切换游客账号") },
+                supportingContent = { Text(if (rotating) "切换中…" else "获取一个新的游客会话") },
+                leadingContent = {
+                    if (rotating) CircularProgressIndicator(Modifier.size(24.dp))
+                    else Icon(Icons.Filled.SwitchAccount, null, tint = MaterialTheme.colorScheme.primary)
+                },
+                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.clickable { onRotateGuest() }
+            )
+        }
+
+        HorizontalDivider()
+        ThemeSwitcher()
+    }
+}
+
+@Composable
+private fun ProfileEntry(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    supporting: String,
+    onClick: () -> Unit
+) {
+    ListItem(
+        headlineContent = { Text(title) },
+        supportingContent = { Text(supporting) },
+        leadingContent = { Icon(icon, null, tint = MaterialTheme.colorScheme.primary) },
+        trailingContent = {
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        },
+        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
+        modifier = Modifier.clickable { onClick() }
+    )
+}
+
+@Composable
+private fun ThemeSwitcher() {
+    val currentMode by App.INSTANCE.themeState.collectAsState()
+    Column(Modifier.fillMaxWidth().padding(horizontal = Spacing.l, vertical = Spacing.m)) {
+        Text(
+            "外观主题",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(Spacing.s))
+        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
+            listOf(
+                ThemeMode.SYSTEM to "跟随系统",
+                ThemeMode.LIGHT to "浅色",
+                ThemeMode.DARK to "深色"
+            ).forEach { (mode, label) ->
+                FilterChip(
+                    selected = currentMode == mode,
+                    onClick = { App.INSTANCE.setThemeMode(mode) },
+                    label = { Text(label) }
+                )
+            }
+        }
+    }
+}

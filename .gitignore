@@ -1,0 +1,26 @@
+# ---- Android / Gradle build outputs ----
+build/
+.gradle/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+captures/
+.cxx/
+
+# ---- IDE ----
+.idea/
+*.iml
+.DS_Store
+local.properties
+
+# ---- Large derived / reference material (not project source) ----
+# reverse-engineering artifacts and toolchains stay out of version control
+decompiled/
+apk_unpacked/
+tools/
+shots/
+.acl-recovery/
+*.apk
+

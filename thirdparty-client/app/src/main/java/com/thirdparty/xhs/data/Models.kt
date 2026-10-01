@@ -1,0 +1,106 @@
+package com.thirdparty.xhs.data
+
+import org.json.JSONObject
+
+/** Guest's own profile (v2/mine/user-info) — used by the "我的" screen. */
+data class UserProfile(
+    val userId: Int,
+    val userName: String,
+    val headImg: String,
+    val backgroundImg: String,
+    val signature: String,
+    val level: String,
+    val follows: Int,
+    val fans: Int,
+    val notes: Int,
+    val vipStatus: Int,   // 0 none, 1 vip
+    val vipEnd: Long,
+    val svipEnd: Long,
+    val phoneBound: Boolean
+) {
+    val isVip: Boolean get() = vipStatus >= 1 || vipEnd > System.currentTimeMillis() / 1000
+
+    companion object {
+        fun from(o: JSONObject): UserProfile? {
+            val ui = o.optJSONObject("user_info") ?: return null
+            val vp = o.optJSONObject("user_vp") ?: JSONObject()
+            return UserProfile(
+                userId = ui.optInt("user_id"),
+                userName = ui.optString("user_name", "游客"),
+                headImg = ui.optString("user_head_img"),
+                backgroundImg = ui.optString("user_background_img"),
+                signature = ui.optString("user_signature"),
+                level = ui.optString("user_level_name"),
+                follows = ui.optInt("user_follows"),
+                fans = ui.optInt("user_funs"),
+                notes = ui.optInt("user_notes"),
+                vipStatus = vp.optInt("vp_status"),
+                vipEnd = vp.optLong("vp_end"),
+                svipEnd = vp.optLong("svp_end"),
+                phoneBound = ui.optString("user_phone").isNotEmpty()
+            )
+        }
+    }
+}
+
+/** An author's public profile (v2/member/user-info / v2/member/note-list data). */
+data class AuthorInfo(
+    val userId: Int,
+    val userName: String,
+    val headImg: String,
+    val signature: String,
+    val vpStatus: Int,
+    val isFollow: Boolean
+) {
+    companion object {
+        fun from(o: JSONObject): AuthorInfo {
+            // NOTE: member/user-info nests these under "user_info" (top-level
+            // user_id is null), so read the nested object first.
+            val ui = o.optJSONObject("user_info")
+            val uid = ui?.optInt("user_id")?.takeIf { it > 0 } ?: o.optInt("user_id")
+            return AuthorInfo(
+                userId = uid,
+                userName = ui?.optString("user_name").orEmpty().ifEmpty { o.optString("user_name") },
+                headImg = ui?.optString("user_head_img").orEmpty().ifEmpty { o.optString("user_head_img") },
+                signature = ui?.optString("user_signature").orEmpty().ifEmpty { o.optString("user_signature") },
+                vpStatus = ui?.optInt("user_vp_status") ?: o.optInt("user_vp_status"),
+                isFollow = o.optBoolean("is_follow") || o.optInt("is_follow") == 1 ||
+                    ui?.optInt("is_follow") == 1
+            )
+        }
+    }
+}
+
+/** A top-level comment (v2/note-comment/comment-list). */
+data class CommentItem(
+    val commentId: Int,
+    val userId: Int,
+    val userName: String,
+    val headImg: String,
+    val content: String,
+    val createdAt: Long,
+    val likeCount: Int,
+    val isLike: Boolean,
+    val replyCount: Int
+) {
+    companion object {
+        fun from(o: JSONObject): CommentItem = CommentItem(
+            commentId = o.optInt("comment_id"),
+            userId = o.optInt("user_id"),
+            userName = o.optString("user_name", "匿名"),
+            headImg = o.optString("user_head_img"),
+            content = o.optString("content"),
+            createdAt = o.optLong("created_at") * 1000L,
+            likeCount = o.optInt("like_count"),
+            isLike = o.optInt("is_like") == 1,
+            replyCount = o.optInt("data_count")
+        )
+    }
+}
+
+/** A discover category (v2/home/discover-category). */
+data class Category(val id: Int, val name: String) {
+    companion object {
+        fun from(o: JSONObject): Category = Category(o.optInt("id"), o.optString("name"))
+    }
+}

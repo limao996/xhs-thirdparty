@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- open book glyph with a play notch - "小黄书" video app mark -->
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M32,32 h12 v44 h-12 z M44,30 c7,5 13,5 20,0 v46 c-7,5 -13,5 -20,0 z M64,32 h12 v44 h-12 z" />
+    <path android:fillColor="#BD1E59"
+        android:pathData="M49,46 L63,53 L49,60 Z" />
+</vector>
