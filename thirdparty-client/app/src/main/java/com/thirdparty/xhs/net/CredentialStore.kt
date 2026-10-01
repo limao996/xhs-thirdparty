@@ -25,16 +25,33 @@ class CredentialStore(context: Context) {
         set(v) = prefs.edit().putString(KEY_HASH, v).apply()
 
     /**
-     * The identity currently in use. Defaults to a fresh random one — a brand-new
-     * identity is perfectly usable because `app/init` registers it.
+     * The identity currently in use.
+     *
+     * On a fresh install this generates a random identity **and persists it right
+     * away**. Persisting matters: the getter would otherwise return a different
+     * random value on every read, so `app/init` and the login that follows would
+     * use different identities and each launch would create a throwaway account.
      */
     val deviceId: String
-        get() = prefs.getString(KEY_DEVICE, null) ?: IdentityGuess.randomFresh()
+        get() {
+            prefs.getString(KEY_DEVICE, null)?.let { return it }
+            val fresh = IdentityGuess.randomFresh()
+            prefs.edit().putString(KEY_DEVICE, fresh).apply()
+            return fresh
+        }
 
     /** Switch to a specific identity. */
     fun setDevice(identity: String) {
         prefs.edit().putString(KEY_DEVICE, identity).apply()
     }
+
+    /**
+     * When on, the app switches to a fresh account (which starts a new VIP window)
+     * as soon as the current account's VIP runs out.
+     */
+    var autoSwitchOnVipExpiry: Boolean
+        get() = prefs.getBoolean(KEY_AUTO_VIP, false)
+        set(v) = prefs.edit().putBoolean(KEY_AUTO_VIP, v).apply()
 
     /** Switch to a brand-new random identity and return it. */
     fun freshDevice(): String {
@@ -89,6 +106,7 @@ class CredentialStore(context: Context) {
         private const val KEY_HASH = "user_hash"
         private const val KEY_DEVICE = "device_identity"
         private const val KEY_HISTORY = "account_history"
+        private const val KEY_AUTO_VIP = "auto_switch_on_vip_expiry"
     }
 }
 

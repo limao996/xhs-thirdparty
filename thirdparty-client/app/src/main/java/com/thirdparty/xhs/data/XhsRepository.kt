@@ -295,6 +295,44 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
     /** Forget one history entry. */
     fun forgetAccount(identity: String) = api.forgetAccount(identity)
 
+    /** Whether to switch accounts once the current VIP window expires. */
+    var autoSwitchOnVipExpiry: Boolean
+        get() = api.autoSwitchOnVipExpiry
+        set(v) { api.autoSwitchOnVipExpiry = v }
+
+    /**
+     * Switch to a fresh account that HAS VIP, used when the current one's window
+     * has run out and the user enabled the automatic switch.
+     *
+     * Each newly registered identity is granted a fresh VIP window by the backend
+     * (that is why a plain random switch usually lands on VIP already), but this
+     * still verifies the new account rather than assuming — if the backend stops
+     * handing out VIP, repeated attempts would otherwise silently keep swapping.
+     *
+     * Returns true when the account actually changed to a VIP one.
+     */
+    suspend fun switchToVipAccount(): Boolean = withContext(Dispatchers.IO) {
+        if (!api.autoSwitchOnVipExpiry) return@withContext false
+        val current = myProfile() ?: return@withContext false
+        if (current.isVip) return@withContext false
+        repeat(VIP_SWITCH_ATTEMPTS) {
+            val id = api.freshRandomMac()
+            if (api.loginAsDevice(id).optInt("result") == 1) {
+                val next = myProfile()
+                if (next?.isVip == true) {
+                    runCatching { rememberCurrentAccount() }
+                    return@withContext true
+                }
+            }
+        }
+        false
+    }
+
+    private companion object {
+        /** how many fresh accounts to try before giving up on finding VIP */
+        const val VIP_SWITCH_ATTEMPTS = 5
+    }
+
     /** The identity currently in use. */
     fun currentDeviceMac(): String = api.currentDeviceMac()
 

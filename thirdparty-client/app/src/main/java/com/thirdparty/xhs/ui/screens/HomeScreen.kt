@@ -72,6 +72,7 @@ fun HomeScreen(
     val guest by guestViewModel.accountLabel.collectAsStateWithLifecycle()
     val rotating by guestViewModel.rotating.collectAsStateWithLifecycle()
     val history by guestViewModel.history.collectAsStateWithLifecycle()
+    val autoVip by guestViewModel.autoVip.collectAsStateWithLifecycle()
     var showAccountHistory by remember { mutableStateOf(false) }
     var tab by rememberSaveable { mutableStateOf(HomeTab.FEED) }
     var feedRefreshTick by rememberSaveable { mutableStateOf(0) }
@@ -144,6 +145,12 @@ fun HomeScreen(
                                 showAccountHistory = true
                             },
                             historyCount = history.size,
+                            autoVip = autoVip,
+                            onSetAutoVip = { on ->
+                                guestViewModel.setAutoVip(on) {
+                                    Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+                                }
+                            },
                             rotating = rotating,
                             reloadKey = guest
                         )

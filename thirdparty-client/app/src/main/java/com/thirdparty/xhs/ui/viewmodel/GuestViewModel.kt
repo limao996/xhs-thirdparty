@@ -41,6 +41,8 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
     /** previously used guest accounts, most recent first */
     val history: StateFlow<List<HistoryAccount>> = _history.asStateFlow()
 
+    private val _autoVip = MutableStateFlow(repo.autoSwitchOnVipExpiry)
+
     fun refreshHistory() {
         _history.value = runCatching { repo.accountHistory() }.getOrDefault(emptyList())
     }
@@ -89,10 +91,48 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
             _rotating.value = true
             _accountLabel.value = "游客ID：加载中…"
             runCatching { repo.rotateGuest() }
+            // first launch / any launch: a random identity is chosen and registered
+            // automatically, then the VIP-expiry rule (if enabled) is applied
+            runCatching { repo.switchToVipAccount() }
             refreshLabel()
             refreshVip()
             remember()
             _rotating.value = false
+        }
+    }
+
+    /** Whether the automatic VIP-expiry switch is on. */
+    val autoVip: StateFlow<Boolean> = _autoVip.asStateFlow()
+
+    fun setAutoVip(on: Boolean, onToast: (String) -> Unit = {}) {
+        repo.autoSwitchOnVipExpiry = on
+        _autoVip.value = on
+        if (!on) {
+            onToast("已关闭：VIP 到期后不再自动切换")
+            return
+        }
+        onToast("已开启：VIP 到期后自动切到有 VIP 的账号")
+        // apply immediately — the current account may already be expired
+        viewModelScope.launch {
+            _rotating.value = true
+            val switched = runCatching { repo.switchToVipAccount() }.getOrDefault(false)
+            refreshLabel()
+            refreshVip()
+            remember()
+            _rotating.value = false
+            if (switched) onToast("当前账号 VIP 已到期，已自动切换")
+        }
+    }
+
+    /** Re-check on demand (e.g. when the profile page loads). */
+    fun checkVipExpiry() {
+        if (!_autoVip.value) return
+        viewModelScope.launch {
+            if (runCatching { repo.switchToVipAccount() }.getOrDefault(false)) {
+                refreshLabel()
+                refreshVip()
+                remember()
+            }
         }
     }
 

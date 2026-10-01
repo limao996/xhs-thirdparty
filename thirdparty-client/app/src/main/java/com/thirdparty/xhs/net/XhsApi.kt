@@ -245,4 +245,9 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
 
     /** Forget one history entry. */
     fun forgetAccount(identity: String) = credentialStore.forgetAccount(identity)
+
+    /** Whether to switch accounts once the current VIP window expires. */
+    var autoSwitchOnVipExpiry: Boolean
+        get() = credentialStore.autoSwitchOnVipExpiry
+        set(v) { credentialStore.autoSwitchOnVipExpiry = v }
 }

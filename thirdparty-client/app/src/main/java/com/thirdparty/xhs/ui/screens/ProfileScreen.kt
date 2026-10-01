@@ -55,6 +55,8 @@ import com.thirdparty.xhs.ui.components.XhsAvatar
 import com.thirdparty.xhs.ui.viewmodel.ProfileViewModel
 import androidx.compose.material.icons.filled.Search
 import com.thirdparty.xhs.ui.theme.BottomNavClearance
+import androidx.compose.material.icons.filled.Autorenew
+import androidx.compose.material3.Switch
 
 /**
  * 我的：账号信息（用户名/ID/VIP）+ 收藏 / 最近浏览 / 我关注的作者 / 切换游客 / 外观主题。
@@ -68,6 +70,9 @@ fun ProfileScreen(
     onRotateGuest: (() -> Unit)? = null,
     onOpenAccountHistory: (() -> Unit)? = null,
     historyCount: Int = 0,
+    /** VIP-expiry auto switch */
+    autoVip: Boolean = false,
+    onSetAutoVip: ((Boolean) -> Unit)? = null,
     rotating: Boolean = false,
     /** changes whenever the guest account changes, forcing a profile reload */
     reloadKey: Any? = Unit,
@@ -194,6 +199,22 @@ fun ProfileScreen(
                     },
                     colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
                     modifier = Modifier.clickable { onOpenAccountHistory() }
+                )
+            }
+            if (onSetAutoVip != null) {
+                ListItem(
+                    headlineContent = { Text("VIP 到期自动切换") },
+                    supportingContent = {
+                        Text("开启后，当前账号 VIP 到期时自动切换到有 VIP 的账号")
+                    },
+                    leadingContent = {
+                        Icon(Icons.Filled.Autorenew, null, tint = MaterialTheme.colorScheme.primary)
+                    },
+                    trailingContent = {
+                        Switch(checked = autoVip, onCheckedChange = { onSetAutoVip(it) })
+                    },
+                    colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
+                    modifier = Modifier.clickable { onSetAutoVip(!autoVip) }
                 )
             }
         }
