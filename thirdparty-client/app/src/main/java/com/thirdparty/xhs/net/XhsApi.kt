@@ -22,6 +22,14 @@ class XhsApi(private val context: Context) {
 
     private val credentialStore = CredentialStore(context)
 
+    /** Guards against concurrent re-login storms after a stale-identity error. */
+    private val reauthLock = Any()
+    @Volatile private var reauthInFlight = false
+
+    private companion object {
+        const val LOGIN_PATH = "v2/user/login-with-guest"
+    }
+
     /** The identity sent in the User-Id header before the first guest login. */
     private fun deviceUserId(): String {
         // The backend only serves account endpoints (mine/user-info etc.) for
@@ -47,8 +55,34 @@ class XhsApi(private val context: Context) {
 
     /** Perform a POST to an API path with the given business params. */
     fun call(path: String, params: Map<String, Any> = emptyMap()): JSONObject {
+        val first = doCall(path, params)
+        if (path == LOGIN_PATH || !needsReauth(first)) return first
+
+        // The guest identity went stale (e.g. the backend no longer knows our
+        // device id). Re-establish a guest session once and retry, so the app
+        // self-heals instead of silently returning empty data forever.
+        synchronized(reauthLock) {
+            if (!reauthInFlight) {
+                reauthInFlight = true
+                try {
+                    loginAsGuest()
+                } catch (e: Exception) {
+                    // fall through and return the original response
+                } finally {
+                    reauthInFlight = false
+                }
+            }
+        }
+        return runCatching { doCall(path, params) }.getOrDefault(first)
+    }
+
+    private fun doCall(path: String, params: Map<String, Any>): JSONObject {
         val token = credentialStore.userToken
         val hash = credentialStore.userHash
+        // The login call must re-establish identity from the *device*, never
+        // from a possibly-stale user_hash, otherwise a stale hash would keep
+        // being echoed back and re-auth would never recover.
+        val userIdHeader = if (path == LOGIN_PATH) deviceUserId() else hash.ifEmpty { deviceUserId() }
 
         val body = JSONObject()
         body.put("s_time", System.currentTimeMillis())
@@ -71,7 +105,7 @@ class XhsApi(private val context: Context) {
             ))
             .header("Content-Type", "application/octet-stream; charset=utf-8")
             .header("Accept", "application/octet-stream")
-            .header("User-Id", hash.ifEmpty { deviceUserId() })
+            .header("User-Id", userIdHeader)
             .header("Client-Type", "1")
             .header("Client-Version", BuildConfig.CLIENT_VERSION)
             .header("Client-Channel", BuildConfig.CLIENT_CHANNEL)
@@ -83,6 +117,24 @@ class XhsApi(private val context: Context) {
             val text = XhsCrypto.decrypt(bytes)
             return JSONObject(text)
         }
+    }
+
+    /**
+     * Does this response mean our identity is no longer usable?
+     *
+     * Empirically (verified against the live API):
+     *   1     ok
+     *   -1    筆記不存在或者已經刪除 / 用戶不存在或者已註銷  -> a real "not found", NOT auth
+     *   -1    用戶ID錯誤 请重新登录                          -> identity gone, must re-login
+     *   1002/1003/1004                                       -> session expired
+     * `-1` is overloaded, so the message has to discriminate.
+     */
+    private fun needsReauth(res: JSONObject): Boolean {
+        val code = res.optInt("result")
+        if (code == 1002 || code == 1003 || code == 1004) return true
+        if (code != -1) return false
+        val msg = res.optString("message")
+        return msg.contains("用戶ID錯誤") || msg.contains("重新登录") || msg.contains("重新登錄")
     }
 
     private val client by lazy {
