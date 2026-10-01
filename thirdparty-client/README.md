@@ -358,3 +358,22 @@ app/src/main/java/com/thirdparty/xhs/
   Pager 自行处理了 pageCount 收缩。
 - **返回后位置丢失**：从推荐流进详情再返回仍停留在原视频，
   `rememberPagerState` 的可保存状态生效。
+
+### 第 22 轮 · 图片缓存管理
+- 上一轮为加速封面/头像挂了 64MB OkHttp 磁盘缓存，但应用内**没有任何入口**
+  能查看或清理它。
+- `XhsRepository` 新增 `httpCacheSizeBytes()` / `clearHttpCache()`
+  （evictAll + 清内存位图缓存）；「我的」页新增「清除图片缓存」行，
+  副标题显示当前占用（B/KB/MB 自适应），点击弹二次确认。
+- 验证：浏览后显示 **5.3 MB**（真实占用）→ 弹窗提示
+  「将删除已缓存的封面与头像（5.3 MB），下次浏览时重新下载。」→
+  确认后显示 **0 B**。
+
+### 第 23 轮 · 瀑布流真实比例
+- 瀑布流此前用 noteId 哈希从固定高度数组取高度，纯属**伪造**：卡片比例
+  与真实封面无关，图片被按错误比例裁切。实测确认列表接口已返回
+  `note_cover_size`（"375*489" / "610*760" / "375*210"…，比例真实多样）。
+- `NoteItem` 新增 `coverRatio`（抽出可复用的 `parseRatio()`，与图片
+  `image_size` 解析共用），`WaterfallCard` 改用 `aspectRatio(coverRatio)`
+  并 clamp 到 0.55–1.6 以容纳极端比例。
+- 验证：两列高度由各自真实封面比例决定、错落自然。
