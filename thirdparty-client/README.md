@@ -308,3 +308,29 @@ app/src/main/java/com/thirdparty/xhs/
 
 ### 补充验证
 发现页三个子 tab（发现 / 粉丝圈 / 关注）均正常渲染，全程 0 崩溃。
+
+### 第 17 轮 · 下拉刷新补全
+- 搜索结果、收藏、最近浏览均接入下拉刷新（此前只有发现页与作者页有）。
+  搜索刷新重载第一页且不闪空列表、失败保留原结果；本地列表刷新用于
+  同步其他界面造成的变化。
+
+### 第 18 轮 · 静默降级与分页死掉
+- 「我的」页：资料请求失败被 getOrNull() 吞掉，页面会显示成普通游客、
+  关注/粉丝/作品全 0，用户无法察觉。新增 error 态并明确提示。
+- 搜索加载更多失败时 `getOrNull() ?: emptyList()` 使 hasMore 被算成
+  `0 >= 10` = false，**之后再也无法翻页**。改为失败时保持 hasMore，
+  下次滚动自动重试。
+
+### 第 19 轮 · Lazy 重复 key 崩溃（实测数据发现）
+- 瀑布流以 noteId 作 LazyStaggeredGrid 的 key，而 Lazy 布局遇重复 key
+  直接抛异常。对真实接口连续分页验证发现：**discover 第 2 页会重复
+  第 1 页的 1 条 noteId**，即向下滚一两页就可能崩。
+- 两层修复：① 数据层新增 `appendUnique()` 按 noteId 去重，
+  四处分页统一使用；② `XhsWaterfallGrid` 内部兜底 distinctBy。
+- 验证：连续 25 次深度滚动跨页，网格正常、无 FATAL、
+  无 "Key was already used"、进程存活。
+
+### 位置记忆验证
+从推荐流进入详情再返回，仍停留在原视频（示例 @煮熟的生蚝），
+说明 `rememberPagerState` 的可保存状态 + Navigation 的 SaveableStateHolder
+工作正常，无需额外处理。
