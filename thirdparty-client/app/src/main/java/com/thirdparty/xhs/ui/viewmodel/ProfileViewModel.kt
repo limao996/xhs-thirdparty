@@ -12,6 +12,8 @@ import kotlinx.coroutines.launch
 data class ProfileUiState(
     val profile: UserProfile? = null,
     val loading: Boolean = true,
+    /** true when the account request failed (so we are not just "a plain guest") */
+    val error: Boolean = false,
     val guestHash: String = "",
     val savedCount: Int = 0,
     val historyCount: Int = 0,
@@ -35,6 +37,9 @@ class ProfileViewModel(private val repo: XhsRepository) : ViewModel() {
             _ui.value = ProfileUiState(
                 profile = profile,
                 loading = false,
+                // a null profile here means the request failed; without this the
+                // page looked like a plain guest with 0 everywhere
+                error = profile == null,
                 guestHash = repo.currentGuestHash(),
                 savedCount = saved,
                 historyCount = history,

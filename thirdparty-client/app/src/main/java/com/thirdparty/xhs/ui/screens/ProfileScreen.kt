@@ -80,13 +80,14 @@ fun ProfileScreen(
                     Spacer(Modifier.width(Spacing.m))
                     Column(Modifier.weight(1f)) {
                         Text(
-                            state.profile?.userName ?: "游客",
+                            state.profile?.userName ?: if (state.error) "账号信息加载失败" else "游客",
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.SemiBold
                         )
                         Spacer(Modifier.height(Spacing.xs))
                         Text(
-                            "游客 ID：${state.profile?.userId ?: 0}",
+                            if (state.error) "点击下方「切换游客账号」重试"
+                            else "游客 ID：${state.profile?.userId ?: 0}",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

@@ -156,14 +156,21 @@ class SearchViewModel(private val repo: XhsRepository) : ViewModel() {
         _ui.update { it.copy(loadingMore = true) }
         viewModelScope.launch {
             val next = page + 1
-            val list = runCatching { repo.searchNote(q, next) }.getOrNull() ?: emptyList()
-            if (list.isNotEmpty()) page = next
-            _ui.update {
-                it.copy(
-                    results = it.results + list,
-                    loadingMore = false,
-                    hasMore = list.size >= 10
-                )
+            val list = runCatching { repo.searchNote(q, next) }.getOrNull()
+            if (list != null) {
+                if (list.isNotEmpty()) page = next
+                _ui.update {
+                    it.copy(
+                        results = it.results + list,
+                        loadingMore = false,
+                        hasMore = list.size >= 10
+                    )
+                }
+            } else {
+                // A failed page must NOT flip hasMore to false — that would end
+                // pagination permanently with no way to retry. Leaving hasMore
+                // alone lets the next scroll attempt again.
+                _ui.update { it.copy(loadingMore = false) }
             }
             loading = false
         }
