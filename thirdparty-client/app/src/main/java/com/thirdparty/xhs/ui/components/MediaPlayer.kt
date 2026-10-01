@@ -137,6 +137,19 @@ private fun AutoHideController(
         if (visible && playing) { delay(3000); visible = false }
     }
 
+    // Keep position/duration fresh while the controls are visible and playing.
+    // Relying on Player.Listener alone leaves the slider and the time label
+    // frozen during normal playback: those callbacks only fire on state changes,
+    // seeks and media transitions — never per frame.
+    LaunchedEffect(player, visible, playing) {
+        if (!visible || !playing) return@LaunchedEffect
+        while (true) {
+            duration = if (player.duration > 0) player.duration.toFloat() else 0f
+            position = player.currentPosition.toFloat()
+            delay(PROGRESS_POLL_MS)
+        }
+    }
+
     Box(
         Modifier.fillMaxSize().clickable {
             visible = !visible
@@ -187,3 +200,6 @@ private fun fmt(ms: Long): String {
     val s = ms / 1000; val m = s / 60
     return "%d:%02d".format(m, s % 60)
 }
+
+/** How often the visible controls re-read the playback position. */
+private const val PROGRESS_POLL_MS = 250L

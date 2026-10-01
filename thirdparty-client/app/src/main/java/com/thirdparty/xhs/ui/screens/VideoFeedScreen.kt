@@ -57,6 +57,7 @@ import com.thirdparty.xhs.ui.components.PauseWhenNotStarted
 import com.thirdparty.xhs.ui.components.PlaybackErrorOverlay
 import com.thirdparty.xhs.ui.components.PlayerView
 import com.thirdparty.xhs.ui.components.XhsAsyncImage
+import com.thirdparty.xhs.ui.components.VideoProgress
 import com.thirdparty.xhs.ui.components.buildVideoPlayer
 import com.thirdparty.xhs.ui.components.rememberPlaybackError
 import com.thirdparty.xhs.ui.components.retryPlayback
@@ -260,6 +261,16 @@ private fun VideoPage(
                     .padding(top = HeaderClearance, end = Spacing.l)
             )
         }
+
+        // thin playback progress line at the bottom of the video
+        VideoProgress(
+            player = player,
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .fillMaxWidth()
+                .padding(bottom = BottomNavHeight)
+                .height(2.dp)
+        )
     }
 }
 

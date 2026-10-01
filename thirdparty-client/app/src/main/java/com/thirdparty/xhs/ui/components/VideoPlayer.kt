@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudOff
@@ -14,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,6 +38,7 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.thirdparty.xhs.ui.theme.Scrim
 import com.thirdparty.xhs.ui.theme.Spacing
+import kotlinx.coroutines.delay
 
 /**
  * Build an ExoPlayer configured for short-video playback.
@@ -155,6 +159,38 @@ fun BufferingIndicator(
                 strokeWidth = 3.dp
             )
         }
+    }
+}
+
+/**
+ * Thin playback progress line (0..1) for the immersive feed.
+ *
+ * Polls the player because media3 has no per-frame position callback — the
+ * listener API only reports state changes and seeks.
+ */
+@Composable
+fun VideoProgress(
+    player: Player?,
+    modifier: Modifier = Modifier,
+    trackColor: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color(0x33FFFFFF),
+    fillColor: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.White
+) {
+    var fraction by remember(player) { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    LaunchedEffect(player) {
+        val p = player ?: return@LaunchedEffect
+        while (true) {
+            val d = p.duration
+            fraction = if (d > 0) (p.currentPosition.toFloat() / d).coerceIn(0f, 1f) else 0f
+            delay(250)
+        }
+    }
+    Box(modifier.background(trackColor)) {
+        Box(
+            Modifier
+                .fillMaxHeight()
+                .fillMaxWidth(fraction)
+                .background(fillColor)
+        )
     }
 }
 
