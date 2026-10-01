@@ -67,8 +67,7 @@ data class NoteItem(
         get() = mediaUrl.isNotEmpty()
 
     companion object {
-        private fun parseImages(o: JSONObject): List<NoteImage> {
-            val list = o.optJSONArray("note_image_list") ?: JSONArray()
+        private fun parseImages(o: JSONObject): List<NoteImage> {            val list = o.optJSONArray("note_image_list") ?: JSONArray()
             val out = mutableListOf<NoteImage>()
             for (i in 0 until list.length()) {
                 val obj = list.optJSONObject(i) ?: continue
@@ -89,4 +88,21 @@ data class NoteItem(
             return w / h
         }
     }
+}
+
+/**
+ * Append [more] to this list, dropping any item whose [NoteItem.noteId] is
+ * already present.
+ *
+ * The waterfall grids key their items by noteId, and Lazy layouts throw on
+ * duplicate keys. The backend's page boundaries are not stable — a live check
+ * showed page 2 of `discover-note` re-serving one item from page 1 — so
+ * de-duplicating on append is required, not just tidy.
+ */
+fun List<NoteItem>.appendUnique(more: List<NoteItem>): List<NoteItem> {
+    if (more.isEmpty()) return this
+    if (isEmpty()) return more.distinctBy { it.noteId }
+    val seen = HashSet<Long>(size + more.size)
+    forEach { seen.add(it.noteId) }
+    return this + more.filter { seen.add(it.noteId) }
 }

@@ -7,6 +7,7 @@ import com.thirdparty.xhs.data.Category
 import com.thirdparty.xhs.data.FollowedEntity
 import com.thirdparty.xhs.data.NoteItem
 import com.thirdparty.xhs.data.XhsRepository
+import com.thirdparty.xhs.data.appendUnique
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -98,7 +99,9 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
                 feedPage++
                 _ui.update { s ->
                     s.copy(feed = s.feed.copy(
-                        items = s.feed.items + list,
+                        // page boundaries are not stable upstream; duplicate keys
+                        // would crash the staggered grid
+                        items = s.feed.items.appendUnique(list),
                         firstLoading = false,
                         hasMore = list.size >= 10,
                         error = false

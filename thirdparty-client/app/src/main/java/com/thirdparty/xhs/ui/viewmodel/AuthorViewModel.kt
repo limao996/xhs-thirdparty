@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.thirdparty.xhs.data.AuthorInfo
 import com.thirdparty.xhs.data.NoteItem
 import com.thirdparty.xhs.data.XhsRepository
+import com.thirdparty.xhs.data.appendUnique
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -121,7 +122,8 @@ class AuthorViewModel(
                 if (list.isNotEmpty()) page++
                 _ui.update {
                     it.copy(
-                        notes = it.notes + list,
+                        // de-dup: the grid keys by noteId and crashes on duplicates
+                        notes = it.notes.appendUnique(list),
                         notesLoading = false,
                         loadingMore = false,
                         hasMore = list.size >= 10,

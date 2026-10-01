@@ -18,6 +18,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,6 +53,11 @@ fun XhsWaterfallGrid(
 ) {
     val gridState = rememberLazyStaggeredGridState()
 
+    // Defensive: Lazy layouts throw when two items share a key, and the backend's
+    // page boundaries are not stable. Callers already de-dup on append; this
+    // guarantees the grid can never crash regardless.
+    val safeItems = remember(items) { items.distinctBy { it.noteId } }
+
     // endless pagination — trigger when the tail becomes visible
     if (onLoadMore != null) {
         LaunchedEffect(gridState) {
@@ -77,12 +83,12 @@ fun XhsWaterfallGrid(
         horizontalArrangement = Arrangement.spacedBy(Spacing.s)
     ) {
         items(
-            count = items.size,
-            key = { i -> items[i].noteId }
+            count = safeItems.size,
+            key = { i -> safeItems[i].noteId }
         ) { index ->
-            WaterfallCard(items[index], onClick = { onOpenDetail(items[index].noteId) })
+            WaterfallCard(safeItems[index], onClick = { onOpenDetail(safeItems[index].noteId) })
         }
-        if (hasMore && items.isNotEmpty()) {
+        if (hasMore && safeItems.isNotEmpty()) {
             item(key = "__loading__") {
                 Box(
                     Modifier.fillMaxWidth().padding(Spacing.m),

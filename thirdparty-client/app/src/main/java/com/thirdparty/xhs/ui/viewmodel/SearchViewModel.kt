@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.thirdparty.xhs.data.AuthorInfo
 import com.thirdparty.xhs.data.NoteItem
 import com.thirdparty.xhs.data.XhsRepository
+import com.thirdparty.xhs.data.appendUnique
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -161,7 +162,8 @@ class SearchViewModel(private val repo: XhsRepository) : ViewModel() {
                 if (list.isNotEmpty()) page = next
                 _ui.update {
                     it.copy(
-                        results = it.results + list,
+                        // de-dup: duplicate keys would crash the waterfall grid
+                        results = it.results.appendUnique(list),
                         loadingMore = false,
                         hasMore = list.size >= 10
                     )

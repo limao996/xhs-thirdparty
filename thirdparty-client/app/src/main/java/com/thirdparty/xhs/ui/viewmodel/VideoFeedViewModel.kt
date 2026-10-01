@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.thirdparty.xhs.data.NoteItem
 import com.thirdparty.xhs.data.XhsRepository
+import com.thirdparty.xhs.data.appendUnique
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -41,7 +42,7 @@ class VideoFeedViewModel(private val repo: XhsRepository) : ViewModel() {
                 val saved = repo.savedIds()
                 _ui.update { s ->
                     s.copy(
-                        items = s.items + list,
+                        items = s.items.appendUnique(list),
                         firstLoading = false,
                         savedIds = saved,
                         error = false
