@@ -12,33 +12,24 @@ import com.thirdparty.xhs.ui.theme.Corners
 import com.thirdparty.xhs.ui.theme.Spacing
 
 /**
- * Fee state for a work: 免费 / 付费 / 粉丝圈.
- * - 付费: note has a coin price (note_cin > 0)
- * - 粉丝圈: content requires the author's fan-group membership
- * - 免费: free
+ * Fee state for a work: 免费 / 付费.
+ *
+ * Verified against the live backend: the only fee signal it exposes is
+ * `note_cin` (0 = free, > 0 = paid). An earlier version also had a 粉丝圈 kind
+ * driven by guessed keys (`fan_group_gate`, `is_fan_group`,
+ * `user_fan_group_only`) — none of which exist in any response, so that badge
+ * could never appear. `group_id` is present but always 0 in every note payload,
+ * so it is not a gate either. Removed rather than left as dead, misleading code.
  */
-enum class FeeKind { FREE, PAID, FAN_GROUP }
+enum class FeeKind { FREE, PAID }
 
 val NoteItem.feeKind: FeeKind
-    get() = when {
-        noteCin > 0 -> FeeKind.PAID
-        fanGroupGated -> FeeKind.FAN_GROUP
-        else -> FeeKind.FREE
-    }
-
-/** Whether this work is behind the author's fan-group gate. */
-private val NoteItem.fanGroupGated: Boolean
-    get() = userId > 0 && noteCin == 0 && runCatching {
-        val r = org.json.JSONObject(rawJson)
-        r.optInt("fan_group_gate") == 1 || r.optInt("is_fan_group") == 1 ||
-            r.optInt("user_fan_group_only") == 1
-    }.getOrDefault(false)
+    get() = if (noteCin > 0) FeeKind.PAID else FeeKind.FREE
 
 /**
  * MD3-toned fee badge. Colors come from the active ColorScheme so both light
  * and dark themes stay legible:
  *  - 付费    -> tertiaryContainer / onTertiaryContainer
- *  - 粉丝圈  -> secondaryContainer / onSecondaryContainer
  *  - 免费    -> surfaceVariant / onSurfaceVariant
  */
 @Composable
@@ -46,19 +37,16 @@ fun FeeBadge(item: NoteItem, compact: Boolean = false, modifier: Modifier = Modi
     val kind = item.feeKind
     val container = when (kind) {
         FeeKind.PAID -> MaterialTheme.colorScheme.tertiaryContainer
-        FeeKind.FAN_GROUP -> MaterialTheme.colorScheme.secondaryContainer
         FeeKind.FREE -> MaterialTheme.colorScheme.surfaceVariant
     }
     val content = when (kind) {
         FeeKind.PAID -> MaterialTheme.colorScheme.onTertiaryContainer
-        FeeKind.FAN_GROUP -> MaterialTheme.colorScheme.onSecondaryContainer
         FeeKind.FREE -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     Surface(shape = Corners.extraSmall, color = container, contentColor = content, modifier = modifier) {
         Text(
             when (kind) {
                 FeeKind.PAID -> "付费"
-                FeeKind.FAN_GROUP -> "粉丝圈"
                 FeeKind.FREE -> "免费"
             },
             Modifier.padding(
