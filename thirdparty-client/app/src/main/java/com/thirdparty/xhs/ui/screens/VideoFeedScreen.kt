@@ -59,6 +59,7 @@ import com.thirdparty.xhs.ui.components.PlayerView
 import com.thirdparty.xhs.ui.components.XhsAsyncImage
 import com.thirdparty.xhs.ui.components.VideoProgress
 import com.thirdparty.xhs.ui.components.buildVideoPlayer
+import com.thirdparty.xhs.ui.components.rememberIsPlaying
 import com.thirdparty.xhs.ui.components.rememberPlaybackError
 import com.thirdparty.xhs.ui.components.retryPlayback
 import com.thirdparty.xhs.ui.theme.Scrim
@@ -152,13 +153,17 @@ private fun VideoPage(
     onClickDetail: () -> Unit
 ) {
     var infoVisible by remember { mutableStateOf(true) }
-    var paused by remember { mutableStateOf(false) }
     // the video's real width/height ratio; used to size the surface so the
     // picture is never stretched (FILL would distort, ZOOM would crop).
     var videoAspect by remember(item.noteId) { mutableFloatStateOf(9f / 16f) }
     val player: ExoPlayer? = rememberPreparedPlayer(item.mediaUrl, nearby) { r ->
         if (r > 0f) videoAspect = r
     }
+    // derive "paused" from the player itself, not from the last double-tap, so an
+    // externally caused pause (audio focus loss, codec stall) is reflected too
+    val playing = rememberIsPlaying(player)
+    val paused = active && player != null && !playing &&
+        player.playbackState == Player.STATE_READY
     val playbackError = rememberPlaybackError(player)
 
     // only the current page plays; neighbours stay prepared (paused)
@@ -174,8 +179,6 @@ private fun VideoPage(
     // recording the view is a separate effect so a player rebuild does not
     // re-stamp viewedAt and reshuffle 最近浏览
     LaunchedEffect(active) { if (active) onWatched() }
-    LaunchedEffect(active) { if (!active) paused = false }
-
     Box(
         Modifier.fillMaxSize().background(Color.Black)
             .pointerInput(item.noteId) {
@@ -183,7 +186,11 @@ private fun VideoPage(
                     onTap = { infoVisible = !infoVisible },
                     onDoubleTap = {
                         val p = player
-                        if (p != null) { if (p.isPlaying) { p.pause(); paused = true } else { p.play(); paused = false } }
+                        // `paused` is derived from the player itself now, so this
+                        // only has to flip playback
+                        if (p != null) {
+                            if (p.isPlaying) p.pause() else p.play()
+                        }
                     }
                 )
             }

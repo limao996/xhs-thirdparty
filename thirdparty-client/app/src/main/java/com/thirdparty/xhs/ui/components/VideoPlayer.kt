@@ -195,6 +195,33 @@ fun VideoProgress(
 }
 
 /**
+ * Whether [player] is actually playing right now.
+ *
+ * The feed used to track paused/playing with a local flag flipped by double-tap
+ * only, so an externally caused pause (another app taking audio focus, a codec
+ * stall) left the UI claiming the video was running.
+ */
+@Composable
+fun rememberIsPlaying(player: Player?): Boolean {
+    var playing by remember(player) { mutableStateOf(player?.isPlaying == true) }
+    DisposableEffect(player) {
+        val p = player
+        val listener = if (p == null) null else object : Player.Listener {
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                playing = isPlaying
+            }
+
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                playing = p.isPlaying
+            }
+        }
+        if (p != null && listener != null) p.addListener(listener)
+        onDispose { if (p != null && listener != null) p.removeListener(listener) }
+    }
+    return playing
+}
+
+/**
  * Tracks the most recent playback failure for [player] (null while healthy).
  *
  * Without this a dead stream (bad URL, unsupported codec, CDN error) is a
