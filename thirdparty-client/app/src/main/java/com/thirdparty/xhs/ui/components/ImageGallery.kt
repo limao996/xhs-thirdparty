@@ -33,6 +33,10 @@ fun ImageGallery(
     images: List<NoteImage>,
     modifier: Modifier = Modifier
 ) {
+    // rememberPagerState must be called unconditionally: hoisting it above the
+    // size checks keeps the slot count stable when the image list is swapped.
+    val pagerState = rememberPagerState(pageCount = { images.size })
+
     if (images.isEmpty()) return
 
     val containerRatio = images.first().ratio.takeIf { it > 0f } ?: NoteImage.DEFAULT_RATIO
@@ -47,7 +51,6 @@ fun ImageGallery(
         return
     }
 
-    val pagerState = rememberPagerState(pageCount = { images.size })
     Box(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerLow)) {
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxWidth()) { page ->
             XhsAsyncImage(

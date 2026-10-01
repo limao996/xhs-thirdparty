@@ -38,19 +38,20 @@ fun XhsAsyncImage(
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Crop
 ) {
-    if (url.isNullOrBlank()) {
-        Box(modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant))
-        return
-    }
-    var bitmap by remember(url) { mutableStateOf<Bitmap?>(BitmapCache[url]) }
-    var failed by remember(url) { mutableStateOf(false) }
-    val currentUrl by rememberUpdatedState(url)
+    // All remember/LaunchedEffect calls are unconditional on purpose: an early
+    // `return` before them would change the number of slots used by this
+    // composable whenever `url` flips between null and non-null (which happens
+    // for every async-loaded avatar), corrupting state association.
+    val key = url.orEmpty()
+    var bitmap by remember(key) { mutableStateOf<Bitmap?>(BitmapCache[key]) }
+    var failed by remember(key) { mutableStateOf(false) }
+    val currentKey by rememberUpdatedState(key)
 
-    LaunchedEffect(url) {
-        if (bitmap != null) return@LaunchedEffect
-        val loaded = withContext(Dispatchers.IO) { loadBitmap(currentUrl) }
+    LaunchedEffect(key) {
+        if (key.isEmpty() || bitmap != null) return@LaunchedEffect
+        val loaded = withContext(Dispatchers.IO) { loadBitmap(currentKey) }
         if (loaded != null) {
-            BitmapCache[currentUrl] = loaded
+            BitmapCache[currentKey] = loaded
             bitmap = loaded
         } else {
             failed = true
@@ -58,18 +59,24 @@ fun XhsAsyncImage(
     }
 
     val bmp = bitmap
-    if (bmp != null) {
-        Image(
-            bitmap = bmp.asImageBitmap(),
-            contentDescription = contentDescription,
-            modifier = modifier,
-            contentScale = contentScale
-        )
-    } else {
-        // placeholder / error surface from the theme
-        val bg = if (failed) MaterialTheme.colorScheme.surfaceContainerHighest
-        else MaterialTheme.colorScheme.surfaceVariant
-        Box(modifier = modifier.background(bg))
+    when {
+        key.isEmpty() ->
+            Box(modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant))
+
+        bmp != null ->
+            Image(
+                bitmap = bmp.asImageBitmap(),
+                contentDescription = contentDescription,
+                modifier = modifier,
+                contentScale = contentScale
+            )
+
+        else -> {
+            // placeholder / error surface from the theme
+            val bg = if (failed) MaterialTheme.colorScheme.surfaceContainerHighest
+            else MaterialTheme.colorScheme.surfaceVariant
+            Box(modifier = modifier.background(bg))
+        }
     }
 }
 
