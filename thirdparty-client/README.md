@@ -226,3 +226,18 @@ app/src/main/java/com/thirdparty/xhs/
 - 「我的」页新增头像（`user_head_img` 实测为真实 URL）与 关注/粉丝/作品 数据行。
 - 「我关注的作者」支持直接取消关注；作者主页补齐错误态与重试。
 - 顺带核实 `discover-category` 返回结构确为 `{id, name}`，`Category.from` 解析无误。
+
+### 第 7 轮 · 头衔与视频预加载
+- 视频缓冲无任何反馈 → 新增 `BufferingIndicator`（监听 `STATE_BUFFERING`）。
+- 滑动切换每次都要重建播放器 + 重新拉流 → 改为**预加载相邻视频**：
+  `beyondBoundsPageCount = 1` + 相邻页保留暂停态的播放器实例，窗口外释放。
+  实测连滑 5 次即时起播、无串音、PSS 152MB。
+
+### 第 8 轮 · 评论区回复
+- 实测确认**没有独立回复接口**（`reply-list` / `son-list` / `comment-reply` 等全部 404），
+  回复内联在 `comment-list` 的 `reply_data` 中。
+- **真实 bug**：`CommentItem.replyCount` 读顶层 `data_count`，该字段不存在 → 恒为 0。
+  改为读 `reply_data.data_count`，并解析 `reply_data.list`。
+- 新增 `CommentReply` 模型与嵌套渲染（"用户 回复 某人" + 内容），
+  回复数多于已加载时提示"共 N 条回复"。
+- 实测：详情页评论下方正确显示「用户_0DsNI 回复 用户_9mm1X / 笑死了」+「共 2 条回复」。
