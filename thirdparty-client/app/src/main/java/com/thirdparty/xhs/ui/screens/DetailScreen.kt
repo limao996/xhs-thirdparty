@@ -510,30 +510,24 @@ private fun timeStr(ms: Long): String =
  */
 private fun shareNote(context: android.content.Context, item: NoteItem?) {
     if (item == null) return
-    // A custom-scheme link that opens THIS app on this note. The backend's
-        // share_url is a web page, which would not come back to the app.
-        val link = com.thirdparty.xhs.DeepLink.noteUrl(item.noteId)
+    // 口令式分享：链接只作为**文本**存在，不做成可点击的深链。
+    // 复制后用户回到本应用，由 MainActivity 检测剪贴板并询问是否跳转。
+    val link = com.thirdparty.xhs.DeepLink.noteUrl(item.noteId)
     val text = buildString {
         if (item.title.isNotBlank()) append(item.title).append('\n')
         append(link)
     }
-    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-        type = "text/plain"
-        putExtra(android.content.Intent.EXTRA_SUBJECT, item.title)
-        putExtra(android.content.Intent.EXTRA_TEXT, text)
-    }
-    runCatching {
-        context.startActivity(
-            android.content.Intent.createChooser(send, "分享到").apply {
-                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-        )
-    }.onFailure {
-        val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
-            as? android.content.ClipboardManager
-        cm?.setPrimaryClip(android.content.ClipData.newPlainText("link", link))
-        android.widget.Toast.makeText(context, "已复制链接", android.widget.Toast.LENGTH_SHORT).show()
-    }
+    val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+        as? android.content.ClipboardManager
+    val copied = runCatching {
+        cm?.setPrimaryClip(android.content.ClipData.newPlainText("link", text))
+        true
+    }.getOrDefault(false)
+    android.widget.Toast.makeText(
+        context,
+        if (copied) "口令已复制，回到应用可自动打开" else "复制失败",
+        android.widget.Toast.LENGTH_SHORT
+    ).show()
 }
 
 private fun com.thirdparty.xhs.data.NoteItem.detailTopic(): String =

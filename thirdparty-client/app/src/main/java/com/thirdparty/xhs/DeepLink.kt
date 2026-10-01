@@ -15,4 +15,16 @@ object DeepLink {
     const val HOST = "note"
 
     fun noteUrl(noteId: Long): String = "$SCHEME://$HOST/$noteId"
+
+    /**
+     * Pull a note id out of arbitrary clipboard text.
+     *
+     * Users paste the whole share message ("标题" + newline + link, or the link
+     * buried in other text), so this searches rather than matching the string
+     * exactly. Returns null when there is no share link in the text.
+     */
+    private val LINK = Regex("""$SCHEME://$HOST/(\d+)""")
+
+    fun parseNoteId(text: String?): Long? =
+        text?.let { LINK.find(it)?.groupValues?.get(1)?.toLongOrNull() }
 }
