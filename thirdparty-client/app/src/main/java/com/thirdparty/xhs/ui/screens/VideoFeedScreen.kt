@@ -310,9 +310,24 @@ private fun rememberPreparedPlayer(
 ): ExoPlayer? {
     val context: Context = LocalContext.current.applicationContext
     val aspect by rememberUpdatedState(onAspect)
+    // Rotating recreates the Activity, which would rebuild this player and restart
+    // the clip. rememberSaveable carries the position across the change.
+    var resumeMs by androidx.compose.runtime.saveable.rememberSaveable(url) {
+        androidx.compose.runtime.mutableLongStateOf(0L)
+    }
     val player = remember(url, prepare) {
         if (url.isBlank() || !prepare) null
         else buildVideoPlayer(context, url, autoPlay = false)
+    }
+    LaunchedEffect(player) {
+        if (player != null && resumeMs > 0L) player.seekTo(resumeMs)
+    }
+    LaunchedEffect(player) {
+        val p = player ?: return@LaunchedEffect
+        while (true) {
+            if (p.isPlaying) resumeMs = p.currentPosition
+            kotlinx.coroutines.delay(500)
+        }
     }
     // stop playback/audio when the app leaves the foreground
     PauseWhenNotStarted(player)

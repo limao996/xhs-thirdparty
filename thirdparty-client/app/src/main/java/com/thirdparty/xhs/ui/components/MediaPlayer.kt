@@ -41,6 +41,7 @@ import com.thirdparty.xhs.ui.theme.Spacing
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 
 /**
  * Detail page player: media3 surface + custom controller.
@@ -58,7 +59,25 @@ fun MediaPlayer(
     onAspect: ((Float) -> Unit)? = null
 ) {
     val context = LocalContext.current.applicationContext
+    // Rotating the device recreates the Activity (verified: WindowManager logs a
+    // "relaunch"), which rebuilds this composition and therefore the player. The
+    // playback position must survive that or the video jumps back to the start.
+    // rememberSaveable is what carries it across the configuration change.
+    var resumeMs by rememberSaveable(url) { androidx.compose.runtime.mutableLongStateOf(0L) }
     val player = remember(url) { buildVideoPlayer(context, url) }
+
+    // pick up where the previous instance left off (a no-op on first entry)
+    LaunchedEffect(player) {
+        if (resumeMs > 0L) player.seekTo(resumeMs)
+    }
+    // keep the saved position fresh without touching composition state: the read
+    // and write both happen in a coroutine, so nothing recomposes every tick
+    LaunchedEffect(player) {
+        while (true) {
+            if (player.isPlaying) resumeMs = player.currentPosition
+            delay(500)
+        }
+    }
     // stop playback/audio when the app leaves the foreground
     PauseWhenNotStarted(player)
     // report the natural aspect ratio so callers can size the container

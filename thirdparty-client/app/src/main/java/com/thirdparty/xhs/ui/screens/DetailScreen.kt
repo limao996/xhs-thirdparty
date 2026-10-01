@@ -192,15 +192,30 @@ private fun DetailContent(
     //  on top of the video — that was the broken layout.)
     Column(Modifier.fillMaxSize().padding(pad).verticalScroll(rememberScrollState())) {
         if (isVideo) {
-            // size the container to the video's real ratio (portrait default for
-            // short video); avoids huge black bars from a fixed 16:9 box
+            // Size the container to the video's real ratio (portrait default for
+            // short video); avoids huge black bars from a fixed 16:9 box.
             var videoAspect by remember(item.noteId) { mutableFloatStateOf(9f / 16f) }
-            MediaPlayer(
-                url = item.mediaUrl,
-                fullscreen = false,
-                onAspect = { r -> if (r > 0f) videoAspect = r },
-                modifier = Modifier.fillMaxWidth().aspectRatio(videoAspect)
-            )
+            // In landscape, sizing by WIDTH would compute a height far taller than
+            // the window (a portrait ratio at 2400px wide is ~5200px tall), so the
+            // video overflowed the screen with black on one side and cropped on the
+            // other. Constrain by height instead and centre it, so the whole frame
+            // fits — which is what 横屏 support has to mean.
+            val config = androidx.compose.ui.platform.LocalConfiguration.current
+            val landscape = config.orientation ==
+                android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            val maxVideoHeight = (config.screenHeightDp * 0.92f).dp
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                MediaPlayer(
+                    url = item.mediaUrl,
+                    fullscreen = false,
+                    onAspect = { r -> if (r > 0f) videoAspect = r },
+                    modifier = if (landscape) {
+                        Modifier.height(maxVideoHeight).aspectRatio(videoAspect)
+                    } else {
+                        Modifier.fillMaxWidth().aspectRatio(videoAspect)
+                    }
+                )
+            }
         } else {
             val images = item.images.ifEmpty {
                 listOf(item.cover).filter { it.isNotEmpty() }.map { NoteImage(it) }
