@@ -56,6 +56,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.thirdparty.xhs.App
 import com.thirdparty.xhs.data.CommentItem
+import com.thirdparty.xhs.data.CommentReply
 import com.thirdparty.xhs.data.NoteImage
 import com.thirdparty.xhs.ui.components.FeeBadge
 import com.thirdparty.xhs.ui.components.ImageGallery
@@ -306,6 +307,58 @@ private fun CommentRow(c: CommentItem) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
+
+            // inline replies (the backend nests them in reply_data — there is
+            // no separate reply endpoint; all candidates return 404)
+            if (c.replies.isNotEmpty()) {
+                Spacer(Modifier.height(Spacing.xs))
+                Surface(
+                    shape = Corners.small,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(Modifier.padding(Spacing.s)) {
+                        c.replies.forEach { r -> ReplyRow(r) }
+                        if (c.replyCount > c.replies.size) {
+                            Text(
+                                "共 ${c.replyCount} 条回复",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = Spacing.xs)
+                            )
+                        }
+                    }
+                }
+            } else if (c.replyCount > 0) {
+                Spacer(Modifier.height(Spacing.xs))
+                Text(
+                    "共 ${c.replyCount} 条回复",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReplyRow(r: CommentReply) {
+    Row(Modifier.padding(vertical = Spacing.xs)) {
+        XhsAvatar(url = r.headImg, contentDescription = r.userName,
+            modifier = Modifier.size(24.dp))
+        Spacer(Modifier.width(Spacing.s))
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(r.userName, style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary)
+                if (r.replyToName.isNotBlank()) {
+                    Text(" 回复 ", style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(r.replyToName, style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary)
+                }
+            }
+            Text(r.content, style = MaterialTheme.typography.bodySmall)
         }
     }
 }

@@ -71,6 +71,32 @@ data class AuthorInfo(
     }
 }
 
+/** A reply to a top-level comment (nested in `reply_data.list`). */
+data class CommentReply(
+    val replyId: Int,
+    val userId: Int,
+    val userName: String,
+    val headImg: String,
+    val content: String,
+    val createdAt: Long,
+    val likeCount: Int,
+    /** whom this reply answers ("" when replying to the comment itself) */
+    val replyToName: String
+) {
+    companion object {
+        fun from(o: JSONObject): CommentReply = CommentReply(
+            replyId = o.optInt("reply_id"),
+            userId = o.optInt("user_id"),
+            userName = o.optString("user_name", "匿名"),
+            headImg = o.optString("user_head_img"),
+            content = o.optString("content"),
+            createdAt = o.optLong("created_at") * 1000L,
+            likeCount = o.optInt("like_count"),
+            replyToName = o.optString("parent_reply_user_name")
+        )
+    }
+}
+
 /** A top-level comment (v2/note-comment/comment-list). */
 data class CommentItem(
     val commentId: Int,
@@ -81,20 +107,36 @@ data class CommentItem(
     val createdAt: Long,
     val likeCount: Int,
     val isLike: Boolean,
-    val replyCount: Int
+    val replyCount: Int,
+    /** replies come inline (there is no separate reply endpoint) */
+    val replies: List<CommentReply> = emptyList()
 ) {
     companion object {
-        fun from(o: JSONObject): CommentItem = CommentItem(
-            commentId = o.optInt("comment_id"),
-            userId = o.optInt("user_id"),
-            userName = o.optString("user_name", "匿名"),
-            headImg = o.optString("user_head_img"),
-            content = o.optString("content"),
-            createdAt = o.optLong("created_at") * 1000L,
-            likeCount = o.optInt("like_count"),
-            isLike = o.optInt("is_like") == 1,
-            replyCount = o.optInt("data_count")
-        )
+        fun from(o: JSONObject): CommentItem {
+            // replies live under reply_data; the top level has no data_count
+            val rd = o.optJSONObject("reply_data")
+            val totalReply = rd?.optInt("data_count") ?: 0
+            val arr = rd?.optJSONArray("list")
+            val replies = buildList {
+                if (arr != null) {
+                    for (i in 0 until arr.length()) {
+                        arr.optJSONObject(i)?.let { add(CommentReply.from(it)) }
+                    }
+                }
+            }
+            return CommentItem(
+                commentId = o.optInt("comment_id"),
+                userId = o.optInt("user_id"),
+                userName = o.optString("user_name", "匿名"),
+                headImg = o.optString("user_head_img"),
+                content = o.optString("content"),
+                createdAt = o.optLong("created_at") * 1000L,
+                likeCount = o.optInt("like_count"),
+                isLike = o.optInt("is_like") == 1,
+                replyCount = totalReply,
+                replies = replies
+            )
+        }
     }
 }
 
