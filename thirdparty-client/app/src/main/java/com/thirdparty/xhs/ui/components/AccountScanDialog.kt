@@ -47,12 +47,14 @@ fun AccountScanDialog(
     scanning: String,
     found: List<AccountProbe>,
     currentMac: String,
+    stoppedAtVip: AccountProbe? = null,
+    switched: Boolean = false,
     onSwitch: (AccountProbe) -> Unit,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = { if (!running) onDismiss() },
-        title = { Text("扫描 VIP 账号") },
+        title = { Text(if (stoppedAtVip != null) "已找到 VIP 账号" else "扫描 VIP 账号") },
         text = {
             Column {
                 if (running) {
@@ -72,9 +74,16 @@ fun AccountScanDialog(
                         fontFamily = FontFamily.Monospace,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                } else if (stoppedAtVip != null) {
+                    Text(
+                        if (switched) "扫到 VIP 即停止，已登录该账号（只扫了 $done 个）"
+                        else "扫到 VIP 即停止，但登录失败（只扫了 $done 个）",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                 } else {
                     Text(
-                        "找到 ${found.size} 个可用账号，其中 ${found.count { it.isVip }} 个带 VIP",
+                        "扫完全部 $total 个候选，找到 ${found.size} 个可用账号，" +
+                            "其中 ${found.count { it.isVip }} 个带 VIP",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }

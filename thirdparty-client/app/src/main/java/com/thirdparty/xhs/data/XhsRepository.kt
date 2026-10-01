@@ -291,8 +291,8 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
     /** The MAC of the identity currently in use. */
     fun currentDeviceMac(): String = api.currentDeviceMac()
 
-    /** Identities already known to work (the pool). */
-    fun knownDeviceMacs(): List<String> = CredentialStore.DEVICE_POOL
+    /** Identities known to work (discovered so far + the verified seed). */
+    fun knownDeviceMacs(): List<String> = api.knownDeviceMacs()
 
     // ---- guest session ------------------------------------------------------
     suspend fun rotateGuest() = withContext(Dispatchers.IO) { api.loginAsGuest() }

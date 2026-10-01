@@ -43,7 +43,11 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
         val done: Int = 0,
         val total: Int = 0,
         val scanning: String = "",
-        val found: List<AccountProbe> = emptyList()
+        val found: List<AccountProbe> = emptyList(),
+        /** set when the scan stopped early because it hit a VIP account */
+        val stoppedAtVip: AccountProbe? = null,
+        /** whether the app managed to log in as that VIP account */
+        val switched: Boolean = false
     )
 
     private val _scan = MutableStateFlow(ScanState())
@@ -110,12 +114,18 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
     }
 
     /**
-     * Scan the candidate identities and collect the ones that exist, keeping VIP
-     * accounts at the top. Runs without touching the current session.
+     * Scan candidate identities and STOP at the first one carrying VIP, switching
+     * to it immediately — no need to walk the whole candidate list.
+     *
+     * Probing never touches the session in use (see XhsApi.probeAccount), and
+     * every identity a probe confirms is persisted by CredentialStore, so the
+     * account pool grows with use instead of staying a fixed hardcoded list.
+     * The candidate order is shuffled so repeated scans do not repeat the same
+     * path.
      */
     fun startScan() {
         if (_scan.value.running) return
-        val candidates = CredentialStore.SCAN_CANDIDATES
+        val candidates = CredentialStore.SCAN_CANDIDATES.shuffled()
         _scan.value = ScanState(running = true, total = candidates.size)
         viewModelScope.launch {
             val found = mutableListOf<AccountProbe>()
@@ -125,6 +135,23 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
                 if (probe != null) {
                     found.add(probe)
                     _scan.update { it.copy(found = found.sortedByDescending { p -> p.isVip }) }
+                    if (probe.isVip) {
+                        // found a VIP — log in with it and stop scanning
+                        val switched = runCatching { repo.switchGuestTo(probe.mac) }
+                            .getOrDefault(false)
+                        refreshLabel()
+                        refreshVip()
+                        _scan.update {
+                            it.copy(
+                                running = false,
+                                done = i + 1,
+                                scanning = "",
+                                stoppedAtVip = probe,
+                                switched = switched
+                            )
+                        }
+                        return@launch
+                    }
                 }
                 // be gentle: this is a lot of sequential requests
                 kotlinx.coroutines.delay(120)

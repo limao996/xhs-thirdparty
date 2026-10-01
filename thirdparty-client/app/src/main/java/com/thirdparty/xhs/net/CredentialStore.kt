@@ -35,7 +35,7 @@ class CredentialStore(context: Context) {
     /** The device identity currently in use (a MAC; "889X" is appended later). */
     val deviceId: String
         get() = prefs.getString(KEY_DEVICE, null)
-            ?: DEVICE_POOL.first()
+            ?: SEED_DEVICES.first()
 
     /** Switch to a specific identity (used by the manual account switch). */
     fun setDevice(mac: String) {
@@ -43,22 +43,41 @@ class CredentialStore(context: Context) {
     }
 
     /**
-     * Advance to the next pooled identity and return it.
-     * Kept for the pool rotation path; switching is manual nowadays.
+     * The identities known to work so far: the verified seed set plus everything
+     * discovery has turned up since. Persisted, so the pool grows with use
+     * instead of staying the hardcoded list.
      */
-    fun nextDevice(): String {
-        val cur = DEVICE_POOL.indexOf(deviceId)
-        setDevice(DEVICE_POOL[(cur + 1).mod(DEVICE_POOL.size)])
-        return deviceId
+    val knownDevices: List<String>
+        get() = prefs.getString(KEY_DISCOVERED, null)
+            ?.split(',')?.filter { it.isNotBlank() }
+            ?.takeIf { it.isNotEmpty() }
+            ?: SEED_DEVICES
+
+    /** Remember an identity that a probe confirmed works. */
+    fun rememberDevice(mac: String) {
+        if (mac.isBlank()) return
+        val cur = knownDevices
+        if (cur.contains(mac)) return
+        prefs.edit().putString(KEY_DISCOVERED, (cur + mac).joinToString(",")).apply()
     }
 
-    /** Pick a random pooled identity different from the current one. */
+    /**
+     * Pick a random identity from the known set (any of them, including ones
+     * already used). Random *generation* is impossible here — see [SEED_DEVICES].
+     */
     fun randomDevice(): String {
-        if (DEVICE_POOL.size <= 1) return deviceId
-        val cur = DEVICE_POOL.indexOf(deviceId)
-        var pick = cur
-        while (pick == cur) pick = (0 until DEVICE_POOL.size).random()
-        setDevice(DEVICE_POOL[pick])
+        val pool = knownDevices
+        if (pool.isEmpty()) return deviceId
+        val pick = pool.random()
+        setDevice(pick)
+        return pick
+    }
+
+    /** Advance to the next known identity and return it. */
+    fun nextDevice(): String {
+        val pool = knownDevices
+        val cur = pool.indexOf(deviceId)
+        setDevice(pool[(cur + 1).mod(pool.size)])
         return deviceId
     }
 
@@ -66,13 +85,23 @@ class CredentialStore(context: Context) {
         const val DEFAULT_HOST = "app.xiaohuangbook.net"
 
         /**
-         * Verified working guest identities, in probe order. Each entry was
-         * confirmed with `login-with-guest` + `mine/user-info` returning a real
-         * `user_id`. Fresh random ids are rejected, so this list cannot be
-         * generated — it can only be extended by discovery.
+         * Verified working guest identities used to seed the pool.
+         *
+         * NOTE on "just use random ids": that is not possible. The backend never
+         * creates accounts — `login-with-guest` only returns a session for an
+         * identity it already knows. Measured: 30 fully random MACs and 20
+         * structured-random MACs produced **0** working accounts, while every
+         * fresh identity answers `result=-1 用戶ID錯誤` immediately and on repeat.
+         *
+         * What does exist is the set of "classic dummy" device ids the original
+         * app falls back to when it cannot read a real MAC (all-zero, all-F,
+         * 112233445566, …), which many devices have used over time. The pool is
+         * therefore *discovered*, not generated: anything a scan confirms is
+         * persisted in [KEY_DISCOVERED] and joins the set, and switching picks
+         * randomly from the whole set.
          */
-        val DEVICE_POOL = listOf(
-            "AABBCCDDEEFF", // uid 3684088  (the long-standing default)
+        val SEED_DEVICES = listOf(
+            "AABBCCDDEEFF", // uid 3684088
             "111111111111", // uid 56347336
             "FFFFFFFFFFFF", // uid 1135580
             "123456789ABC", // uid 211839
@@ -82,6 +111,9 @@ class CredentialStore(context: Context) {
             "000000000001", // uid 159493
             "000000000003"  // uid 52605634
         )
+
+        /** @Deprecated use [SEED_DEVICES] / [knownDevices] */
+        val DEVICE_POOL = SEED_DEVICES
 
         /** Kept for compatibility; the first pool entry. */
         const val DEFAULT_DEVICE_MAC = "AABBCCDDEEFF"
@@ -95,7 +127,7 @@ class CredentialStore(context: Context) {
          * family of well-known values — random MACs are never accepted.
          */
         val SCAN_CANDIDATES: List<String> = buildList {
-            addAll(DEVICE_POOL)
+            addAll(SEED_DEVICES)
             // repeated nibbles: 000000000000 … FFFFFFFFFFFF
             for (c in "0123456789ABCDEF") add(c.toString().repeat(12))
             // repeated nibbles + incrementing last char
@@ -119,5 +151,6 @@ class CredentialStore(context: Context) {
         private const val KEY_TOKEN = "user_token"
         private const val KEY_HASH = "user_hash"
         private const val KEY_DEVICE = "device_mac"
+        private const val KEY_DISCOVERED = "discovered_macs"
     }
 }

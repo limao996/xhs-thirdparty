@@ -239,6 +239,8 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
         val d = me.optJSONObject("data") ?: return null
         val info = d.optJSONObject("user_info") ?: return null
         val vp = d.optJSONObject("user_vp") ?: JSONObject()
+        // a probe that produced an account is by definition a usable identity
+        credentialStore.rememberDevice(mac)
         return AccountProbe(
             mac = mac,
             userId = info.optInt("user_id"),
@@ -261,6 +263,12 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
     /** The MAC of the identity currently in use. */
     fun currentDeviceMac(): String = credentialStore.deviceId
 
-    /** Pick a random identity different from the current one. */
+    /** Pick a random identity from the discovered set. */
     fun randomDeviceMac(): String = credentialStore.randomDevice()
+
+    /** Identities known to work (discovered so far + the verified seed). */
+    fun knownDeviceMacs(): List<String> = credentialStore.knownDevices
+
+    /** Remember an identity a probe confirmed. */
+    fun rememberDeviceMac(mac: String) = credentialStore.rememberDevice(mac)
 }
