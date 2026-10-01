@@ -364,6 +364,24 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
         (0 until arr.length()).map { CommentItem.from(arr.optJSONObject(it)) }
     }
 
+    /**
+     * The reply thread of ONE comment (v2/note-comment/comment-reply-list).
+     *
+     * Needed because the comment list only embeds a short preview of the replies:
+     * `reply_data.data_count` is the true total and `reply_data.list` holds just
+     * the first few. The examined client pages this endpoint with
+     * `{note_id, parent_comment_id, page}`.
+     */
+    suspend fun commentReplies(noteId: Long, parentCommentId: Int, page: Int): List<CommentReply> =
+        withContext(Dispatchers.IO) {
+            val res = api.call(
+                "v2/note-comment/comment-reply-list",
+                mapOf("note_id" to noteId, "parent_comment_id" to parentCommentId, "page" to page)
+            )
+            val arr = res.optJSONObject("data")?.optJSONArray("list") ?: org.json.JSONArray()
+            (0 until arr.length()).map { CommentReply.from(arr.optJSONObject(it)) }
+        }
+
     /** Author's profile (v2/member/user-info). */
     suspend fun authorProfile(userId: Int): AuthorInfo? = withContext(Dispatchers.IO) {
         val res = api.call("v2/member/user-info", mapOf("user_id" to userId))

@@ -77,6 +77,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.saveable.rememberSaveable
 import com.thirdparty.xhs.ui.components.buildVideoPlayer
 import kotlinx.coroutines.delay
+import com.thirdparty.xhs.ui.components.CommentRepliesDialog
+import androidx.compose.ui.draw.clip
 
 /**
  * 详情页：视频播放器 + 标题 + 作者 + 介绍 + 标签 + 评论区。
@@ -227,6 +229,11 @@ private fun DetailContent(
     sharedPlayer: androidx.media3.exoplayer.ExoPlayer? = null
 ) {
     val item = state.item!!
+    // which comment's reply thread is open in the dialog (null = none).
+    // Declared here, not inside the scrolling Column, so the dialog below can see it.
+    var openReplies by remember(item.noteId) {
+        mutableStateOf<com.thirdparty.xhs.data.CommentItem?>(null)
+    }
     // Single scrolling column: media on top, then all the content BELOW it.
     // (Previously media and text were siblings in a Box, so the text drew
     //  on top of the video — that was the broken layout.)
@@ -360,7 +367,7 @@ private fun DetailContent(
             } else if (state.comments.isEmpty()) {
                 Text("还没有评论", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             } else {
-                state.comments.forEach { c -> CommentRow(c) }
+                state.comments.forEach { c -> CommentRow(c) { openReplies = it } }
                 if (state.commentsHasMore) {
                     TextButton(
                         onClick = { viewModel.loadMoreComments() },
@@ -375,11 +382,22 @@ private fun DetailContent(
                 }
             }
         }
+
+    }
+    openReplies?.let { oc ->
+        CommentRepliesDialog(
+            noteId = item.noteId,
+            commentId = oc.commentId,
+            commentUserName = oc.userName,
+            totalCount = oc.replyCount,
+            preview = oc.replies,
+            onDismiss = { openReplies = null }
+        )
     }
 }
 
 @Composable
-private fun CommentRow(c: CommentItem) {
+private fun CommentRow(c: CommentItem, onOpenReplies: (CommentItem) -> Unit) {
     Row(Modifier.padding(vertical = Spacing.s)) {
         XhsAvatar(url = c.headImg, contentDescription = c.userName,
             modifier = Modifier.size(AvatarSize.comment))
@@ -397,33 +415,40 @@ private fun CommentRow(c: CommentItem) {
                 }
             }
 
-            // inline replies (the backend nests them in reply_data — there is
-            // no separate reply endpoint; all candidates return 404)
+            // inline reply preview. The comment list only carries a FEW replies
+            // (reply_data is a preview with a data_count); the full thread comes
+            // from v2/note-comment/comment-reply-list. Tapping the preview or the
+            // count opens the whole thread in a dialog.
             if (c.replies.isNotEmpty()) {
                 Spacer(Modifier.height(Spacing.xs))
                 Surface(
                     shape = Corners.small,
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().clickable { onOpenReplies(c) }
                 ) {
                     Column(Modifier.padding(Spacing.s)) {
                         c.replies.forEach { r -> ReplyRow(r) }
                         if (c.replyCount > c.replies.size) {
                             Text(
-                                "共 ${c.replyCount} 条回复",
+                                "共 ${c.replyCount} 条回复，点击查看",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.padding(top = Spacing.xs)
                             )
                         }
                     }
                 }
             } else if (c.replyCount > 0) {
+                // no preview came with the comment, but replies exist
                 Spacer(Modifier.height(Spacing.xs))
                 Text(
-                    "共 ${c.replyCount} 条回复",
+                    "共 ${c.replyCount} 条回复，点击查看",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clip(Corners.small)
+                        .clickable { onOpenReplies(c) }
+                        .padding(vertical = Spacing.xs)
                 )
             }
         }
