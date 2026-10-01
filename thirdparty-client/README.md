@@ -508,3 +508,26 @@ app/src/main/java/com/thirdparty/xhs/
   （限定 READY 以免缓冲期间误显示暂停图标）。
 - 验证：双击前无指示 → 双击后出现 content-desc="已暂停" → 再双击消失 →
   滑动到下一条无残留（active 守卫有效）。
+
+### 第 36 轮 · 字段名审计（排查同类"编造解析"）
+遍历代码里所有 `optXxx("字段")` 调用，逐一对真实响应核对：
+- `mine/user-info` → `{agent_url, note_config, user_info, user_vp, user_wat}`；
+  `user_info` 含 `user_background_img` / `user_level_name` / `user_phone` 等全部被读字段 ✅
+- `data.user_vp` 真实结构 `{svp_end, vp_end, vp_status, user_head_img, user_name}`
+  与 Models.kt 的嵌套解析完全一致 ✅
+- 作者接口是 `v2/member/user-info`（不是 `user/view`，后者 404），
+  读取路径正确 ✅ ；`member/note-list` 返回 `{list, note_total, …}` ✅
+**结论：除上一轮修掉的费用门控外，不存在其他编造解析。**
+
+### 第 37 轮 · "每次启动更换游客账号"实测不成立（重要）
+- 实测：游客 ID 每次启动**恒为 3684088**，从未变化；而界面每次冷启动都弹
+  「已切换新的游客账号」—— **对用户的虚假陈述**。
+- 对线上后端的完整验证：换后缀、换 MAC、附加 user_phone/device_type/
+  is_register/client_id/channel 等参数，一律 `result=-1 用戶ID錯誤`；
+  同一身份的两次登录 token 不同但 user_hash 相同；新身份的登录响应只是把
+  设备 id 原样回显（first_login=false）。
+  → **只有唯一的预建立设备身份可用；会话 token 轮换，账号不可更换。**
+- 改动：冷启动不再弹提示；手动入口改为「刷新游客会话」+
+  「重新获取访客凭证（账号由设备决定）」；提示语「已刷新游客会话」；
+  修正三处同样误导的代码注释。
+- 该限制来自后端，真正的账号轮换需要服务端支持。
