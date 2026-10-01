@@ -83,10 +83,11 @@ fun HomeScreen(
 
     val immersive = tab == HomeTab.FEED
 
-    // 推荐 tab: keep the status bar but make it TRANSPARENT with white icons —
-    // the video stays full-bleed behind it while time/battery remain readable.
-    // The navigation bar is hidden for immersion. The header below already applies
-    // statusBarsPadding(), so it moves down instead of sitting under the clock.
+    // 推荐 tab: BOTH system bars stay visible but fully transparent with white
+    // icons — the video keeps drawing behind them (edge-to-edge), so nothing is
+    // covered while time/battery and the gesture bar remain reachable.
+    // The header has statusBarsPadding(), and the bottom NavigationBar inherits
+    // MD3's default window insets, so each lifts clear of its bar automatically.
     val darkNow = currentThemeMode().isDark(androidx.compose.foundation.isSystemInDarkTheme())
     val view = androidx.compose.ui.platform.LocalView.current
     val activity = LocalContext.current as? android.app.Activity
@@ -94,16 +95,10 @@ fun HomeScreen(
         val w = activity?.window
         if (w != null) {
             val controller = androidx.core.view.WindowCompat.getInsetsController(w, view)
-            if (immersive) {
-                controller.show(androidx.core.view.WindowInsetsCompat.Type.statusBars())
-                controller.hide(androidx.core.view.WindowInsetsCompat.Type.navigationBars())
-                controller.systemBarsBehavior =
-                    androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            } else {
-                controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-            }
-            // white icons over video on the 推荐 tab, otherwise follow the theme
+            controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            //白图标：推荐页强制深色主题，所以两栏图标都用浅色
             controller.isAppearanceLightStatusBars = !immersive && !darkNow
+            controller.isAppearanceLightNavigationBars = !immersive && !darkNow
         }
         onDispose { }
     }

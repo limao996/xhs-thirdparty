@@ -67,6 +67,7 @@ import com.thirdparty.xhs.ui.theme.Spacing
 import com.thirdparty.xhs.ui.viewmodel.VideoFeedViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.statusBarsPadding
 
 /**
  * 推荐短视频（沉浸式）：
@@ -268,10 +269,14 @@ private fun VideoPage(
                 )
             }
             // fee tag at top-right — pushed below the translucent header so it
-            // never collides with the search icon
+            // never collides with the search icon.
+            // statusBarsPadding() is required in addition to HeaderClearance: the
+            // header gained a status-bar inset when that bar became visible, so the
+            // old fixed clearance alone left the tag sitting on the search icon.
             FeeBadge(
                 item,
                 modifier = Modifier.align(Alignment.TopEnd)
+                    .statusBarsPadding()
                     .padding(top = HeaderClearance, end = Spacing.l)
             )
         }
@@ -288,7 +293,11 @@ private fun VideoPage(
     }
 }
 
-/** Height reserved for the translucent feed header so overlays clear it. */
+/**
+ * Height of the translucent feed header's own content, so overlays clear it.
+ * Excludes the status-bar inset — overlays must add `statusBarsPadding()` too,
+ * otherwise they drift up by a full status bar whenever that bar is visible.
+ */
 private val HeaderClearance = 76.dp
 
 /** Height reserved for the bottom NavigationBar so overlays clear it. */
