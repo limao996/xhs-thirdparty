@@ -114,6 +114,15 @@ private fun AutoHideController(
     var duration by remember(player) { mutableFloatStateOf(0f) }
     var position by remember(player) { mutableFloatStateOf(0f) }
     var ended by remember(player) { mutableStateOf(false) }
+    // While the user drags the slider we show a local value and only seek on
+    // release. Otherwise the 250ms position poll fights the drag, and every
+    // pixel of movement would issue a seek — expensive on an HLS stream.
+    var dragging by remember(player) { mutableStateOf(false) }
+    var dragFraction by remember(player) { mutableFloatStateOf(0f) }
+    // Bumped on every user interaction so the auto-hide timer restarts — without
+    // this the controls vanish immediately after a seek and the user never sees
+    // where the video landed.
+    var interaction by remember(player) { androidx.compose.runtime.mutableIntStateOf(0) }
 
     DisposableEffect(player) {
         val listener = object : Player.Listener {
@@ -132,17 +141,19 @@ private fun AutoHideController(
         onDispose { player.removeListener(listener) }
     }
 
-    // auto-hide after 3s of no interaction
-    LaunchedEffect(visible, playing) {
-        if (visible && playing) { delay(3000); visible = false }
+    // Auto-hide after 3s of no interaction — but NEVER while the user's finger
+    // is on the slider, otherwise the controls can vanish mid-drag and the
+    // gesture is cancelled with it.
+    LaunchedEffect(visible, playing, interaction, dragging) {
+        if (visible && playing && !dragging) { delay(3000); visible = false }
     }
 
     // Keep position/duration fresh while the controls are visible and playing.
     // Relying on Player.Listener alone leaves the slider and the time label
     // frozen during normal playback: those callbacks only fire on state changes,
     // seeks and media transitions — never per frame.
-    LaunchedEffect(player, visible, playing) {
-        if (!visible || !playing) return@LaunchedEffect
+    LaunchedEffect(player, visible, playing, dragging) {
+        if (!visible || !playing || dragging) return@LaunchedEffect
         while (true) {
             duration = if (player.duration > 0) player.duration.toFloat() else 0f
             position = player.currentPosition.toFloat()
@@ -170,8 +181,18 @@ private fun AutoHideController(
             ) {
                 val fraction = if (duration > 0f) (position / duration).coerceIn(0f, 1f) else 0f
                 Slider(
-                    value = fraction,
-                    onValueChange = { f -> player.seekTo((f * player.duration).toLong()) },
+                    value = if (dragging) dragFraction else fraction,
+                    onValueChange = { f ->
+                        dragging = true
+                        dragFraction = f
+                        interaction++
+                    },
+                    onValueChangeFinished = {
+                        val d = player.duration
+                        if (d > 0) player.seekTo((dragFraction * d).toLong())
+                        dragging = false
+                        interaction++
+                    },
                     colors = SliderDefaults.colors(
                         thumbColor = Scrim.onMedia,
                         activeTrackColor = MaterialTheme.colorScheme.primary,
