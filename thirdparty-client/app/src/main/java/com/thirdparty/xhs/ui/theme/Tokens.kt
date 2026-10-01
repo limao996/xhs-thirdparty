@@ -14,6 +14,17 @@ import androidx.compose.ui.unit.dp
  * Spacing follows the 4dp baseline grid; corner radii map to Material3 shape
  * tokens; scrims are only used over media (video/photo), per MD3 guidance.
  */
+/**
+ * Bottom clearance for content that scrolls UNDER the floating NavigationBar.
+ *
+ * The bar is drawn as an overlay on top of the tab content (so the video can run
+ * edge to edge behind it), which means a scrollable area that reaches the bottom
+ * of the window has its last ~176dp permanently covered. Any scrollable content
+ * hosted inside HomeScreen must reserve this much bottom space, otherwise the
+ * final rows can never be brought into view — which reads as "it won't scroll".
+ */
+val BottomNavClearance: Dp = 96.dp
+
 object Spacing {
     val none: Dp = 0.dp
     val xs: Dp = 4.dp

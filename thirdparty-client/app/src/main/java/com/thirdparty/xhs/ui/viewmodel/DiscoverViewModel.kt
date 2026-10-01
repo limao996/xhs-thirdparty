@@ -42,7 +42,9 @@ data class DiscoverUiState(
     val fanGroupError: Boolean = false,
     val followed: List<FollowedEntity> = emptyList(),
     /** true while a pull-to-refresh is in flight */
-    val refreshing: Boolean = false
+    val refreshing: Boolean = false,
+    /** bumped on every refresh so the grid scrolls back to the top */
+    val refreshTick: Int = 0
 )
 
 class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
@@ -52,6 +54,8 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
 
     private var feedPage = 0
     private var feedLoading = false
+    /** consecutive pages that added nothing new — two in a row ends pagination */
+    private var emptyPages = 0
     private var myId = 0
 
     init {
@@ -70,6 +74,7 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
         _ui.update { it.copy(selectedCategory = id, feed = FeedSection()) }
         feedPage = 0
         feedLoading = false
+        emptyPages = 0
         loadMore()
     }
 
@@ -104,13 +109,22 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
             if (list != null) {
                 feedPage++
                 _ui.update { s ->
+                    val before = s.feed.items.size
+                    val merged = s.feed.items.appendUnique(list)
+                    val added = merged.size - before
+                    // The old rule (hasMore = list.size >= 10) ended pagination
+                    // whenever the backend returned a short page — which it does
+                    // often, because its page boundaries are not stable. Only an
+                    // empty page, or two consecutive pages that add nothing new,
+                    // really means "no more".
+                    emptyPages = if (added == 0) emptyPages + 1 else 0
                     s.copy(feed = s.feed.copy(
                         // page boundaries are not stable upstream; duplicate keys
                         // would crash the staggered grid
-                        items = s.feed.items.appendUnique(list),
+                        items = merged,
                         firstLoading = false,
                         loadingMore = false,
-                        hasMore = list.size >= 10,
+                        hasMore = list.isNotEmpty() && emptyPages < 2,
                         error = false
                     ))
                 }
@@ -131,16 +145,19 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
             val catId = _ui.value.selectedCategory
             val list = runCatching { repo.discoverPage(categoryId = catId, groupId = 0, page = 1) }.getOrNull()
             feedPage = if (list != null) 1 else 0
+            if (list != null) emptyPages = 0
             _ui.update { s ->
                 s.copy(
                     refreshing = false,
+                    // a refresh always returns the user to the top of the list
+                    refreshTick = s.refreshTick + 1,
                     categories = cats ?: s.categories,
                     // only replace the feed when the refresh actually succeeded
                     feed = if (list != null) {
                         s.feed.copy(
                             items = list,
                             firstLoading = false,
-                            hasMore = list.size >= 10,
+                            hasMore = list.isNotEmpty(),
                             error = false
                         )
                     } else {

@@ -24,7 +24,9 @@ data class AuthorUiState(
     /** true when the works request failed and there is nothing to show */
     val notesError: Boolean = false,
     /** true while a pull-to-refresh is in flight */
-    val refreshing: Boolean = false
+    val refreshing: Boolean = false,
+    /** bumped on refresh so the grid scrolls back to the top */
+    val refreshTick: Int = 0
 )
 
 class AuthorViewModel(
@@ -37,6 +39,8 @@ class AuthorViewModel(
 
     private var page = 0
     private var loading = false
+    /** short pages are normal upstream — see PagingGuard */
+    private val paging = PagingGuard()
 
     /** A userId of 0 means the caller had no usable author id (e.g. a note
      *  whose payload lacked `user_id`); there is nothing to fetch. */
@@ -96,13 +100,16 @@ class AuthorViewModel(
             val list = runCatching { repo.authorNotes(userId, 1) }.getOrNull()
             if (list != null) {
                 if (list.isNotEmpty()) page = 1
+                paging.reset()
                 _ui.update {
                     it.copy(
                         notes = list,
                         notesLoading = false,
                         refreshing = false,
-                        hasMore = list.size >= 10,
-                        notesError = false
+                        hasMore = list.isNotEmpty(),
+                        notesError = false,
+                        // a refresh returns the user to the top of the list
+                        refreshTick = it.refreshTick + 1
                     )
                 }
             } else {
@@ -121,12 +128,14 @@ class AuthorViewModel(
             if (list != null) {
                 if (list.isNotEmpty()) page++
                 _ui.update {
+                    val before = it.notes.size
+                    val merged = it.notes.appendUnique(list)
                     it.copy(
                         // de-dup: the grid keys by noteId and crashes on duplicates
-                        notes = it.notes.appendUnique(list),
+                        notes = merged,
                         notesLoading = false,
                         loadingMore = false,
-                        hasMore = list.size >= 10,
+                        hasMore = paging.onPage(list.size, merged.size - before),
                         notesError = false
                     )
                 }

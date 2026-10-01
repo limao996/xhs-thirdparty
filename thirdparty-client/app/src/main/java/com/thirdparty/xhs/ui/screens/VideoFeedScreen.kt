@@ -90,7 +90,12 @@ fun VideoFeedScreen(
     }
     // refresh when the 推荐 tab is re-tapped
     LaunchedEffect(refreshTick) {
-        if (refreshTick > 0) viewModel.refresh()
+        if (refreshTick > 0) {
+            // refreshing must also return the viewer to the first video,
+            // otherwise they stay parked on the old position
+            pagerState.scrollToPage(0)
+            viewModel.refresh()
+        }
     }
 
     if (state.items.isEmpty()) {

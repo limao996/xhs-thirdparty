@@ -66,6 +66,7 @@ import com.thirdparty.xhs.ui.components.XhsAsyncImage
 import com.thirdparty.xhs.ui.components.XhsAvatar
 import com.thirdparty.xhs.ui.components.XhsWaterfallGrid
 import com.thirdparty.xhs.ui.theme.AvatarSize
+import com.thirdparty.xhs.ui.theme.BottomNavClearance
 import com.thirdparty.xhs.ui.theme.Spacing
 import com.thirdparty.xhs.ui.viewmodel.DiscoverTab
 import com.thirdparty.xhs.ui.viewmodel.DiscoverViewModel
@@ -73,8 +74,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
-/** Clearance for the floating bottom NavigationBar (80dp bar + margin). */
-private val BottomNavClearance = 96.dp
+/** Clearance for the floating bottom NavigationBar (see theme/BottomNavClearance). */
 
 /**
  * 发现页：顶部 TabRow（发现 / 粉丝圈 / 关注）+ 右下刷新 FAB。
@@ -198,6 +198,7 @@ private fun FeedTab(
                 ),
                 hasMore = state.feed.hasMore,
                 loadingMore = state.feed.loadingMore,
+                resetKey = state.refreshTick,
                 onLoadMore = { viewModel.loadMore() }
             )
         }

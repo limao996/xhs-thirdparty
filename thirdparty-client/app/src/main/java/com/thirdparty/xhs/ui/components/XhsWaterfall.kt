@@ -38,7 +38,12 @@ import kotlinx.coroutines.flow.distinctUntilChanged
  *  - fee badge on the cover corner
  *  - endless pagination: watches the tail index and calls [onLoadMore]
  *  - a trailing loading row while the next page is in flight
+ *  - scroll-to-top when [resetKey] changes (refresh)
  */
+
+/** How close to the tail (in items) triggers the next page. */
+private const val LOAD_MORE_THRESHOLD = 4
+
 @Composable
 fun XhsWaterfallGrid(
     items: List<NoteItem>,
@@ -50,7 +55,13 @@ fun XhsWaterfallGrid(
     ),
     hasMore: Boolean = false,
     loadingMore: Boolean = false,
-    onLoadMore: (() -> Unit)? = null
+    onLoadMore: (() -> Unit)? = null,
+    /**
+     * Changing this value scrolls the grid back to the top. Callers pass a
+     * counter that increments on refresh — reloading data alone leaves the
+     * LazyGrid at its old scroll offset, so the user stays parked mid-list.
+     */
+    resetKey: Any? = Unit
 ) {
     val gridState = rememberLazyStaggeredGridState()
 
@@ -59,19 +70,28 @@ fun XhsWaterfallGrid(
     // guarantees the grid can never crash regardless.
     val safeItems = remember(items) { items.distinctBy { it.noteId } }
 
-    // endless pagination — trigger when the tail becomes visible
-    if (onLoadMore != null) {
-        LaunchedEffect(gridState) {
+    // back to the top whenever the caller signals a refresh
+    LaunchedEffect(resetKey) {
+        if (safeItems.isNotEmpty()) gridState.scrollToItem(0)
+    }
+
+    // Endless pagination — trigger when the tail becomes visible.
+    //
+    // The effect is keyed on the item count and the in-flight flag so it is
+    // re-evaluated after every load. Relying on the visible index alone meant
+    // that a page which added nothing new (the backend re-serves overlapping
+    // ids) left the condition unchanged, so no further snapshot emission ever
+    // happened and pagination stalled permanently.
+    if (onLoadMore != null && hasMore) {
+        LaunchedEffect(gridState, safeItems.size, loadingMore) {
             snapshotFlow {
                 val info = gridState.layoutInfo
-                if (info.totalItemsCount == 0) -1
-                else info.visibleItemsInfo.lastOrNull()?.index ?: -1
+                val total = info.totalItemsCount
+                val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
+                total > 0 && last >= total - LOAD_MORE_THRESHOLD
             }
                 .distinctUntilChanged()
-                .collect { last ->
-                    val total = gridState.layoutInfo.totalItemsCount
-                    if (total > 0 && last >= total - 4) onLoadMore()
-                }
+                .collect { nearEnd -> if (nearEnd) onLoadMore() }
         }
     }
 

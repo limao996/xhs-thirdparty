@@ -29,7 +29,9 @@ data class SearchUiState(
     /** true once the user has run at least one search */
     val searched: Boolean = false,
     /** true while a pull-to-refresh is in flight */
-    val refreshing: Boolean = false
+    val refreshing: Boolean = false,
+    /** bumped on every refresh / new search so the grid scrolls back to the top */
+    val refreshTick: Int = 0
 )
 
 class SearchViewModel(private val repo: XhsRepository) : ViewModel() {
@@ -39,6 +41,8 @@ class SearchViewModel(private val repo: XhsRepository) : ViewModel() {
 
     private var page = 1
     private var loading = false
+    /** short pages are normal upstream — see PagingGuard */
+    private val paging = PagingGuard()
 
     init { refreshHistory() }
 
@@ -72,10 +76,13 @@ class SearchViewModel(private val repo: XhsRepository) : ViewModel() {
     private fun runSearch(q: String) {
         page = 1
         loading = true
+        paging.reset()
         _ui.update {
             it.copy(
                 searching = true, empty = false, error = false, hasMore = true,
-                results = emptyList(), users = emptyList(), searched = true
+                results = emptyList(), users = emptyList(), searched = true,
+                // new search results start from the top
+                refreshTick = it.refreshTick + 1
             )
         }
         viewModelScope.launch {
@@ -88,7 +95,7 @@ class SearchViewModel(private val repo: XhsRepository) : ViewModel() {
                             results = list ?: it.results,
                             empty = list != null && list.isEmpty(),
                             error = list == null,
-                            hasMore = list != null && list.size >= 10
+                            hasMore = list != null && list.isNotEmpty()
                         )
                     }
                 }
@@ -131,13 +138,15 @@ class SearchViewModel(private val repo: XhsRepository) : ViewModel() {
             val list = runCatching { repo.searchNote(q, 1) }.getOrNull()
             if (list != null) {
                 page = 1
+                paging.reset()
                 _ui.update {
                     it.copy(
                         results = list,
                         refreshing = false,
-                        hasMore = list.size >= 10,
+                        hasMore = list.isNotEmpty(),
                         empty = list.isEmpty(),
-                        error = false
+                        error = false,
+                        refreshTick = it.refreshTick + 1
                     )
                 }
             } else {
@@ -161,11 +170,13 @@ class SearchViewModel(private val repo: XhsRepository) : ViewModel() {
             if (list != null) {
                 if (list.isNotEmpty()) page = next
                 _ui.update {
+                    val before = it.results.size
+                    val merged = it.results.appendUnique(list)
                     it.copy(
                         // de-dup: duplicate keys would crash the waterfall grid
-                        results = it.results.appendUnique(list),
+                        results = merged,
                         loadingMore = false,
-                        hasMore = list.size >= 10
+                        hasMore = paging.onPage(list.size, merged.size - before)
                     )
                 }
             } else {

@@ -182,6 +182,7 @@ fun SearchScreen(
                             ),
                             hasMore = state.hasMore,
                             loadingMore = state.loadingMore,
+                            resetKey = state.refreshTick,
                             onLoadMore = { viewModel.loadMore() }
                         )
                     }

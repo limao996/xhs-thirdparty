@@ -71,6 +71,7 @@ fun LocalListScreen(
                 start = Spacing.s, end = Spacing.s, top = Spacing.s, bottom = Spacing.l
             ),
             hasMore = state.hasMore,
+            resetKey = state.refreshTick,
             onLoadMore = { viewModel.loadMore() }
         )
     }

@@ -16,7 +16,9 @@ data class LocalListUiState(
     val visibleCount: Int = PAGE_SIZE,
     val loading: Boolean = true,
     /** true while a pull-to-refresh is in flight */
-    val refreshing: Boolean = false
+    val refreshing: Boolean = false,
+    /** bumped on refresh so the grid scrolls back to the top */
+    val refreshTick: Int = 0
 ) {
     val visible: List<NoteItem> get() = all.take(visibleCount)
     val hasMore: Boolean get() = visibleCount < all.size
@@ -64,7 +66,9 @@ class LocalListViewModel(
                 all = items,
                 visibleCount = LocalListUiState.PAGE_SIZE,
                 loading = false,
-                refreshing = false
+                refreshing = false,
+                // a refresh returns the user to the top of the list
+                refreshTick = _ui.value.refreshTick + 1
             )
         }
     }

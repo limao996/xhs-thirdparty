@@ -1,6 +1,8 @@
 package com.thirdparty.xhs.ui.screens
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -52,6 +54,7 @@ import com.thirdparty.xhs.ui.theme.ThemeMode
 import com.thirdparty.xhs.ui.components.XhsAvatar
 import com.thirdparty.xhs.ui.viewmodel.ProfileViewModel
 import androidx.compose.material.icons.filled.Search
+import com.thirdparty.xhs.ui.theme.BottomNavClearance
 
 /**
  * 我的：账号信息（用户名/ID/VIP）+ 收藏 / 最近浏览 / 我关注的作者 / 切换游客 / 外观主题。
@@ -79,7 +82,16 @@ fun ProfileScreen(
         return
     }
 
-    Column(Modifier.fillMaxSize()) {
+    // The 我的 page stacks ~10 rows (account card + stats + 3 entries + guest
+    // switch + scan + cache + theme picker). A plain Column CLIPS whatever does
+    // not fit and cannot be scrolled — it must be scrollable. The bottom padding
+    // keeps the last rows clear of the floating NavigationBar, which is drawn on
+    // top of this area; without it 外观主题 could never be brought into view.
+    Column(
+        Modifier.fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(bottom = BottomNavClearance)
+    ) {
         // account header
         Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
             Column(Modifier.fillMaxWidth().padding(Spacing.l)) {
