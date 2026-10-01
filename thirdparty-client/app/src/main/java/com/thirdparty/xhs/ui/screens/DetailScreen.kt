@@ -225,6 +225,7 @@ fun DetailScreen(
                             url = item.mediaUrl,
                             externalPlayer = sharedPlayer,
                             fullscreen = true,
+                            title = item.title,
                             onAspect = { r -> if (r > 0f) videoAspect = r },
                             onToggleFullscreen = { fullscreen = !fullscreen },
                             modifier = Modifier.fillMaxSize()
@@ -284,6 +285,7 @@ private fun DetailContent(
                     url = item.mediaUrl,
                     externalPlayer = sharedPlayer,
                     fullscreen = false,
+                    title = item.title,
                     // without this the in-player fullscreen button is inert:
                     // MediaPlayer defaults the callback to a no-op
                     onToggleFullscreen = onEnterFullscreen,

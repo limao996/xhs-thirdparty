@@ -55,6 +55,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.text.style.TextOverflow
 
 /**
  * Detail page player: media3 surface + custom controller.
@@ -80,7 +86,9 @@ fun MediaPlayer(
     /** an externally owned player to render instead of building a new one */
     externalPlayer: ExoPlayer? = null,
     /** start with the control bar hidden; a tap reveals it */
-    controlsHiddenInitially: Boolean = false
+    controlsHiddenInitially: Boolean = false,
+    /** shown in the fullscreen top bar */
+    title: String = ""
 ) {
     val context = LocalContext.current.applicationContext
     val ownsPlayer = externalPlayer == null
@@ -140,7 +148,7 @@ fun MediaPlayer(
             resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT,
             modifier = Modifier.fillMaxSize()
         )
-        AutoHideController(player, fullscreen, onToggleFullscreen, controlsHiddenInitially)
+        AutoHideController(player, fullscreen, onToggleFullscreen, controlsHiddenInitially, title)
         // buffering feedback
         BufferingIndicator(player, modifier = Modifier.fillMaxSize())
         // a dead stream must not fail silently
@@ -157,7 +165,8 @@ private fun AutoHideController(
     player: Player,
     fullscreen: Boolean,
     onToggleFullscreen: () -> Unit,
-    startHidden: Boolean = false
+    startHidden: Boolean = false,
+    title: String = ""
 ) {
     val scope = rememberCoroutineScope()
     var visible by remember(player) { mutableStateOf(!startHidden) }
@@ -181,6 +190,8 @@ private fun AutoHideController(
     var speedIdx by remember(player) { androidx.compose.runtime.mutableIntStateOf(DEFAULT_SPEED_IDX) }
     // fine-seek step: ±5s by default, toggled to ±1s for frame-ish nudging
     var fineStep by remember(player) { mutableStateOf(false) }
+    // 更多菜单：微调步长、倍速、锁定都收在这里
+    var menuOpen by remember(player) { mutableStateOf(false) }
 
     // show everything the moment the user unlocks, and keep the speed applied
     LaunchedEffect(speedIdx) { player.setPlaybackSpeed(SPEEDS[speedIdx]) }
@@ -271,6 +282,78 @@ private fun AutoHideController(
             }
         }
         if (visible && !locked) {
+            // ── 顶栏: 退出全屏 + 标题 + 更多菜单 ──────────────────────────
+            // Everything that is not an everyday action lives in the menu, so the
+            // bars stay uncrowded instead of stacking eight controls in one row.
+            Row(
+                Modifier.align(Alignment.TopCenter).fillMaxWidth()
+                    .background(Scrim.strong)
+                    .padding(horizontal = Spacing.xs, vertical = Spacing.xs),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // the page's own app bar is hidden in fullscreen, so offer a way back
+                if (fullscreen) {
+                    IconButton(onClick = onToggleFullscreen) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            "退出全屏", tint = Scrim.onMedia
+                        )
+                    }
+                }
+                Text(
+                    title.ifBlank { "播放中" },
+                    color = Scrim.onMedia,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f).padding(start = Spacing.xs)
+                )
+                Box {
+                    IconButton(onClick = { menuOpen = true }) {
+                        Icon(Icons.Filled.MoreVert, "更多", tint = Scrim.onMedia)
+                    }
+                    DropdownMenu(
+                        expanded = menuOpen,
+                        onDismissRequest = { menuOpen = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(if (fineStep) "微调：±1 秒" else "微调：±5 秒") },
+                            onClick = { fineStep = !fineStep; menuOpen = false; interaction++ }
+                        )
+                        HorizontalDivider()
+                        SPEEDS.forEachIndexed { i, s ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        if (i == speedIdx) "$s x  ✓" else "$s x",
+                                        color = if (i == speedIdx) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurface
+                                    )
+                                },
+                                onClick = { speedIdx = i; menuOpen = false; interaction++ }
+                            )
+                        }
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text("锁定屏幕") },
+                            onClick = { menuOpen = false; locked = true }
+                        )
+                    }
+                }
+            }
+
+            // ── 侧边按钮: 锁定（左缘中部，拇指够得到）────────────────────
+            Surface(
+                shape = CircleShape,
+                color = Scrim.strong,
+                modifier = Modifier.align(Alignment.CenterStart).padding(Spacing.xs)
+            ) {
+                IconButton(onClick = { locked = true; interaction++ }) {
+                    Icon(Icons.Filled.Lock, "锁定", tint = Scrim.onMedia)
+                }
+            }
+
+            // ── 底栏: 进度条 + 播放控制 ─────────────────────────────────
             Column(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                     .background(Scrim.strong).padding(vertical = Spacing.xs)
@@ -295,13 +378,7 @@ private fun AutoHideController(
                         inactiveTrackColor = Scrim.onMediaVariant
                     )
                 )
-                // Main row: icon-only controls plus the clock. The two text chips
-                // (微调 / 变速) used to live here too, which made eight items fight
-                // for a phone's width in portrait — they now get their own row.
                 Row(Modifier.fillMaxWidth().padding(horizontal = Spacing.xs), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { locked = true }) {
-                        Icon(Icons.Filled.Lock, "锁定", tint = Scrim.onMedia)
-                    }
                     val step = if (fineStep) 1000L else 5000L
                     IconButton(onClick = { seekBy(-step) }) {
                         Icon(Icons.Filled.Replay5, "后退${step / 1000}秒", tint = Scrim.onMedia)
@@ -317,40 +394,16 @@ private fun AutoHideController(
                         color = Scrim.onMedia, style = MaterialTheme.typography.labelSmall,
                         modifier = Modifier.padding(start = Spacing.xs))
                     Spacer(Modifier.weight(1f))
+                    // 当前倍速直接显示，否则用户在底栏看不出视频被改过速
+                    if (speedIdx != DEFAULT_SPEED_IDX) {
+                        Text("${SPEEDS[speedIdx]}x",
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(end = Spacing.xs))
+                    }
                     IconButton(onClick = onToggleFullscreen) {
                         Icon(if (fullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
                             "全屏", tint = Scrim.onMedia)
-                    }
-                }
-                // Secondary row: 微调 step toggle + 变速, right-aligned and compact
-                Row(
-                    Modifier.fillMaxWidth().padding(start = Spacing.xs, end = Spacing.m, bottom = Spacing.xs),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // 微调: switch the step buttons between ±5s and ±1s
-                    TextButton(
-                        onClick = { fineStep = !fineStep; interaction++ },
-                        contentPadding = PaddingValues(horizontal = Spacing.s, vertical = 0.dp)
-                    ) {
-                        Text(
-                            if (fineStep) "微调 ±1s" else "微调 ±5s",
-                            color = if (fineStep) MaterialTheme.colorScheme.primary else Scrim.onMedia,
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                    }
-                    Spacer(Modifier.width(Spacing.s))
-                    // 变速: cycle 0.5x → 0.75x → 1x → 1.25x → 1.5x → 2x
-                    TextButton(
-                        onClick = { speedIdx = (speedIdx + 1) % SPEEDS.size; interaction++ },
-                        contentPadding = PaddingValues(horizontal = Spacing.s, vertical = 0.dp)
-                    ) {
-                        Text(
-                            "${SPEEDS[speedIdx]}x",
-                            color = if (speedIdx == DEFAULT_SPEED_IDX) Scrim.onMedia
-                            else MaterialTheme.colorScheme.primary,
-                            style = MaterialTheme.typography.labelSmall
-                        )
                     }
                 }
             }
