@@ -17,6 +17,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.thirdparty.xhs.App
 import com.thirdparty.xhs.ui.components.EmptyState
+import com.thirdparty.xhs.ui.components.PullToRefreshBox
 import com.thirdparty.xhs.ui.components.XhsWaterfallGrid
 import com.thirdparty.xhs.ui.theme.Spacing
 import com.thirdparty.xhs.ui.viewmodel.LocalListViewModel
@@ -58,13 +59,18 @@ fun LocalListScreen(
         return
     }
 
-    XhsWaterfallGrid(
-        items = state.visible,
-        onOpenDetail = onOpenDetail,
-        contentPadding = PaddingValues(
-            start = Spacing.s, end = Spacing.s, top = Spacing.s, bottom = Spacing.l
-        ),
-        hasMore = state.hasMore,
-        onLoadMore = { viewModel.loadMore() }
-    )
+    PullToRefreshBox(
+        refreshing = state.refreshing,
+        onRefresh = { viewModel.refresh() }
+    ) {
+        XhsWaterfallGrid(
+            items = state.visible,
+            onOpenDetail = onOpenDetail,
+            contentPadding = PaddingValues(
+                start = Spacing.s, end = Spacing.s, top = Spacing.s, bottom = Spacing.l
+            ),
+            hasMore = state.hasMore,
+            onLoadMore = { viewModel.loadMore() }
+        )
+    }
 }

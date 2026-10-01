@@ -50,6 +50,7 @@ import com.thirdparty.xhs.ui.components.EmptyState
 import com.thirdparty.xhs.ui.components.FeeBadge
 import com.thirdparty.xhs.ui.components.XhsAsyncImage
 import com.thirdparty.xhs.ui.components.XhsAvatar
+import com.thirdparty.xhs.ui.components.PullToRefreshBox
 import com.thirdparty.xhs.ui.components.XhsWaterfallGrid
 import com.thirdparty.xhs.ui.theme.AvatarSize
 import com.thirdparty.xhs.ui.theme.Spacing
@@ -158,16 +159,21 @@ fun SearchScreen(
                     icon = Icons.Filled.Search
                 )
                 state.mode == SearchResultMode.CONTENT && state.results.isNotEmpty() ->
-                    XhsWaterfallGrid(
-                        items = state.results,
-                        onOpenDetail = onOpenDetail,
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                            start = Spacing.s, end = Spacing.s, top = Spacing.xs, bottom = Spacing.l
-                        ),
-                        hasMore = state.hasMore,
-                        loadingMore = state.loadingMore,
-                        onLoadMore = { viewModel.loadMore() }
-                    )
+                    PullToRefreshBox(
+                        refreshing = state.refreshing,
+                        onRefresh = { viewModel.refresh() }
+                    ) {
+                        XhsWaterfallGrid(
+                            items = state.results,
+                            onOpenDetail = onOpenDetail,
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                                start = Spacing.s, end = Spacing.s, top = Spacing.xs, bottom = Spacing.l
+                            ),
+                            hasMore = state.hasMore,
+                            loadingMore = state.loadingMore,
+                            onLoadMore = { viewModel.loadMore() }
+                        )
+                    }
                 state.mode == SearchResultMode.USER && state.users.isNotEmpty() ->
                     LazyColumn(
                         Modifier.fillMaxSize(),

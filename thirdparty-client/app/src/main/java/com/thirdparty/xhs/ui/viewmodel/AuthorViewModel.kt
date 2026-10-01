@@ -37,9 +37,17 @@ class AuthorViewModel(
     private var page = 0
     private var loading = false
 
-    init { load() }
+    /** A userId of 0 means the caller had no usable author id (e.g. a note
+     *  whose payload lacked `user_id`); there is nothing to fetch. */
+    val validUserId: Boolean get() = userId > 0
+
+    init { if (validUserId) load() }
 
     fun load() {
+        if (!validUserId) {
+            _ui.update { it.copy(notesLoading = false, profileError = true) }
+            return
+        }
         viewModelScope.launch {
             val author = runCatching { repo.authorProfile(userId) }.getOrNull()
             if (author != null) {
@@ -103,6 +111,7 @@ class AuthorViewModel(
     }
 
     fun loadMore() {
+        if (!validUserId) return
         if (loading || !_ui.value.hasMore) return
         loading = true
         _ui.update { it.copy(loadingMore = it.notes.isNotEmpty(), notesError = false) }

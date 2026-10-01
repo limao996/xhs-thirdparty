@@ -39,6 +39,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoLibrary
 import com.thirdparty.xhs.ui.components.EmptyState
 import com.thirdparty.xhs.ui.components.PullToRefreshBox
@@ -119,6 +120,13 @@ fun AuthorScreen(
 
             if (state.notesLoading && state.notes.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            } else if (!viewModel.validUserId) {
+                // the caller had no usable author id — a network retry cannot help
+                EmptyState(
+                    title = "作者信息不可用",
+                    description = "这条内容没有提供作者信息",
+                    icon = Icons.Filled.Person
+                )
             } else if (state.notes.isEmpty() && (state.notesError || state.profileError)) {
                 EmptyState(
                     title = "加载失败",
