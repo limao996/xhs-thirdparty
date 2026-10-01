@@ -138,8 +138,26 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
             .build()
 
         client.newCall(request).execute().use { response ->
-            val bytes = response.body?.bytes() ?: ByteArray(0)
-            val text = XhsCrypto.decrypt(bytes)
+            // Check the HTTP status BEFORE touching the body. Without this an
+            // error page (HTML from a CDN 502, an empty 503 body, ...) goes
+            // straight into the AES decryptor and surfaces as a crypto
+            // exception — which is neither retryable nor diagnosable, and it
+            // silently disabled the network retry for the most common
+            // transient failure. Throwing IOException instead makes the retry
+            // wrapper above do its job.
+            if (!response.isSuccessful) {
+                throw java.io.IOException("HTTP ${response.code} for $path")
+            }
+            val bytes = response.body?.bytes()
+            if (bytes == null || bytes.isEmpty()) {
+                throw java.io.IOException("empty response body for $path")
+            }
+            val text = try {
+                XhsCrypto.decrypt(bytes)
+            } catch (e: Exception) {
+                // truncated / non-encrypted body: treat it as a transport error
+                throw java.io.IOException("undecodable response for $path", e)
+            }
             return JSONObject(text)
         }
     }
