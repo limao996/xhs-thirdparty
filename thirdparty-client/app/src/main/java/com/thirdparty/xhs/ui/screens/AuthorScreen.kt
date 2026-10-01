@@ -39,7 +39,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.thirdparty.xhs.ui.components.FeeBadge
+import androidx.compose.material.icons.filled.PhotoLibrary
+import com.thirdparty.xhs.ui.components.EmptyState
 import com.thirdparty.xhs.ui.components.XhsWaterfallGrid
 import com.thirdparty.xhs.ui.components.XhsAvatar
 import com.thirdparty.xhs.ui.theme.AvatarSize
@@ -117,10 +118,19 @@ fun AuthorScreen(
 
             if (state.notesLoading && state.notes.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            } else if (state.notes.isEmpty() && (state.notesError || state.profileError)) {
+                EmptyState(
+                    title = "加载失败",
+                    description = "请检查网络后重试",
+                    actionLabel = "重试",
+                    onAction = { viewModel.retry() }
+                )
             } else if (state.notes.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("作者还没有发布内容", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                EmptyState(
+                    title = "作者还没有发布内容",
+                    description = "换个作者看看吧",
+                    icon = Icons.Filled.PhotoLibrary
+                )
             } else {
                 // waterfall with endless pagination
                 XhsWaterfallGrid(
