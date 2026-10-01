@@ -26,12 +26,18 @@ class App : Application() {
     override fun onCreate() {
         super.onCreate()
         INSTANCE = this
-        repository = XhsRepository(this)
+        // One shared client for the whole app: API calls and image loads use the
+        // same connection pool. A disk cache is attached because the image CDN
+        // serves `Cache-Control: max-age=31536000`, so covers and avatars are
+        // served from disk on later launches. (OkHttp never caches POSTs, so the
+        // encrypted API traffic is unaffected.)
         httpClient = OkHttpClient.Builder()
+            .cache(okhttp3.Cache(java.io.File(cacheDir, "http_cache"), HTTP_CACHE_BYTES))
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .build()
+        repository = XhsRepository(this, httpClient)
         themeState.value = loadThemeMode()
     }
 
@@ -52,5 +58,7 @@ class App : Application() {
             private set
         val repo: XhsRepository get() = INSTANCE.repository
         val http: OkHttpClient get() = INSTANCE.httpClient
+
+        private const val HTTP_CACHE_BYTES = 64L * 1024 * 1024
     }
 }

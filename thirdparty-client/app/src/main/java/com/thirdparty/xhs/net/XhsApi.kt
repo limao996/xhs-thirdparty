@@ -18,7 +18,7 @@ import org.json.JSONObject
  * Response body is AES-CBC encrypted JSON:
  *   { "result": 1, "message": "...", "data": {...} }
  */
-class XhsApi(private val context: Context) {
+class XhsApi(private val context: Context, private val client: okhttp3.OkHttpClient) {
 
     private val credentialStore = CredentialStore(context)
 
@@ -135,14 +135,6 @@ class XhsApi(private val context: Context) {
         if (code != -1) return false
         val msg = res.optString("message")
         return msg.contains("用戶ID錯誤") || msg.contains("重新登录") || msg.contains("重新登錄")
-    }
-
-    private val client by lazy {
-        okhttp3.OkHttpClient.Builder()
-            .connectTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
-            .readTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
-            .writeTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
-            .build()
     }
 
     /**

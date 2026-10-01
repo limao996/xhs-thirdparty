@@ -7,15 +7,16 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
 import org.json.JSONObject
 
 /**
  * Coordinates network fetches with the purely local favorite/history storage.
  */
-class XhsRepository(context: Context) {
+class XhsRepository(context: Context, httpClient: OkHttpClient) {
 
     private val appContext = context.applicationContext
-    private val api by lazy { XhsApi(appContext) }
+    private val api by lazy { XhsApi(appContext, httpClient) }
     private val db by lazy { XhsDatabase.get(appContext) }
     private val savedDao get() = db.savedDao()
     private val historyDao get() = db.historyDao()
