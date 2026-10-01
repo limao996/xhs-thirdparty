@@ -288,3 +288,23 @@ app/src/main/java/com/thirdparty/xhs/
 ### 第 14 轮 · 刷新与内存压力
 - 作者主页接入下拉刷新（重载资料 + 作品首页，成功才替换）。
 - 新增 `onTrimMemory`/`onLowMemory`：内存紧张时释放位图缓存。
+
+### 第 15 轮 · 播放失败不再静默
+- `buildVideoPlayer` 未挂任何错误监听，视频播放失败（坏链接 / 解码失败 /
+  CDN 故障 / 断网）是完全静默的：用户只看到封面或卡住的转圈。
+- 新增 `rememberPlaybackError` + `PlaybackErrorOverlay`（"视频播放失败 + 重试"）
+  + `retryPlayback`；瞬时故障先做**一次静默自动重试**，再失败才提示。
+- 验证方式：临时把播放地址替换为必然失败的 URL 构建验证 → 覆盖层正确显示
+  （`shots/err_overlay.png`），随后还原并确认无残留（`TEMP-VERIFY` 计数 0）。
+- **真实故障验证**：期间模拟器网络中断，logcat 出现
+  `UnknownHostException (no network)`，App 不再黑屏无提示而是给出明确错误，
+  且无崩溃；网络恢复后重新启动 0 播放错误、0 崩溃、视频正常播放。
+
+### 第 16 轮 · API 网络重试
+- 上述故障暴露了另一个脆弱点：API 调用一次失败就让整页进入错误态。
+- `doCall` 拆为「重试包装 + doCallOnce」，对 `IOException` 最多重试 1 次、
+  间隔 350ms；业务层错误（result != 1）不重试。
+  此处接口均为只读查询，重试安全。
+
+### 补充验证
+发现页三个子 tab（发现 / 粉丝圈 / 关注）均正常渲染，全程 0 崩溃。
