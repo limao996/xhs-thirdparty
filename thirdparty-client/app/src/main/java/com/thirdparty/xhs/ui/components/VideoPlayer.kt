@@ -31,7 +31,7 @@ import androidx.media3.exoplayer.ExoPlayer
  * pauses itself when another app takes over audio (a call, a music player),
  * and holds a local wake lock while playing.
  */
-fun buildVideoPlayer(context: Context, url: String): ExoPlayer =
+fun buildVideoPlayer(context: Context, url: String, autoPlay: Boolean = true): ExoPlayer =
     ExoPlayer.Builder(context.applicationContext)
         .setWakeMode(C.WAKE_MODE_LOCAL)
         .setAudioAttributes(
@@ -47,7 +47,7 @@ fun buildVideoPlayer(context: Context, url: String): ExoPlayer =
             repeatMode = Player.REPEAT_MODE_ONE
             setMediaItem(MediaItem.fromUri(url))
             prepare()
-            playWhenReady = true
+            playWhenReady = autoPlay
         }
 
 /**

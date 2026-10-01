@@ -110,12 +110,18 @@ fun VideoFeedScreen(
 
     VerticalPager(
         state = pagerState,
-        modifier = Modifier.fillMaxSize().background(Color.Black)
+        modifier = Modifier.fillMaxSize().background(Color.Black),
+        // keep the immediate neighbours composed so their players can pre-buffer
+        beyondBoundsPageCount = 1
     ) { index ->
         val item = state.items[index]
+        val isCurrent = pagerState.currentPage == index
+        // prepare the previous/next video too, so swiping starts instantly
+        val nearby = kotlin.math.abs(index - pagerState.currentPage) <= 1
         VideoPage(
             item = item,
-            active = pagerState.currentPage == index,
+            active = isCurrent,
+            nearby = nearby,
             onClickDetail = { onOpenDetail(item.noteId) }
         )
     }
@@ -132,6 +138,7 @@ fun VideoFeedScreen(
 private fun VideoPage(
     item: NoteItem,
     active: Boolean,
+    nearby: Boolean,
     onClickDetail: () -> Unit
 ) {
     var infoVisible by remember { mutableStateOf(true) }
@@ -139,10 +146,20 @@ private fun VideoPage(
     // the video's real width/height ratio; used to size the surface so the
     // picture is never stretched (FILL would distort, ZOOM would crop).
     var videoAspect by remember(item.noteId) { mutableFloatStateOf(9f / 16f) }
-    val player: ExoPlayer? = rememberActivePlayer(item.mediaUrl, active) { r ->
+    val player: ExoPlayer? = rememberPreparedPlayer(item.mediaUrl, nearby) { r ->
         if (r > 0f) videoAspect = r
     }
 
+    // only the current page plays; neighbours stay prepared (paused)
+    LaunchedEffect(active, player) {
+        val p = player ?: return@LaunchedEffect
+        if (active) {
+            if (p.playbackState == Player.STATE_IDLE) p.prepare()
+            p.play()
+        } else {
+            p.pause()
+        }
+    }
     LaunchedEffect(active) { if (!active) paused = false }
 
     Box(
@@ -235,17 +252,25 @@ private val HeaderClearance = 76.dp
 /** Height reserved for the bottom NavigationBar so overlays clear it. */
 private val BottomNavHeight = 80.dp
 
+/**
+ * Player for one feed page.
+ *
+ * [prepare] keeps the player alive (buffering, paused) for the pages adjacent to
+ * the current one, so swiping starts playback instantly instead of paying a
+ * fresh prepare + network round-trip each time. Players outside that window are
+ * released.
+ */
 @Composable
-private fun rememberActivePlayer(
+private fun rememberPreparedPlayer(
     url: String,
-    active: Boolean,
+    prepare: Boolean,
     onAspect: (Float) -> Unit = {}
 ): ExoPlayer? {
     val context: Context = LocalContext.current.applicationContext
     val aspect by rememberUpdatedState(onAspect)
-    val player = remember(url, active) {
-        if (url.isBlank() || !active) null
-        else buildVideoPlayer(context, url)
+    val player = remember(url, prepare) {
+        if (url.isBlank() || !prepare) null
+        else buildVideoPlayer(context, url, autoPlay = false)
     }
     // stop playback/audio when the app leaves the foreground
     PauseWhenNotStarted(player)
@@ -261,7 +286,7 @@ private fun rememberActivePlayer(
         if (p != null && listener != null) p.addListener(listener)
         onDispose { if (p != null && listener != null) p.removeListener(listener) }
     }
-    DisposableEffect(player, active) {
+    DisposableEffect(player, prepare) {
         onDispose {
             player?.let {
                 it.stop()
