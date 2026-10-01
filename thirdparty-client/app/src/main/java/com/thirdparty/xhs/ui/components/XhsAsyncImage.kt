@@ -96,25 +96,61 @@ private fun loadBitmap(url: String): Bitmap? {
             if (url.contains("codstatic")) {
                 bytes = runCatching { XhsCrypto.zdecrypt(bytes) }.getOrElse { bytes }
             }
-            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            decodeDownsampled(bytes)
         }
     } catch (e: Exception) {
         null
     }
 }
 
-/** Tiny LRU-ish in-memory bitmap cache (bounded). */
+/**
+ * Decode with sub-sampling.
+ *
+ * Screens never display more than ~1280px on the long edge, so decoding the
+ * full-size source wastes huge amounts of heap (a 1080x1440 cover is ~6MB in
+ * ARGB_8888; caching 80 of those would be ~480MB and would OOM).
+ * Software (non-hardware) bitmaps are also required for the LRU cache to be
+ * able to report size accurately.
+ */
+private const val MAX_DECODE_EDGE = 1280
+
+private fun decodeDownsampled(bytes: ByteArray): Bitmap? {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+
+    var sample = 1
+    var w = bounds.outWidth
+    var h = bounds.outHeight
+    while (w / 2 >= MAX_DECODE_EDGE || h / 2 >= MAX_DECODE_EDGE) {
+        w /= 2
+        h /= 2
+        sample *= 2
+    }
+
+    val opts = BitmapFactory.Options().apply {
+        inSampleSize = sample
+        inPreferredConfig = Bitmap.Config.RGB_565   // halves the footprint; these are photos
+        inScaled = false
+    }
+    return runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts) }.getOrNull()
+}
+
+/**
+ * Memory-bounded LRU bitmap cache.
+ *
+ * Sized as a fraction of the app's heap rather than by entry count, so it can
+ * never grow past what the process can actually hold.
+ */
 private object BitmapCache {
-    private val cache = LinkedHashMap<String, Bitmap>(0, 0.75f, true)
-    private val maxEntries = 80
+    private val maxKb: Int = (Runtime.getRuntime().maxMemory() / 1024 / 8).toInt() // ~12.5% of heap
+    private val lru = object : android.util.LruCache<String, Bitmap>(maxKb) {
+        override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount / 1024
+    }
 
-    operator fun get(key: String): Bitmap? = synchronized(cache) { cache[key] }
+    operator fun get(key: String): Bitmap? = lru.get(key)
 
-    operator fun set(key: String, bmp: Bitmap) = synchronized(cache) {
-        cache[key] = bmp
-        while (cache.size > maxEntries) {
-            val it = cache.entries.iterator()
-            if (it.hasNext()) { it.next(); it.remove() }
-        }
+    operator fun set(key: String, bmp: Bitmap) {
+        if (bmp.byteCount / 1024 <= maxKb / 4) lru.put(key, bmp)
     }
 }

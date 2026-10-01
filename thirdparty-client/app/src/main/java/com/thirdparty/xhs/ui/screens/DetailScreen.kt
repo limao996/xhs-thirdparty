@@ -33,6 +33,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -264,7 +265,7 @@ private fun DetailContent(
             }
 
             Spacer(Modifier.height(18.dp))
-            Text("评论 ${state.comments.size}", style = MaterialTheme.typography.titleSmall)
+            Text("评论 ${item.commentCount}", style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(4.dp))
             if (state.commentsLoading && state.comments.isEmpty()) {
                 CircularProgressIndicator(Modifier.size(28.dp))
@@ -272,6 +273,18 @@ private fun DetailContent(
                 Text("还没有评论", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             } else {
                 state.comments.forEach { c -> CommentRow(c) }
+                if (state.commentsHasMore) {
+                    TextButton(
+                        onClick = { viewModel.loadMoreComments() },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (state.commentsLoading) {
+                            CircularProgressIndicator(Modifier.size(18.dp))
+                            Spacer(Modifier.width(Spacing.s))
+                        }
+                        Text("查看更多评论")
+                    }
+                }
             }
         }
     }

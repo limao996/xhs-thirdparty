@@ -19,7 +19,8 @@ data class DetailUiState(
     val author: AuthorInfo? = null,
     val followed: Boolean = false,
     val comments: List<CommentItem> = emptyList(),
-    val commentsLoading: Boolean = false
+    val commentsLoading: Boolean = false,
+    val commentsHasMore: Boolean = false
 )
 
 class DetailViewModel(
@@ -29,6 +30,9 @@ class DetailViewModel(
 
     private val _ui = MutableStateFlow(DetailUiState())
     val ui: StateFlow<DetailUiState> = _ui.asStateFlow()
+
+    private var commentPage = 0
+    private var commentsInFlight = false
 
     init { load() }
 
@@ -61,13 +65,29 @@ class DetailViewModel(
         }
     }
 
-    private fun loadComments() {
+    private fun loadComments() = fetchComments(reset = true)
+
+    /** Fetch a comments page; [reset] restarts from page 1. */
+    fun fetchComments(reset: Boolean = false) {
+        if (commentsInFlight) return
+        if (!reset && !_ui.value.commentsHasMore) return
+        commentsInFlight = true
         viewModelScope.launch {
+            val next = if (reset) 1 else commentPage + 1
             _ui.value = _ui.value.copy(commentsLoading = true)
-            val comments = runCatching { repo.comments(noteId, 1) }.getOrDefault(emptyList())
-            _ui.value = _ui.value.copy(comments = comments, commentsLoading = false)
+            val page = runCatching { repo.comments(noteId, next) }.getOrDefault(emptyList())
+            if (page.isNotEmpty()) commentPage = next
+            _ui.value = _ui.value.copy(
+                comments = if (reset) page else _ui.value.comments + page,
+                commentsLoading = false,
+                commentsHasMore = page.size >= 10
+            )
+            commentsInFlight = false
         }
     }
+
+    /** Used by the UI's "load more comments" action. */
+    fun loadMoreComments() = fetchComments(reset = false)
 
     fun toggleFollow() {
         val author = _ui.value.author ?: return
