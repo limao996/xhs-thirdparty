@@ -93,6 +93,12 @@ fun MediaPlayer(
         AutoHideController(player, fullscreen, onToggleFullscreen)
         // buffering feedback
         BufferingIndicator(player, modifier = Modifier.fillMaxSize())
+        // a dead stream must not fail silently
+        PlaybackErrorOverlay(
+            error = rememberPlaybackError(player),
+            onRetry = { retryPlayback(player) },
+            modifier = Modifier.fillMaxSize()
+        )
     }
 }
 

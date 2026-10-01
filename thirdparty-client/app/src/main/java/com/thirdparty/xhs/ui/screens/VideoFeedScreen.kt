@@ -54,9 +54,12 @@ import com.thirdparty.xhs.ui.components.BufferingIndicator
 import com.thirdparty.xhs.ui.components.EmptyState
 import com.thirdparty.xhs.ui.components.FeeBadge
 import com.thirdparty.xhs.ui.components.PauseWhenNotStarted
+import com.thirdparty.xhs.ui.components.PlaybackErrorOverlay
 import com.thirdparty.xhs.ui.components.PlayerView
 import com.thirdparty.xhs.ui.components.XhsAsyncImage
 import com.thirdparty.xhs.ui.components.buildVideoPlayer
+import com.thirdparty.xhs.ui.components.rememberPlaybackError
+import com.thirdparty.xhs.ui.components.retryPlayback
 import com.thirdparty.xhs.ui.theme.Scrim
 import com.thirdparty.xhs.ui.theme.Spacing
 import com.thirdparty.xhs.ui.viewmodel.VideoFeedViewModel
@@ -151,6 +154,7 @@ private fun VideoPage(
     val player: ExoPlayer? = rememberPreparedPlayer(item.mediaUrl, nearby) { r ->
         if (r > 0f) videoAspect = r
     }
+    val playbackError = rememberPlaybackError(player)
 
     // only the current page plays; neighbours stay prepared (paused)
     LaunchedEffect(active, player) {
@@ -201,6 +205,12 @@ private fun VideoPage(
             }
             // feedback while the stream buffers / starts up
             BufferingIndicator(player, modifier = Modifier.fillMaxSize())
+            // a dead stream must not fail silently
+            PlaybackErrorOverlay(
+                error = playbackError,
+                onRetry = { retryPlayback(player) },
+                modifier = Modifier.fillMaxSize()
+            )
         }
 
         // center play/pause flash icon on double-tap pause

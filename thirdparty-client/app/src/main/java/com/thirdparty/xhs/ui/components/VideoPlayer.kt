@@ -1,7 +1,17 @@
 package com.thirdparty.xhs.ui.components
 
 import android.content.Context
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -9,7 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -23,6 +33,8 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import com.thirdparty.xhs.ui.theme.Scrim
+import com.thirdparty.xhs.ui.theme.Spacing
 
 /**
  * Build an ExoPlayer configured for short-video playback.
@@ -142,6 +154,85 @@ fun BufferingIndicator(
                 color = tint,
                 strokeWidth = 3.dp
             )
+        }
+    }
+}
+
+/**
+ * Tracks the most recent playback failure for [player] (null while healthy).
+ *
+ * Without this a dead stream (bad URL, unsupported codec, CDN error) is a
+ * completely silent failure — the user just sees a poster or a stuck spinner.
+ */
+@Composable
+fun rememberPlaybackError(player: Player?): PlaybackException? {
+    var error by remember(player) { mutableStateOf<PlaybackException?>(null) }
+    var autoRetried by remember(player) { mutableStateOf(false) }
+    DisposableEffect(player) {
+        val p = player
+        val listener = if (p == null) null else object : Player.Listener {
+            override fun onPlayerError(e: PlaybackException) {
+                // Transient failures (a DNS blip, a 5xx from the CDN) are worth
+                // one silent retry; only surface the error if that also fails.
+                if (!autoRetried) {
+                    autoRetried = true
+                    retryPlayback(p)
+                } else {
+                    error = e
+                }
+            }
+
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                // a retry moves us back through BUFFERING -> clear the error
+                if (playbackState == Player.STATE_BUFFERING ||
+                    playbackState == Player.STATE_READY
+                ) {
+                    error = null
+                }
+            }
+        }
+        if (p != null && listener != null) p.addListener(listener)
+        onDispose { if (p != null && listener != null) p.removeListener(listener) }
+    }
+    return error
+}
+
+/** Restart playback after a failure. */
+fun retryPlayback(player: Player?) {
+    val p = player ?: return
+    runCatching {
+        p.prepare()
+        p.play()
+    }
+}
+
+/**
+ * "播放失败 + 重试" overlay shown over a video that could not be played.
+ */
+@Composable
+fun PlaybackErrorOverlay(
+    error: PlaybackException?,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (error == null) return
+    Box(
+        modifier.background(Scrim.strong),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                Icons.Filled.CloudOff,
+                contentDescription = null,
+                tint = Scrim.onMedia
+            )
+            Spacer(Modifier.size(Spacing.s))
+            Text(
+                "视频播放失败",
+                color = Scrim.onMedia,
+                style = MaterialTheme.typography.bodyMedium
+            )
+            TextButton(onClick = onRetry) { Text("重试") }
         }
     }
 }
