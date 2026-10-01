@@ -4,6 +4,20 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
+ * One image of a photo post. [ratio] is width/height taken from the backend's
+ * `image_size` field ("1080*720"), so the viewer can render it at its true
+ * proportions instead of stretching or cropping.
+ */
+data class NoteImage(
+    val url: String,
+    val ratio: Float = DEFAULT_RATIO
+) {
+    companion object {
+        const val DEFAULT_RATIO = 3f / 4f
+    }
+}
+
+/**
  * Denormalised local snapshot of a note. Enough to render in lists and, via
  * [rawJson], to re-open the full detail (images / video / text) offline.
  */
@@ -21,7 +35,7 @@ data class NoteItem(
     val noteCin: Int = 0,
     val content: String = "",
     val mediaUrl: String = "",
-    val images: List<String> = emptyList(),
+    val images: List<NoteImage> = emptyList(),
     val rawJson: String = ""
 ) {
     /** Whether this work is paid (has a coin price). */
@@ -50,14 +64,26 @@ data class NoteItem(
         get() = mediaUrl.isNotEmpty()
 
     companion object {
-        private fun parseImages(o: JSONObject): List<String> {
+        private fun parseImages(o: JSONObject): List<NoteImage> {
             val list = o.optJSONArray("note_image_list") ?: JSONArray()
-            val out = mutableListOf<String>()
+            val out = mutableListOf<NoteImage>()
             for (i in 0 until list.length()) {
-                val url = list.optJSONObject(i)?.optString("image_url").orEmpty()
-                if (url.isNotEmpty()) out.add(url)
+                val obj = list.optJSONObject(i) ?: continue
+                val url = obj.optString("image_url")
+                if (url.isEmpty()) continue
+                out.add(NoteImage(url, ratioOf(obj.optString("image_size"))))
             }
             return out
+        }
+
+        /** "1080*720" -> 1.5 ; falls back to the portrait default. */
+        private fun ratioOf(size: String): Float {
+            val parts = size.split('*')
+            if (parts.size != 2) return NoteImage.DEFAULT_RATIO
+            val w = parts[0].trim().toFloatOrNull() ?: return NoteImage.DEFAULT_RATIO
+            val h = parts[1].trim().toFloatOrNull() ?: return NoteImage.DEFAULT_RATIO
+            if (w <= 0f || h <= 0f) return NoteImage.DEFAULT_RATIO
+            return w / h
         }
     }
 }

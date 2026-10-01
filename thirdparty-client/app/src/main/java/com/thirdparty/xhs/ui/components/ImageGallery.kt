@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import com.thirdparty.xhs.data.NoteImage
 import com.thirdparty.xhs.ui.theme.Corners
 import com.thirdparty.xhs.ui.theme.Scrim
 import com.thirdparty.xhs.ui.theme.Spacing
@@ -21,25 +22,27 @@ import com.thirdparty.xhs.ui.theme.Spacing
 /**
  * Swipeable multi-image viewer for photo posts.
  *
- * Images are shown with [ContentScale.Fit] inside a fixed-ratio box so they are
- * never stretched or cropped; a "n/N" counter appears when there is more than
- * one image.
+ * The container takes the first image's aspect ratio (from the backend's
+ * `image_size`) so the pager height stays stable; every page renders with
+ * [ContentScale.Fit] so nothing is ever stretched or cropped. A "n/N" counter
+ * appears when there is more than one image.
  */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun ImageGallery(
-    images: List<String>,
-    modifier: Modifier = Modifier,
-    aspectRatio: Float = 3f / 4f
+    images: List<NoteImage>,
+    modifier: Modifier = Modifier
 ) {
     if (images.isEmpty()) return
 
+    val containerRatio = images.first().ratio.takeIf { it > 0f } ?: NoteImage.DEFAULT_RATIO
+
     if (images.size == 1) {
         XhsAsyncImage(
-            url = images[0],
+            url = images[0].url,
             contentDescription = null,
             contentScale = ContentScale.Fit,
-            modifier = modifier.fillMaxWidth().aspectRatio(aspectRatio)
+            modifier = modifier.fillMaxWidth().aspectRatio(containerRatio)
         )
         return
     }
@@ -48,10 +51,10 @@ fun ImageGallery(
     Box(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerLow)) {
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxWidth()) { page ->
             XhsAsyncImage(
-                url = images[page],
+                url = images[page].url,
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxWidth().aspectRatio(aspectRatio)
+                modifier = Modifier.fillMaxWidth().aspectRatio(containerRatio)
             )
         }
         // n/N indicator

@@ -56,6 +56,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.thirdparty.xhs.App
 import com.thirdparty.xhs.data.CommentItem
+import com.thirdparty.xhs.data.NoteImage
 import com.thirdparty.xhs.ui.components.FeeBadge
 import com.thirdparty.xhs.ui.components.ImageGallery
 import com.thirdparty.xhs.ui.components.MediaPlayer
@@ -190,7 +191,9 @@ private fun DetailContent(
                 modifier = Modifier.fillMaxWidth().aspectRatio(videoAspect)
             )
         } else {
-            val images = item.images.ifEmpty { listOf(item.cover).filter { it.isNotEmpty() } }
+            val images = item.images.ifEmpty {
+                listOf(item.cover).filter { it.isNotEmpty() }.map { NoteImage(it) }
+            }
             ImageGallery(images = images)
         }
 
