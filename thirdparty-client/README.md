@@ -436,3 +436,18 @@ app/src/main/java/com/thirdparty/xhs/
 ### 第 29 轮 · 关注 tab 细节
 - 空态由裸 Text 改为 EmptyState（含引导文案），与其他 tab 一致；
 - `LazyColumn` 补 `BottomNavClearance` —— 此前最后一项会被浮层底部导航遮住。
+
+### 第 30 轮 · 空态/错误态不可见（重要）
+- 现象：搜索「作者」模式下的空态，文案存在于 uiautomator 树中，**屏幕上看不到**。
+- 根因：`EmptyState` 内部强制 `modifier.fillMaxSize()`。当它被放进**已有兄弟节点的
+  Column**（PrimaryTabRow / 分类条 / 作者头部之后），拿到的是父容器**整高**而非
+  剩余高度，内容中心被推到屏幕下方 —— 用户只看到一大片空白。
+- **方法论教训**：此前我对错误态的"验证"用的是 **UI 树文本断言**，而 off-screen
+  节点同样在树里，所以一直"通过"。本轮改为**用 bounds 坐标判断是否真的在屏幕内**。
+- 受影响页面：搜索页（错误/空结果/初始引导）、发现页（加载失败/分类为空）、
+  粉丝圈、关注 tab、作者主页（三种状态）。
+- 修复：采用本项目 HomeScreen 已验证的模式 —— EmptyState 不再强制尺寸，
+  Column 上下文用 `Box(Modifier.fillMaxWidth().weight(1f))` 包裹内容区，
+  EmptyState 传 `Modifier.fillMaxSize()`；Box 上下文直接传 fillMaxSize。
+- 验证（坐标而非文本）：搜索空态标题 y=1515..1568、关注空态 y=1404..1457，
+  均居中于剩余空间且在屏幕内。
