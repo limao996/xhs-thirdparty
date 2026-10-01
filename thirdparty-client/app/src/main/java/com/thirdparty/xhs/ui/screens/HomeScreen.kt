@@ -50,6 +50,7 @@ import com.thirdparty.xhs.ui.theme.XhsTheme
 import com.thirdparty.xhs.ui.viewmodel.GuestViewModel
 import android.widget.Toast
 import androidx.compose.runtime.remember
+import com.thirdparty.xhs.ui.components.AccountHistoryDialog
 
 /**
  * Root shell. The 推荐 tab is full-bleed immersive: the header and bottom nav
@@ -69,6 +70,8 @@ fun HomeScreen(
     val context = LocalContext.current
     val guest by guestViewModel.accountLabel.collectAsStateWithLifecycle()
     val rotating by guestViewModel.rotating.collectAsStateWithLifecycle()
+    val history by guestViewModel.history.collectAsStateWithLifecycle()
+    var showAccountHistory by remember { mutableStateOf(false) }
     var tab by rememberSaveable { mutableStateOf(HomeTab.FEED) }
     var feedRefreshTick by rememberSaveable { mutableStateOf(0) }
 
@@ -128,6 +131,11 @@ fun HomeScreen(
                                     Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
                                 }
                             },
+                            onOpenAccountHistory = {
+                                guestViewModel.refreshHistory()
+                                showAccountHistory = true
+                            },
+                            historyCount = history.size,
                             rotating = rotating,
                             reloadKey = guest
                         )
@@ -180,6 +188,20 @@ fun HomeScreen(
                     )
                 }
             }
+        }
+
+        if (showAccountHistory) {
+            AccountHistoryDialog(
+                history = history,
+                currentIdentity = guestViewModel.currentDeviceMac(),
+                onPick = { entry ->
+                    guestViewModel.switchToHistory(entry) {
+                        Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+                    }
+                },
+                onForget = { guestViewModel.forget(it) },
+                onDismiss = { showAccountHistory = false }
+            )
         }
     }
 }

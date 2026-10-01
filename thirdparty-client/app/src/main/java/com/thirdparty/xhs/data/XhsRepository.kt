@@ -283,6 +283,18 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
     /** A brand-new randomly generated identity (the manual switch path). */
     fun freshRandomMac(): String = api.freshRandomMac()
 
+    /** Previously used accounts, most recent first. */
+    fun accountHistory(): List<com.thirdparty.xhs.net.HistoryAccount> = api.accountHistory()
+
+    /** Record the account now in use (called after a successful login). */
+    suspend fun rememberCurrentAccount() = withContext(Dispatchers.IO) {
+        val p = myProfile() ?: return@withContext
+        api.rememberAccount(p.userId, p.userName)
+    }
+
+    /** Forget one history entry. */
+    fun forgetAccount(identity: String) = api.forgetAccount(identity)
+
     /** The identity currently in use. */
     fun currentDeviceMac(): String = api.currentDeviceMac()
 

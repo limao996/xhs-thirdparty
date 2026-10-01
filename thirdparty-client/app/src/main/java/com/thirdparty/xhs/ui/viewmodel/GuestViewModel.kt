@@ -9,14 +9,17 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.update
+import com.thirdparty.xhs.net.HistoryAccount
 import com.thirdparty.xhs.net.IdentityGuess
 
 /**
- * Guest account state: the current account and manual switching.
+ * Guest account state: the current account, manual switching, and the history of
+ * accounts used so far.
  *
- * The backend never creates accounts (see CredentialStore), so the app keeps the
- * guest it already has and only changes when the user asks. Switching is manual
- * and may reuse any previously seen account.
+ * The identity is persisted, so the app keeps the SAME account across restarts
+ * until the user switches. `app/init` registers a new identity and that creates
+ * the account (see XhsApi.loginAsGuest), which is why a switch can simply
+ * generate a fresh random id.
  */
 class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
     private val _accountLabel = MutableStateFlow("游客ID：加载中…")
@@ -33,6 +36,41 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
 
     private val _vipEnd = MutableStateFlow(0L)
     val vipEnd: StateFlow<Long> = _vipEnd.asStateFlow()
+
+    private val _history = MutableStateFlow<List<HistoryAccount>>(emptyList())
+    /** previously used guest accounts, most recent first */
+    val history: StateFlow<List<HistoryAccount>> = _history.asStateFlow()
+
+    fun refreshHistory() {
+        _history.value = runCatching { repo.accountHistory() }.getOrDefault(emptyList())
+    }
+
+    /** Switch back to an account already used before. */
+    fun switchToHistory(entry: HistoryAccount, onToast: (String) -> Unit = {}) {
+        if (_rotating.value) return
+        viewModelScope.launch {
+            _rotating.value = true
+            val ok = runCatching { repo.switchGuestTo(entry.identity) }.getOrDefault(false)
+            refreshLabel()
+            refreshVip()
+            remember()
+            refreshHistory()
+            _rotating.value = false
+            onToast(if (ok) "已切换回 ${entry.name}" else "切换失败，沿用当前账号")
+        }
+    }
+
+    /** Drop one entry from the history list. */
+    fun forget(entry: HistoryAccount) {
+        repo.forgetAccount(entry.identity)
+        refreshHistory()
+    }
+
+    /** Record the account now in use, so it can be switched back to later. */
+    private fun remember() {
+        viewModelScope.launch { runCatching { repo.rememberCurrentAccount() }; refreshHistory() }
+    }
+
 
     // ---- VIP scan -----------------------------------------------------------
     // REMOVED on purpose. Logging in as a guest appears to start/consume a
@@ -53,6 +91,7 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
             runCatching { repo.rotateGuest() }
             refreshLabel()
             refreshVip()
+            remember()
             _rotating.value = false
         }
     }
@@ -84,6 +123,7 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
             val ok = runCatching { repo.switchGuestTo(fresh) }.getOrDefault(false)
             refreshLabel()
             refreshVip()
+            remember()
             _rotating.value = false
             onToast(if (ok) "已切换到新的随机账号" else "切换失败，沿用当前账号")
         }

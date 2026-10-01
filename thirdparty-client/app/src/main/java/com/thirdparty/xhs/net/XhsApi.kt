@@ -236,4 +236,13 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
 
     /** A brand-new randomly generated identity (the manual switch path). */
     fun freshRandomMac(): String = credentialStore.freshDevice()
+
+    /** Previously used accounts, most recent first. */
+    fun accountHistory(): List<HistoryAccount> = credentialStore.history
+
+    /** Record the account now in use. */
+    fun rememberAccount(uid: Int, name: String) = credentialStore.rememberAccount(uid, name)
+
+    /** Forget one history entry. */
+    fun forgetAccount(identity: String) = credentialStore.forgetAccount(identity)
 }

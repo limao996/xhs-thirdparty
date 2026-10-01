@@ -43,10 +43,54 @@ class CredentialStore(context: Context) {
         return id
     }
 
+    /**
+     * Previously used guest accounts, most recent first.
+     *
+     * Stored as `identity|uid|name` so the picker can show something meaningful
+     * without re-querying the backend for every entry. Capped so the list cannot
+     * grow without bound; entries whose identity is blank are dropped.
+     */
+    val history: List<HistoryAccount>
+        get() = prefs.getString(KEY_HISTORY, null)
+            ?.split('\n')
+            ?.mapNotNull { line ->
+                val parts = line.split('|')
+                if (parts.size < 3 || parts[0].isBlank()) null
+                else HistoryAccount(parts[0], parts[1].toIntOrNull() ?: 0, parts[2])
+            }
+            ?: emptyList()
+
+    /** Record the account now in use, moving it to the front of the history. */
+    fun rememberAccount(uid: Int, name: String) {
+        val id = deviceId
+        if (id.isBlank()) return
+        val entry = HistoryAccount(id, uid, name)
+        val next = (listOf(entry) + history.filterNot { it.identity == id }).take(HISTORY_MAX)
+        prefs.edit()
+            .putString(
+                KEY_HISTORY,
+                next.joinToString("\n") { "${it.identity}|${it.userId}|${it.name}" }
+            )
+            .apply()
+    }
+
+    /** Forget one account. */
+    fun forgetAccount(identity: String) {
+        val next = history.filterNot { it.identity == identity }
+        prefs.edit()
+            .putString(KEY_HISTORY, next.joinToString("\n") { "${it.identity}|${it.userId}|${it.name}" })
+            .apply()
+    }
+
     companion object {
         const val DEFAULT_HOST = "app.xiaohuangbook.net"
+        private const val HISTORY_MAX = 50
         private const val KEY_TOKEN = "user_token"
         private const val KEY_HASH = "user_hash"
         private const val KEY_DEVICE = "device_identity"
+        private const val KEY_HISTORY = "account_history"
     }
 }
+
+/** One entry of the guest-account history. */
+data class HistoryAccount(val identity: String, val userId: Int, val name: String)

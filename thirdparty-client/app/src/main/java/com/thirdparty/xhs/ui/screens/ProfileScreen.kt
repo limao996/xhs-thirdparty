@@ -66,6 +66,8 @@ fun ProfileScreen(
     onOpenHistory: () -> Unit,
     onOpenFollowed: () -> Unit,
     onRotateGuest: (() -> Unit)? = null,
+    onOpenAccountHistory: (() -> Unit)? = null,
+    historyCount: Int = 0,
     rotating: Boolean = false,
     /** changes whenever the guest account changes, forcing a profile reload */
     reloadKey: Any? = Unit,
@@ -170,7 +172,31 @@ fun ProfileScreen(
                 },
                 colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
                 modifier = Modifier.clickable { onRotateGuest() }
-            )        }
+            )
+            if (onOpenAccountHistory != null) {
+                ListItem(
+                    headlineContent = { Text("历史账号") },
+                    supportingContent = {
+                        Text(
+                            if (historyCount > 0) "已用过 $historyCount 个账号，可切换回去"
+                            else "还没有切换过账号"
+                        )
+                    },
+                    leadingContent = {
+                        Icon(Icons.Filled.History, null, tint = MaterialTheme.colorScheme.primary)
+                    },
+                    trailingContent = {
+                        Icon(
+                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    },
+                    colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
+                    modifier = Modifier.clickable { onOpenAccountHistory() }
+                )
+            }
+        }
 
         HorizontalDivider()
 
