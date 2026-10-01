@@ -17,7 +17,9 @@ data class ProfileUiState(
     val guestHash: String = "",
     val savedCount: Int = 0,
     val historyCount: Int = 0,
-    val followedCount: Int = 0
+    val followedCount: Int = 0,
+    /** size of the on-disk image cache, in bytes */
+    val cacheBytes: Long = 0
 )
 
 class ProfileViewModel(private val repo: XhsRepository) : ViewModel() {
@@ -43,8 +45,17 @@ class ProfileViewModel(private val repo: XhsRepository) : ViewModel() {
                 guestHash = repo.currentGuestHash(),
                 savedCount = saved,
                 historyCount = history,
-                followedCount = followed
+                followedCount = followed,
+                cacheBytes = repo.httpCacheSizeBytes()
             )
+        }
+    }
+
+    /** Evict the on-disk image cache (up to 64MB) and refresh the shown size. */
+    fun clearCache() {
+        viewModelScope.launch {
+            repo.clearHttpCache()
+            _ui.value = _ui.value.copy(cacheBytes = repo.httpCacheSizeBytes())
         }
     }
 }

@@ -14,10 +14,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.SwitchAccount
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -27,10 +29,14 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -140,8 +146,48 @@ fun ProfileScreen(
         }
 
         HorizontalDivider()
+
+        // image cache management (the disk cache can hold up to 64MB)
+        var confirmClear by remember { mutableStateOf(false) }
+        ListItem(
+            headlineContent = { Text("清除图片缓存") },
+            supportingContent = { Text(formatBytes(state.cacheBytes)) },
+            leadingContent = {
+                Icon(
+                    Icons.Filled.DeleteSweep,
+                    null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
+            modifier = Modifier.clickable { confirmClear = true }
+        )
+        if (confirmClear) {
+            AlertDialog(
+                onDismissRequest = { confirmClear = false },
+                title = { Text("清除图片缓存？") },
+                text = { Text("将删除已缓存的封面与头像（${formatBytes(state.cacheBytes)}），下次浏览时重新下载。") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        viewModel.clearCache()
+                        confirmClear = false
+                    }) { Text("清除") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmClear = false }) { Text("取消") }
+                }
+            )
+        }
+
+        HorizontalDivider()
         ThemeSwitcher()
     }
+}
+
+private fun formatBytes(bytes: Long): String = when {
+    bytes >= 1024L * 1024L -> "%.1f MB".format(bytes / 1024.0 / 1024.0)
+    bytes >= 1024L -> "%.0f KB".format(bytes / 1024.0)
+    else -> "$bytes B"
 }
 
 @Composable

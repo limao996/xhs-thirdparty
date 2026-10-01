@@ -16,6 +16,7 @@ import org.json.JSONObject
 class XhsRepository(context: Context, httpClient: OkHttpClient) {
 
     private val appContext = context.applicationContext
+    private val http = httpClient
     private val api by lazy { XhsApi(appContext, httpClient) }
     private val db by lazy { XhsDatabase.get(appContext) }
     private val savedDao get() = db.savedDao()
@@ -116,6 +117,21 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
             )
         )
         historyDao.trim()
+    }
+
+    // ---- on-disk HTTP cache (covers / avatars, up to 64MB) ------------------
+    /** Current size of the on-disk image cache in bytes. */
+    fun httpCacheSizeBytes(): Long = runCatching {
+        http.cache?.let { c ->
+            c.flush()
+            c.size()
+        } ?: 0L
+    }.getOrDefault(0L)
+
+    /** Evict every cached image response (memory + disk). */
+    fun clearHttpCache() {
+        runCatching { http.cache?.evictAll() }
+        com.thirdparty.xhs.ui.components.clearImageMemoryCache()
     }
 
     /**
