@@ -223,10 +223,15 @@ private fun AutoHideController(
     }
 
     // Auto-hide after 3s of no interaction — but NEVER while the user's finger
-    // is on the slider, otherwise the controls can vanish mid-drag and the
-    // gesture is cancelled with it.
-    LaunchedEffect(visible, playing, interaction, dragging) {
-        if (visible && playing && !dragging) { delay(3000); visible = false }
+    // is on the slider (the controls would vanish mid-drag and cancel the
+    // gesture) and NEVER while the overflow menu is open: hiding `visible`
+    // removes the whole control block, DropdownMenu included, so the menu would
+    // close itself out from under the user mid-choice.
+    LaunchedEffect(visible, playing, interaction, dragging, menuOpen, locked) {
+        if (visible && playing && !dragging && !menuOpen && !locked) {
+            delay(3000)
+            visible = false
+        }
     }
 
     // Keep position/duration fresh while the controls are visible and playing.
@@ -309,7 +314,7 @@ private fun AutoHideController(
                     modifier = Modifier.weight(1f).padding(start = Spacing.xs)
                 )
                 Box {
-                    IconButton(onClick = { menuOpen = true }) {
+                    IconButton(onClick = { menuOpen = true; interaction++ }) {
                         Icon(Icons.Filled.MoreVert, "更多", tint = Scrim.onMedia)
                     }
                     DropdownMenu(
