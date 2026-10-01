@@ -266,6 +266,9 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
     /** Pick a random identity from the discovered set. */
     fun randomDeviceMac(): String = credentialStore.randomDevice()
 
+    /** A brand-new randomly generated device id (see [CredentialStore]). */
+    fun freshRandomMac(): String = credentialStore.generateRandomDevice()
+
     /** Identities known to work (discovered so far + the verified seed). */
     fun knownDeviceMacs(): List<String> = credentialStore.knownDevices
 

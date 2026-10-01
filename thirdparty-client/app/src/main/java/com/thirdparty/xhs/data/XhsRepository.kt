@@ -288,6 +288,9 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
     /** Pick a random pooled identity (may be one used before) and return it. */
     fun randomDeviceMac(): String = api.randomDeviceMac()
 
+    /** A brand-new randomly generated device id. */
+    fun freshRandomMac(): String = api.freshRandomMac()
+
     /** The MAC of the identity currently in use. */
     fun currentDeviceMac(): String = api.currentDeviceMac()
 

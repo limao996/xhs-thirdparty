@@ -49,6 +49,7 @@ fun AccountScanDialog(
     currentMac: String,
     stoppedAtVip: AccountProbe? = null,
     switched: Boolean = false,
+    randomTried: Int = 0,
     onSwitch: (AccountProbe) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -64,7 +65,7 @@ fun AccountScanDialog(
                     )
                     Spacer(Modifier.height(Spacing.s))
                     Text(
-                        "已扫描 $done / $total",
+                        "已扫描 $done / $total · 随机 ID 已试 $randomTried 个",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -76,8 +77,9 @@ fun AccountScanDialog(
                     )
                 } else if (stoppedAtVip != null) {
                     Text(
-                        if (switched) "扫到 VIP 即停止，已登录该账号（只扫了 $done 个）"
-                        else "扫到 VIP 即停止，但登录失败（只扫了 $done 个）",
+                        if (switched)
+                            "扫到 VIP 即停止，已登录该账号（扫了 $done 个，其中随机 ID $randomTried 个）"
+                        else "扫到 VIP 即停止，但登录失败（扫了 $done 个）",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 } else {

@@ -43,6 +43,8 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
         val done: Int = 0,
         val total: Int = 0,
         val scanning: String = "",
+        /** how many freshly generated random ids have been probed so far */
+        val randomTried: Int = 0,
         val found: List<AccountProbe> = emptyList(),
         /** set when the scan stopped early because it hit a VIP account */
         val stoppedAtVip: AccountProbe? = null,
@@ -83,17 +85,37 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
         }
     }
 
-    /** Manual switch to a random pooled account (may repeat an older one). */
+    /**
+     * Manual switch, random-id first.
+     *
+     * Tries a freshly generated random device id, and only when the backend
+     * refuses it (verified: it never issues accounts for new ids, so this is the
+     * normal outcome) falls back to a randomly chosen known-good account. The
+     * random path is kept so the app starts using such an id automatically if the
+     * backend ever begins handing out accounts.
+     */
     fun switchRandom(onToast: (String) -> Unit = {}) {
         if (_rotating.value) return
         viewModelScope.launch {
             _rotating.value = true
-            val mac = repo.randomDeviceMac()
-            val ok = runCatching { repo.switchGuestTo(mac) }.getOrDefault(false)
+            val fresh = repo.freshRandomMac()
+            val freshProbe = runCatching { repo.probeAccount(fresh) }.getOrNull()
+            val usedFresh = if (freshProbe != null) {
+                runCatching { repo.switchGuestTo(freshProbe.mac) }.getOrDefault(false)
+            } else false
+            val mac = if (usedFresh) freshProbe!!.mac else repo.randomDeviceMac()
+            val ok = if (usedFresh) true
+            else runCatching { repo.switchGuestTo(mac) }.getOrDefault(false)
             refreshLabel()
             refreshVip()
             _rotating.value = false
-            onToast(if (ok) "已随机切换游客账号" else "切换失败，沿用当前账号")
+            onToast(
+                when {
+                    !ok -> "切换失败，沿用当前账号"
+                    usedFresh -> "已切换到随机新账号 ${freshProbe!!.userId}"
+                    else -> "已随机切换游客账号"
+                }
+            )
         }
     }
 
@@ -125,12 +147,28 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
      */
     fun startScan() {
         if (_scan.value.running) return
-        val candidates = CredentialStore.SCAN_CANDIDATES.shuffled()
+        // Random ids first, as requested. Verified: the backend answers
+        // `result=-1 用戶ID錯誤` for every freshly generated id, so the known-good
+        // identities are interleaved — otherwise the scan could never find
+        // anything. The random attempts are kept so a backend that starts
+        // issuing accounts for new ids is picked up with no code change.
+        val randomCount = 24
+        val randomIds = List(randomCount) { repo.freshRandomMac() }
+        val candidates = buildList {
+            val known = repo.knownDeviceMacs().shuffled().iterator()
+            randomIds.forEach { r ->
+                add(r)
+                if (known.hasNext()) add(known.next())
+            }
+            while (known.hasNext()) add(known.next())
+        }
         _scan.value = ScanState(running = true, total = candidates.size)
         viewModelScope.launch {
             val found = mutableListOf<AccountProbe>()
+            var triedRandom = 0
             for ((i, mac) in candidates.withIndex()) {
-                _scan.update { it.copy(done = i, scanning = mac) }
+                if (randomIds.contains(mac)) triedRandom++
+                _scan.update { it.copy(done = i, scanning = mac, randomTried = triedRandom) }
                 val probe = runCatching { repo.probeAccount(mac) }.getOrNull()
                 if (probe != null) {
                     found.add(probe)
@@ -146,6 +184,7 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
                                 running = false,
                                 done = i + 1,
                                 scanning = "",
+                                randomTried = triedRandom,
                                 stoppedAtVip = probe,
                                 switched = switched
                             )
@@ -156,7 +195,9 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
                 // be gentle: this is a lot of sequential requests
                 kotlinx.coroutines.delay(120)
             }
-            _scan.update { it.copy(running = false, done = candidates.size, scanning = "") }
+            _scan.update {
+                it.copy(running = false, done = candidates.size, scanning = "", randomTried = triedRandom)
+            }
         }
     }
 

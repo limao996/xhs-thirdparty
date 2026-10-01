@@ -73,6 +73,21 @@ class CredentialStore(context: Context) {
         return pick
     }
 
+    /**
+     * A freshly generated, never-before-used device id.
+     *
+     * Used by the switch/scan refresh paths so they genuinely try random ids
+     * first (as requested) instead of only replaying a fixed list. Verified
+     * behaviour of the backend: these ids always answer `result=-1
+     * 用戶ID錯誤` — it never creates accounts — so callers MUST have a fallback.
+     * Keeping the attempt means that if the backend ever starts issuing
+     * accounts for new ids, the app picks them up with no code change.
+     */
+    fun generateRandomDevice(): String {
+        val hex = "0123456789ABCDEF"
+        return (1..12).map { hex.random() }.joinToString("")
+    }
+
     /** Advance to the next known identity and return it. */
     fun nextDevice(): String {
         val pool = knownDevices

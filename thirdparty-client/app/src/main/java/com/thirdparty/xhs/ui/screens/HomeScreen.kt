@@ -200,6 +200,7 @@ fun HomeScreen(
                 currentMac = guestViewModel.currentDeviceMac(),
                 stoppedAtVip = scan.stoppedAtVip,
                 switched = scan.switched,
+                randomTried = scan.randomTried,
                 onSwitch = { probe ->
                     guestViewModel.switchTo(probe) {
                         Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
