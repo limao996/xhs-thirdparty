@@ -66,6 +66,9 @@ fun HomeScreen(
     onOpenSaved: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenFollowed: () -> Unit,
+    onOpenFollowing: () -> Unit,
+    onOpenFans: () -> Unit,
+    onOpenMyNotes: (Int) -> Unit,
     guestViewModel: GuestViewModel = viewModel(factory = RepoViewModelFactory())
 ) {
     val context = LocalContext.current
@@ -139,6 +142,9 @@ fun HomeScreen(
                                 guestViewModel.refreshHistory()
                                 showAccountHistory = true
                             },
+                            onOpenFollowing = onOpenFollowing,
+                            onOpenFans = onOpenFans,
+                            onOpenMyNotes = { uid -> onOpenMyNotes(uid) },
                             historyCount = history.size,
                             autoVip = autoVip,
                             onSetAutoVip = { on ->

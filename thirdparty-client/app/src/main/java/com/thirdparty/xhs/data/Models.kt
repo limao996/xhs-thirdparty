@@ -3,6 +3,39 @@ package com.thirdparty.xhs.data
 import org.json.JSONObject
 
 /**
+ * An account row from the 关注 / 粉丝 lists
+ * (v2/member/follow-list and v2/member/fun-list).
+ *
+ * Both endpoints return the same item shape; the naming of the endpoints is the
+ * reverse of the labels — see XhsRepository.followList.
+ */
+data class AccountUser(
+    val userId: Int,
+    val userName: String,
+    val headImg: String,
+    val signature: String,
+    val isFollow: Boolean,
+    val vpStatus: Int
+) {
+    val isVip: Boolean get() = vpStatus >= 1
+
+    companion object {
+        fun from(o: JSONObject): AccountUser? {
+            val uid = o.optInt("user_id")
+            if (uid <= 0) return null
+            return AccountUser(
+                userId = uid,
+                userName = o.optString("user_name"),
+                headImg = o.optString("user_head_img"),
+                signature = o.optString("user_signature"),
+                isFollow = o.optInt("is_follow") == 1,
+                vpStatus = o.optInt("user_vp_status")
+            )
+        }
+    }
+}
+
+/**
  * A recommended fan-group author (v2/member/fun-group-list → recommend_list).
  *
  * The payload also carries a `note_list` preview (up to 3 works) and the

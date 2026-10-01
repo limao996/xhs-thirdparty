@@ -42,6 +42,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import com.thirdparty.xhs.App
+import com.thirdparty.xhs.ui.screens.UserListScreen
+import com.thirdparty.xhs.ui.viewmodel.UserListMode
 
 /**
  * A Scaffold wrapper hosting the local (Room) list for a given mode.
@@ -129,7 +131,11 @@ fun AppNavHost(nav: NavHostController) {
                 onOpenAuthor = { uid -> nav.navigate(Routes.author(uid)) },
                 onOpenSaved = { nav.navigate(Routes.SAVED) },
                 onOpenHistory = { nav.navigate(Routes.HISTORY) },
-                onOpenFollowed = { nav.navigate(Routes.FOLLOWED) }
+                onOpenFollowed = { nav.navigate(Routes.FOLLOWED) },
+                onOpenFollowing = { nav.navigate(Routes.FOLLOWING) },
+                onOpenFans = { nav.navigate(Routes.FANS) },
+                // 作品 on the account card opens that account's own author page
+                onOpenMyNotes = { uid -> nav.navigate(Routes.author(uid)) }
             )
         }
 
@@ -151,6 +157,24 @@ fun AppNavHost(nav: NavHostController) {
             val noteId = backStackEntry.arguments?.getString("noteId")?.toLongOrNull() ?: 0L
             DetailScreen(
                 noteId = noteId,
+                onBack = { nav.popBackStack() },
+                onOpenAuthor = { uid -> nav.navigate(Routes.author(uid)) }
+            )
+        }
+
+        composable(Routes.FOLLOWING) {
+            UserListScreen(
+                mode = UserListMode.FOLLOWING,
+                userId = 0,   // 0 = the signed-in account, matching the client
+                onBack = { nav.popBackStack() },
+                onOpenAuthor = { uid -> nav.navigate(Routes.author(uid)) }
+            )
+        }
+
+        composable(Routes.FANS) {
+            UserListScreen(
+                mode = UserListMode.FANS,
+                userId = 0,
                 onBack = { nav.popBackStack() },
                 onOpenAuthor = { uid -> nav.navigate(Routes.author(uid)) }
             )

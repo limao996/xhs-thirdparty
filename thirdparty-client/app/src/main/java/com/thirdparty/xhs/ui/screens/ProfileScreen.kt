@@ -57,6 +57,7 @@ import androidx.compose.material.icons.filled.Search
 import com.thirdparty.xhs.ui.theme.BottomNavClearance
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material3.Switch
+import androidx.compose.ui.draw.clip
 
 /**
  * 我的：账号信息（用户名/ID/VIP）+ 收藏 / 最近浏览 / 我关注的作者 / 切换游客 / 外观主题。
@@ -70,6 +71,10 @@ fun ProfileScreen(
     onRotateGuest: (() -> Unit)? = null,
     onOpenAccountHistory: (() -> Unit)? = null,
     historyCount: Int = 0,
+    /** stat taps on the account card */
+    onOpenFollowing: (() -> Unit)? = null,
+    onOpenFans: (() -> Unit)? = null,
+    onOpenMyNotes: ((Int) -> Unit)? = null,
     /** VIP-expiry auto switch */
     autoVip: Boolean = false,
     onSetAutoVip: ((Boolean) -> Unit)? = null,
@@ -149,13 +154,21 @@ fun ProfileScreen(
                     }
                 }
 
-                // account stats (real values from v2/mine/user-info)
+                // account stats (real values from v2/mine/user-info).
+                // Each one is tappable: 关注 / 粉丝 open the server-backed lists,
+                // 作品 opens this account's own author page.
                 state.profile?.let { p ->
                     Spacer(Modifier.height(Spacing.l))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                        ProfileStat("关注", p.follows)
-                        ProfileStat("粉丝", p.fans)
-                        ProfileStat("作品", p.notes)
+                        ProfileStat("关注", p.follows, enabled = onOpenFollowing != null) {
+                            onOpenFollowing?.invoke()
+                        }
+                        ProfileStat("粉丝", p.fans, enabled = onOpenFans != null) {
+                            onOpenFans?.invoke()
+                        }
+                        ProfileStat("作品", p.notes, enabled = onOpenMyNotes != null) {
+                            onOpenMyNotes?.invoke(p.userId)
+                        }
                     }
                 }
             }
@@ -265,12 +278,26 @@ private fun formatBytes(bytes: Long): String = when {
 }
 
 @Composable
-private fun ProfileStat(label: String, value: Int) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+private fun ProfileStat(
+    label: String,
+    value: Int,
+    enabled: Boolean = false,
+    onClick: () -> Unit = {}
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clip(MaterialTheme.shapes.small)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = Spacing.l, vertical = Spacing.xs)
+    ) {
         Text(
             value.toString(),
             style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.SemiBold,
+            // a tappable count is tinted so the affordance is visible
+            color = if (enabled) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.onSurface
         )
         Text(
             label,

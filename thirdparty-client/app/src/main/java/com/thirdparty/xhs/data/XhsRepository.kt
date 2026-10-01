@@ -370,6 +370,36 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
         res.optJSONObject("data")?.let { AuthorInfo.from(it) }
     }
 
+    /**
+     * Accounts this user follows (v2/member/follow-list).
+     *
+     * Note the naming is the opposite of what the endpoints suggest — confirmed
+     * against the examined client, where MyAttentionActivity (我的关注) calls
+     * follow-list and MyFansActivity (我的粉丝) calls fun-list:
+     *
+     *     v2/member/follow-list  ->  关注
+     *     v2/member/fun-list     ->  粉丝
+     */
+    suspend fun followList(userId: Int, page: Int): List<AccountUser> =
+        accountUsers("v2/member/follow-list", userId, page)
+
+    /** Accounts following this user (v2/member/fun-list — see [followList]). */
+    suspend fun fansList(userId: Int, page: Int): List<AccountUser> =
+        accountUsers("v2/member/fun-list", userId, page)
+
+    private suspend fun accountUsers(path: String, userId: Int, page: Int): List<AccountUser> =
+        withContext(Dispatchers.IO) {
+            // userId <= 0 means "my own list": the examined client omits user_id in
+            // that case (it only sends it when viewing somebody else).
+            val body = mutableMapOf<String, Any>("page" to page)
+            if (userId > 0) body["user_id"] = userId
+            val res = api.call(path, body)
+            val arr = res.optJSONObject("data")?.optJSONArray("list") ?: org.json.JSONArray()
+            (0 until arr.length()).mapNotNull { i ->
+                arr.optJSONObject(i)?.let { AccountUser.from(it) }
+            }
+        }
+
     /** Author's notes (v2/member/note-list). */
     suspend fun authorNotes(userId: Int, page: Int): List<NoteItem> = withContext(Dispatchers.IO) {
         val res = api.call("v2/member/note-list", mapOf("user_id" to userId, "page" to page))

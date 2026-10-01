@@ -12,6 +12,10 @@ object Routes {
     const val SAVED = "saved"
     const val HISTORY = "history"
     const val FOLLOWED = "followed"
+    /** "关注" — accounts this user follows (v2/member/follow-list) */
+    const val FOLLOWING = "following"
+    /** "粉丝" — accounts following this user (v2/member/fun-list) */
+    const val FANS = "fans"
 
     fun detail(noteId: Long): String = "detail/$noteId"
     fun author(userId: Int): String = "author/$userId"
