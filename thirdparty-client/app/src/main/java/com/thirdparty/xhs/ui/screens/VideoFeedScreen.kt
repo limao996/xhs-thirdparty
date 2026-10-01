@@ -50,6 +50,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import com.thirdparty.xhs.App
 import com.thirdparty.xhs.common.RepoViewModelFactory
 import com.thirdparty.xhs.data.NoteItem
+import com.thirdparty.xhs.ui.components.BufferingIndicator
 import com.thirdparty.xhs.ui.components.EmptyState
 import com.thirdparty.xhs.ui.components.FeeBadge
 import com.thirdparty.xhs.ui.components.PauseWhenNotStarted
@@ -179,6 +180,8 @@ private fun VideoPage(
                     modifier = Modifier.fillMaxWidth().aspectRatio(videoAspect)
                 )
             }
+            // feedback while the stream buffers / starts up
+            BufferingIndicator(player, modifier = Modifier.fillMaxSize())
         }
 
         // center play/pause flash icon on double-tap pause

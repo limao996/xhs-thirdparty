@@ -1,15 +1,20 @@
 package com.thirdparty.xhs.ui.components
 
 import android.content.Context
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.media3.common.AudioAttributes
@@ -100,6 +105,45 @@ fun rememberExoPlayer(
         onDispose { player.release() }
     }
     return player
+}
+
+/**
+ * Centered spinner shown while the player is buffering, so switching to the
+ * next video never looks like a frozen black screen.
+ */
+@Composable
+fun BufferingIndicator(
+    player: Player?,
+    modifier: Modifier = Modifier,
+    tint: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.White
+) {
+    var buffering by remember(player) {
+        androidx.compose.runtime.mutableStateOf(
+            player?.playbackState == Player.STATE_BUFFERING
+        )
+    }
+    DisposableEffect(player) {
+        val p = player
+        val listener = if (p == null) null else object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                buffering = playbackState == Player.STATE_BUFFERING
+            }
+        }
+        if (p != null && listener != null) p.addListener(listener)
+        onDispose { if (p != null && listener != null) p.removeListener(listener) }
+    }
+    if (buffering) {
+        androidx.compose.foundation.layout.Box(
+            modifier,
+            contentAlignment = androidx.compose.ui.Alignment.Center
+        ) {
+            androidx.compose.material3.CircularProgressIndicator(
+                modifier = Modifier.size(40.dp),
+                color = tint,
+                strokeWidth = 3.dp
+            )
+        }
+    }
 }
 
 /**

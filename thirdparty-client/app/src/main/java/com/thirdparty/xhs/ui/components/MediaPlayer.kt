@@ -91,6 +91,8 @@ fun MediaPlayer(
             modifier = Modifier.fillMaxSize()
         )
         AutoHideController(player, fullscreen, onToggleFullscreen)
+        // buffering feedback
+        BufferingIndicator(player, modifier = Modifier.fillMaxSize())
     }
 }
 
