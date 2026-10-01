@@ -377,3 +377,24 @@ app/src/main/java/com/thirdparty/xhs/
   `image_size` 解析共用），`WaterfallCard` 改用 `aspectRatio(coverRatio)`
   并 clamp 到 0.55–1.6 以容纳极端比例。
 - 验证：两列高度由各自真实封面比例决定、错落自然。
+
+### 第 24 轮 · 进度显示冻结（"看起来在动、其实是死的"）
+- 详情页控制栏的 position/duration 只在 `onPlaybackStateChanged` /
+  `onPositionDiscontinuity` 时更新，而正常连续播放期间这两个回调都不触发
+  → 进度条与时间文本实际上是**冻住**的。
+- 修复：控制栏可见且播放中时以 250ms 轮询刷新（media3 无逐帧回调）。
+- 顺带新增推荐流底部的 2dp 细进度条（短视频 App 标准元素），同样用轮询驱动，
+  位于底部导航之上，信息栏隐藏时也可见。
+- 验证：详情页时间文本连续采样 `0:10 → 0:06 → 0:10 → 0:04`（10 秒视频循环），
+  确认实时推进；推荐流同一视频相隔 4 秒两帧截图，进度条由约 25% 推至接近 100%。
+
+### 附：顺手发现并确认可用的功能
+打开到一条**图片帖**时画廊显示 `1/25` —— 25 张图的多图浏览工作正常
+（此前实测过的 15 图帖也一致）。
+
+### 第 25 轮 · 死代码与无谓开销
+- `savedIds` 是早期"推荐流带收藏按钮"的遗留：后来按需求移除了收藏按钮，
+  但状态字段/赋值/仓库方法都留着，UI 从不读取。其唯一效果是**每次翻页
+  都白跑一次 `SELECT * FROM saved_notes`**。
+- 一并清理：`VideoFeedUiState.savedIds`、两处 `repo.savedIds()`、
+  `onSavedChanged()`、`XhsRepository.savedIds()`、无引用的 `NoteItem.isPaid`。
