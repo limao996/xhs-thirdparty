@@ -170,7 +170,7 @@ fun DetailScreen(
                         )
                     }
                 } else {
-                    DetailContent(state, viewModel, onOpenAuthor, pad, isVideo)
+                    DetailContent(state, viewModel, onOpenAuthor, pad, isVideo, onEnterFullscreen = { fullscreen = true })
                 }
             }
         }
@@ -184,7 +184,8 @@ private fun DetailContent(
     viewModel: DetailViewModel,
     onOpenAuthor: (Int) -> Unit,
     pad: androidx.compose.foundation.layout.PaddingValues,
-    isVideo: Boolean
+    isVideo: Boolean,
+    onEnterFullscreen: () -> Unit = {}
 ) {
     val item = state.item!!
     // Single scrolling column: media on top, then all the content BELOW it.
@@ -208,6 +209,9 @@ private fun DetailContent(
                 MediaPlayer(
                     url = item.mediaUrl,
                     fullscreen = false,
+                    // without this the in-player fullscreen button is inert:
+                    // MediaPlayer defaults the callback to a no-op
+                    onToggleFullscreen = onEnterFullscreen,
                     onAspect = { r -> if (r > 0f) videoAspect = r },
                     modifier = if (landscape) {
                         Modifier.height(maxVideoHeight).aspectRatio(videoAspect)

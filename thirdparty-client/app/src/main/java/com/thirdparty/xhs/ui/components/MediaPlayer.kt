@@ -42,6 +42,16 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Forward5
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.Replay5
+import androidx.compose.material3.Surface
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.input.pointer.pointerInput
 
 /**
  * Detail page player: media3 surface + custom controller.
@@ -142,6 +152,25 @@ private fun AutoHideController(
     // this the controls vanish immediately after a seek and the user never sees
     // where the video landed.
     var interaction by remember(player) { androidx.compose.runtime.mutableIntStateOf(0) }
+    // touch lock: while on, every gesture except the unlock button is ignored, so
+    // a stray palm cannot seek or pause the video
+    var locked by remember(player) { mutableStateOf(false) }
+    // playback speed, cycled through SPEEDS by the speed button
+    var speedIdx by remember(player) { androidx.compose.runtime.mutableIntStateOf(DEFAULT_SPEED_IDX) }
+    // fine-seek step: ±5s by default, toggled to ±1s for frame-ish nudging
+    var fineStep by remember(player) { mutableStateOf(false) }
+
+    // show everything the moment the user unlocks, and keep the speed applied
+    LaunchedEffect(speedIdx) { player.setPlaybackSpeed(SPEEDS[speedIdx]) }
+    LaunchedEffect(locked) { if (locked) visible = true }
+
+    fun seekBy(deltaMs: Long) {
+        val d = player.duration
+        if (d <= 0) return
+        player.seekTo((player.currentPosition + deltaMs).coerceIn(0L, d))
+        position = player.currentPosition.toFloat()
+        interaction++
+    }
 
     DisposableEffect(player) {
         val listener = object : Player.Listener {
@@ -181,19 +210,45 @@ private fun AutoHideController(
     }
 
     Box(
-        Modifier.fillMaxSize().clickable {
-            visible = !visible
-            if (visible) { scope.launch { delay(3000); visible = false } }
+        Modifier.fillMaxSize().pointerInput(locked) {
+            // pointerInput (not clickable) on purpose: no ripple, and it gives us
+            // a double-tap for free. Ripples over video look like artifacts.
+            detectTapGestures(
+                onTap = {
+                    if (locked) return@detectTapGestures
+                    visible = !visible
+                    if (visible) { scope.launch { delay(3000); visible = false } }
+                },
+                onDoubleTap = {
+                    if (locked) return@detectTapGestures
+                    if (player.isPlaying) player.pause() else player.play()
+                    visible = true
+                    interaction++
+                }
+            )
         }
     ) {
         // replay button when ended
-        if (ended) {
+        if (ended && !locked) {
             IconButton(onClick = { player.seekTo(0); player.play() },
                 modifier = Modifier.align(Alignment.Center)) {
                 Icon(Icons.Filled.Replay, "重播", tint = Scrim.onMedia)
             }
         }
-        if (visible) {
+        // The lock button stays reachable whenever the lock is on — it is the only
+        // way out, so it must never auto-hide.
+        if (locked) {
+            Surface(
+                shape = CircleShape,
+                color = Scrim.strong,
+                modifier = Modifier.align(Alignment.CenterEnd).padding(Spacing.s)
+            ) {
+                IconButton(onClick = { locked = false; visible = true; interaction++ }) {
+                    Icon(Icons.Filled.LockOpen, "解除锁定", tint = Scrim.onMedia)
+                }
+            }
+        }
+        if (visible && !locked) {
             Column(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                     .background(Scrim.strong).padding(vertical = Spacing.xs)
@@ -218,14 +273,42 @@ private fun AutoHideController(
                         inactiveTrackColor = Scrim.onMediaVariant
                     )
                 )
-                Row(Modifier.fillMaxWidth().padding(horizontal = Spacing.s), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = Spacing.xs), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { locked = true }) {
+                        Icon(Icons.Filled.Lock, "锁定", tint = Scrim.onMedia)
+                    }
+                    val step = if (fineStep) 1000L else 5000L
+                    IconButton(onClick = { seekBy(-step) }) {
+                        Icon(Icons.Filled.Replay5, "后退${step / 1000}秒", tint = Scrim.onMedia)
+                    }
                     IconButton(onClick = { if (playing) player.pause() else player.play() }) {
                         Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                             if (playing) "暂停" else "播放", tint = Scrim.onMedia)
                     }
+                    IconButton(onClick = { seekBy(step) }) {
+                        Icon(Icons.Filled.Forward5, "前进${step / 1000}秒", tint = Scrim.onMedia)
+                    }
                     Text("${fmt(position.toLong())} / ${fmt(duration.toLong())}",
                         color = Scrim.onMedia, style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.weight(1f).padding(start = Spacing.xs))
+                        modifier = Modifier.padding(start = Spacing.xs))
+                    Spacer(Modifier.weight(1f))
+                    // 微调: switch the step buttons between ±5s and ±1s
+                    TextButton(onClick = { fineStep = !fineStep; interaction++ }) {
+                        Text(
+                            if (fineStep) "微调 ±1s" else "微调",
+                            color = if (fineStep) MaterialTheme.colorScheme.primary else Scrim.onMedia,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                    // 变速: cycle 0.5x → 0.75x → 1x → 1.25x → 1.5x → 2x
+                    TextButton(onClick = { speedIdx = (speedIdx + 1) % SPEEDS.size; interaction++ }) {
+                        Text(
+                            "${SPEEDS[speedIdx]}x",
+                            color = if (speedIdx == DEFAULT_SPEED_IDX) Scrim.onMedia
+                            else MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
                     IconButton(onClick = onToggleFullscreen) {
                         Icon(if (fullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
                             "全屏", tint = Scrim.onMedia)
@@ -235,6 +318,10 @@ private fun AutoHideController(
         }
     }
 }
+
+/** Playback speed steps offered by the speed button. */
+private val SPEEDS = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
+private const val DEFAULT_SPEED_IDX = 2
 
 private fun fmt(ms: Long): String {
     val s = ms / 1000; val m = s / 60

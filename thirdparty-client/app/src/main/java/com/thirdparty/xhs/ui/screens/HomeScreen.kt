@@ -51,6 +51,7 @@ import com.thirdparty.xhs.ui.viewmodel.GuestViewModel
 import android.widget.Toast
 import androidx.compose.runtime.remember
 import com.thirdparty.xhs.ui.components.AccountHistoryDialog
+import com.thirdparty.xhs.ui.theme.isDark
 
 /**
  * Root shell. The 推荐 tab is full-bleed immersive: the header and bottom nav
@@ -81,20 +82,27 @@ fun HomeScreen(
 
     val immersive = tab == HomeTab.FEED
 
-    // true immersion on the 推荐 tab: hide the system bars
+    // 推荐 tab: keep the status bar but make it TRANSPARENT with white icons —
+    // the video stays full-bleed behind it while time/battery remain readable.
+    // The navigation bar is hidden for immersion. The header below already applies
+    // statusBarsPadding(), so it moves down instead of sitting under the clock.
+    val darkNow = currentThemeMode().isDark(androidx.compose.foundation.isSystemInDarkTheme())
     val view = androidx.compose.ui.platform.LocalView.current
     val activity = LocalContext.current as? android.app.Activity
-    DisposableEffect(immersive, activity) {
+    DisposableEffect(immersive, darkNow, activity) {
         val w = activity?.window
         if (w != null) {
             val controller = androidx.core.view.WindowCompat.getInsetsController(w, view)
             if (immersive) {
-                controller.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                controller.show(androidx.core.view.WindowInsetsCompat.Type.statusBars())
+                controller.hide(androidx.core.view.WindowInsetsCompat.Type.navigationBars())
                 controller.systemBarsBehavior =
                     androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             } else {
                 controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
             }
+            // white icons over video on the 推荐 tab, otherwise follow the theme
+            controller.isAppearanceLightStatusBars = !immersive && !darkNow
         }
         onDispose { }
     }
