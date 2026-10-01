@@ -68,6 +68,8 @@ import com.thirdparty.xhs.ui.viewmodel.VideoFeedViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
 
 /**
  * 推荐短视频（沉浸式）：
@@ -244,12 +246,18 @@ private fun VideoPage(
             )
         }
 
+        // The system navigation bar is now VISIBLE (transparent) and the app's own
+        // bottom NavigationBar grows by that inset, so a fixed clearance left the
+        // overlays sitting underneath it. Read the real inset instead.
+        val navBarInset = androidx.compose.foundation.layout.WindowInsets.navigationBars
+            .asPaddingValues().calculateBottomPadding()
+
         // info bar (bottom, toggled by single tap) — tapping it opens detail.
         // Lifted above the bottom navigation bar so it stays tappable.
         if (infoVisible) {
             Column(
                 Modifier.align(Alignment.BottomStart).fillMaxWidth()
-                    .padding(bottom = BottomNavHeight)
+                    .padding(bottom = BottomNavHeight + navBarInset)
                     .background(Scrim.strong)
                     .clickable { onClickDetail() }
                     .padding(Spacing.l)
@@ -287,7 +295,7 @@ private fun VideoPage(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .fillMaxWidth()
-                .padding(bottom = BottomNavHeight)
+                .padding(bottom = BottomNavHeight + navBarInset)
                 .height(2.dp)
         )
     }
