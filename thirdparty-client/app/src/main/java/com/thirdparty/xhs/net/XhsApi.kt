@@ -28,6 +28,8 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
 
     private companion object {
         const val LOGIN_PATH = "v2/user/login-with-guest"
+        const val NETWORK_ATTEMPTS = 2
+        const val RETRY_BACKOFF_MS = 350L
     }
 
     /** The identity sent in the User-Id header before the first guest login. */
@@ -77,6 +79,29 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
     }
 
     private fun doCall(path: String, params: Map<String, Any>): JSONObject {
+        // Transient network failures (DNS blips, dropped connections) are common
+        // on mobile. Every endpoint used here is a read-only query (or a guest
+        // login, which is safe to repeat), so one bounded retry is worthwhile.
+        var lastError: java.io.IOException? = null
+        for (attempt in 0 until NETWORK_ATTEMPTS) {
+            try {
+                return doCallOnce(path, params)
+            } catch (e: java.io.IOException) {
+                lastError = e
+                if (attempt < NETWORK_ATTEMPTS - 1) {
+                    try {
+                        Thread.sleep(RETRY_BACKOFF_MS)
+                    } catch (ie: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                        throw e
+                    }
+                }
+            }
+        }
+        throw lastError ?: java.io.IOException("request failed: $path")
+    }
+
+    private fun doCallOnce(path: String, params: Map<String, Any>): JSONObject {
         val token = credentialStore.userToken
         val hash = credentialStore.userHash
         // The login call must re-establish identity from the *device*, never
