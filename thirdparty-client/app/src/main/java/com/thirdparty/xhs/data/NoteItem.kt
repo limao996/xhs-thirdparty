@@ -58,6 +58,17 @@ data class NoteItem(
      * instead of a synthetic height. Falls back to portrait when absent.
      */
     val coverRatio: Float = DEFAULT_COVER_RATIO,
+    /**
+     * Fan-group id. 0 = ordinary work; > 0 = published inside the author's
+     * fan group, i.e. fans-only content.
+     *
+     * Verified against the live backend: `group_id` is 1 on exactly the notes
+     * the original app labels 粉絲團專享 (13/13 of them carried note_cin=18,
+     * while group_id=0 covered cin 0/2/8/10/18), and it is present in
+     * `member/note-list` and `note/view` alike. The general discover feed always
+     * reports 0.
+     */
+    val groupId: Int = 0,
     val rawJson: String = ""
 ) {
 
@@ -79,6 +90,7 @@ data class NoteItem(
         images = NoteItem.parseImages(o),
         shareUrl = o.optString("share_url"),
         coverRatio = parseRatio(o.optString("note_cover_size"), DEFAULT_COVER_RATIO),
+        groupId = o.optInt("group_id"),
         rawJson = o.toString()
     )
 

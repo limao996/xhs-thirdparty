@@ -12,24 +12,28 @@ import com.thirdparty.xhs.ui.theme.Corners
 import com.thirdparty.xhs.ui.theme.Spacing
 
 /**
- * Fee state for a work: 免费 / 付费.
+ * Fee state for a work: 免费 / 付费 / 粉丝圈.
  *
- * Verified against the live backend: the only fee signal it exposes is
- * `note_cin` (0 = free, > 0 = paid). An earlier version also had a 粉丝圈 kind
- * driven by guessed keys (`fan_group_gate`, `is_fan_group`,
- * `user_fan_group_only`) — none of which exist in any response, so that badge
- * could never appear. `group_id` is present but always 0 in every note payload,
- * so it is not a gate either. Removed rather than left as dead, misleading code.
+ * Verified against the live backend (and cross-checked against the original
+ * app's own labels on the same author page, 4/4 correct):
+ *  - `group_id > 0`            -> 粉丝圈   (published inside the author's fan group)
+ *  - `group_id == 0, cin > 0`  -> 付费
+ *  - `group_id == 0, cin == 0` -> 免费
  */
-enum class FeeKind { FREE, PAID }
+enum class FeeKind { FREE, PAID, FAN_GROUP }
 
 val NoteItem.feeKind: FeeKind
-    get() = if (noteCin > 0) FeeKind.PAID else FeeKind.FREE
+    get() = when {
+        groupId > 0 -> FeeKind.FAN_GROUP
+        noteCin > 0 -> FeeKind.PAID
+        else -> FeeKind.FREE
+    }
 
 /**
  * MD3-toned fee badge. Colors come from the active ColorScheme so both light
  * and dark themes stay legible:
  *  - 付费    -> tertiaryContainer / onTertiaryContainer
+ *  - 粉丝圈  -> secondaryContainer / onSecondaryContainer
  *  - 免费    -> surfaceVariant / onSurfaceVariant
  */
 @Composable
@@ -37,16 +41,19 @@ fun FeeBadge(item: NoteItem, compact: Boolean = false, modifier: Modifier = Modi
     val kind = item.feeKind
     val container = when (kind) {
         FeeKind.PAID -> MaterialTheme.colorScheme.tertiaryContainer
+        FeeKind.FAN_GROUP -> MaterialTheme.colorScheme.secondaryContainer
         FeeKind.FREE -> MaterialTheme.colorScheme.surfaceVariant
     }
     val content = when (kind) {
         FeeKind.PAID -> MaterialTheme.colorScheme.onTertiaryContainer
+        FeeKind.FAN_GROUP -> MaterialTheme.colorScheme.onSecondaryContainer
         FeeKind.FREE -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     Surface(shape = Corners.extraSmall, color = container, contentColor = content, modifier = modifier) {
         Text(
             when (kind) {
                 FeeKind.PAID -> "付费"
+                FeeKind.FAN_GROUP -> "粉丝圈"
                 FeeKind.FREE -> "免费"
             },
             Modifier.padding(

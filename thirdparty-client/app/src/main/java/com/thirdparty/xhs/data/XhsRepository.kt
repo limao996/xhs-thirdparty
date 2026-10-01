@@ -233,8 +233,18 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
         return if (detail != null) JSONObject(detail.rawJson) else summaryJson(item)
     }
 
+    /**
+     * Snapshot of a note for local storage (收藏 / 最近浏览).
+     *
+     * Must carry every field the UI renders from the item itself, otherwise a
+     * locally-stored note renders differently from the same note in a live list.
+     * It previously omitted `note_cin` and `group_id`, so every saved note was
+     * labelled 免费 and fan-group works lost their 粉丝圈 tag, and it omitted
+     * `note_cover_size`, so waterfall cells fell back to the default ratio.
+     */
     private fun summaryJson(item: NoteItem): JSONObject = JSONObject().apply {
         put("note_id", item.noteId)
+        put("user_id", item.userId)
         put("note_title", item.title)
         put("user_name", item.userName)
         put("note_cover", item.cover)
@@ -243,8 +253,22 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
         put("like_count", item.likeCount)
         put("collect_count", item.collectCount)
         put("comment_count", item.commentCount)
+        put("note_cin", item.noteCin)
+        put("group_id", item.groupId)
+        // re-encoded so NoteItem's ratio parser reads the same format back
+        put("note_cover_size", ratioToSize(item.coverRatio))
         put("note_content", item.content)
         put("note_media_url", item.mediaUrl)
+        put("share_url", item.shareUrl)
+    }
+
+    /** Re-encode an aspect ratio as the "w*h" string NoteItem's parser expects. */
+    private fun ratioToSize(ratio: Float): String {
+        val r = if (ratio.isFinite() && ratio > 0f) ratio else NoteItem.DEFAULT_COVER_RATIO
+        // scale so both sides stay reasonably sized integers
+        val w = 1000
+        val h = Math.round(w / r).coerceAtLeast(1)
+        return "$w*$h"
     }
 
     // ---- guest session ------------------------------------------------------
