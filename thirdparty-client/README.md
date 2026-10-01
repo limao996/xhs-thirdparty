@@ -477,3 +477,34 @@ app/src/main/java/com/thirdparty/xhs/
   `input motionevent` DOWN/MOVE/UP）都无法让 Compose Slider 识别为拖动 ——
   分次注入的 MOVE 事件不构成连续手势流，属 adb 合成输入的固有限制，
   而非应用缺陷。真实触摸会正常触发相关回调。
+
+### 第 33 轮 · 依赖瘦身
+核对后确认四个依赖**零引用**并移除：
+- `androidx.appcompat` —— MainActivity 继承的是 ComponentActivity
+- `com.google.android.material` —— 界面纯 Compose，且启动主题 parent 是
+  **框架自带**的 `android:Theme.Material.Light.NoActionBar`
+- `com.google.code.gson` —— 全项目 JSON 解析统一用 org.json
+- `kotlinx-coroutines-guava` —— 未使用 ListenableFuture
+- 显式 `org.json:json` —— Android 平台自带，且只用标准 API
+
+实测：**APK 22.82 → 20.86 MB（-1.96 MB / -8.6%）**，dex 未压缩 -4.45 MB。
+运行时验证（移除 org.json 是风险点，全应用都在解析 JSON）：冷启动、发现页、
+详情页、我的页全部正常，应用进程内无 NoSuchMethodError / JSONException。
+
+### 第 34 轮 · 搜索页键盘遮挡（edge-to-edge 下 adjustResize 失效）
+- 应用使用 `enableEdgeToEdge()`，窗口绘制在 IME 之下，此时
+  `android:windowSoftInputMode="adjustResize"` **不再收缩布局** —— 需要应用
+  自己消费 ime insets。结果是输入关键词时搜索结果/空态被键盘压住看不见
+  （第 30 轮那次"空态不可见"有一部分正是这个原因）。
+- 修复：结果区 `Box(...weight(1f).imePadding())`。
+- 验证：键盘展开（`dumpsys input_method: mInputShown=true`）时，空态标题 y
+  由修复前 ~1541（键盘约从 1440 起）变为 ~1073；截图确认完整可见于键盘之上。
+
+### 第 35 轮 · 暂停指示反映真实播放状态
+- `paused` 原是一个只由双击翻转的本地布尔值；音频焦点被其他应用抢走
+  （我们开启了 handleAudioFocus）或解码停顿时，视频停住但界面毫无提示。
+- 新增 `rememberIsPlaying(player)`（Player.Listener 驱动），
+  `paused = active && !playing && playbackState == STATE_READY`
+  （限定 READY 以免缓冲期间误显示暂停图标）。
+- 验证：双击前无指示 → 双击后出现 content-desc="已暂停" → 再双击消失 →
+  滑动到下一条无残留（active 守卫有效）。
