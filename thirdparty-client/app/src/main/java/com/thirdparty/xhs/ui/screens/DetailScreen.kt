@@ -268,6 +268,16 @@ private fun DetailContent(
             Spacer(Modifier.height(4.dp))
             if (state.commentsLoading && state.comments.isEmpty()) {
                 CircularProgressIndicator(Modifier.size(28.dp))
+            } else if (state.comments.isEmpty() && state.commentsError) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "评论加载失败",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = { viewModel.fetchComments(reset = true) }) { Text("重试") }
+                }
             } else if (state.comments.isEmpty()) {
                 Text("还没有评论", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             } else {

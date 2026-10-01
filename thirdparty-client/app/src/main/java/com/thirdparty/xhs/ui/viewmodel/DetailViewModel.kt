@@ -20,7 +20,9 @@ data class DetailUiState(
     val followed: Boolean = false,
     val comments: List<CommentItem> = emptyList(),
     val commentsLoading: Boolean = false,
-    val commentsHasMore: Boolean = false
+    val commentsHasMore: Boolean = false,
+    /** true when the comment request failed (distinct from "no comments") */
+    val commentsError: Boolean = false
 )
 
 class DetailViewModel(
@@ -74,14 +76,23 @@ class DetailViewModel(
         commentsInFlight = true
         viewModelScope.launch {
             val next = if (reset) 1 else commentPage + 1
-            _ui.value = _ui.value.copy(commentsLoading = true)
-            val page = runCatching { repo.comments(noteId, next) }.getOrDefault(emptyList())
-            if (page.isNotEmpty()) commentPage = next
-            _ui.value = _ui.value.copy(
-                comments = if (reset) page else _ui.value.comments + page,
-                commentsLoading = false,
-                commentsHasMore = page.size >= 10
-            )
+            _ui.value = _ui.value.copy(commentsLoading = true, commentsError = false)
+            val page = runCatching { repo.comments(noteId, next) }.getOrNull()
+            if (page != null) {
+                if (page.isNotEmpty()) commentPage = next
+                _ui.value = _ui.value.copy(
+                    comments = if (reset) page else _ui.value.comments + page,
+                    commentsLoading = false,
+                    commentsHasMore = page.size >= 10,
+                    commentsError = false
+                )
+            } else {
+                // a failed request must not masquerade as "no comments"
+                _ui.value = _ui.value.copy(
+                    commentsLoading = false,
+                    commentsError = _ui.value.comments.isEmpty()
+                )
+            }
             commentsInFlight = false
         }
     }
