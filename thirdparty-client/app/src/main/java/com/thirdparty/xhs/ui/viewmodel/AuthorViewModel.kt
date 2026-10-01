@@ -24,7 +24,6 @@ data class AuthorUiState(
     /** true when the works request failed and there is nothing to show */
     val notesError: Boolean = false,
     /** true while a pull-to-refresh is in flight */
-    val refreshing: Boolean = false,
     /** bumped on refresh so the grid scrolls back to the top */
     val refreshTick: Int = 0
 )
@@ -76,46 +75,6 @@ class AuthorViewModel(
         loading = false
         _ui.update { it.copy(profileError = false, notesError = false, notes = emptyList(), hasMore = true) }
         load()
-    }
-
-    /**
-     * Pull-to-refresh: reload the profile and the first page of works, replacing
-     * the list on success and keeping it on failure.
-     */
-    fun refresh() {
-        page = 0
-        loading = false
-        _ui.update { it.copy(refreshing = true, notesError = false, profileError = false, hasMore = true) }
-        viewModelScope.launch {
-            val author = runCatching { repo.authorProfile(userId) }.getOrNull()
-            _ui.update {
-                if (author != null) {
-                    it.copy(author = author, followed = repo.isFollowed(userId), profileError = false)
-                } else {
-                    it.copy(profileError = it.author == null)
-                }
-            }
-        }
-        viewModelScope.launch {
-            val list = runCatching { repo.authorNotes(userId, 1) }.getOrNull()
-            if (list != null) {
-                if (list.isNotEmpty()) page = 1
-                paging.reset()
-                _ui.update {
-                    it.copy(
-                        notes = list,
-                        notesLoading = false,
-                        refreshing = false,
-                        hasMore = list.isNotEmpty(),
-                        notesError = false,
-                        // a refresh returns the user to the top of the list
-                        refreshTick = it.refreshTick + 1
-                    )
-                }
-            } else {
-                _ui.update { it.copy(refreshing = false, notesLoading = false, notesError = it.notes.isEmpty()) }
-            }
-        }
     }
 
     fun loadMore() {

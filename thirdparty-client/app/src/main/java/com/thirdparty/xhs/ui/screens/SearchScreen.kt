@@ -51,7 +51,6 @@ import com.thirdparty.xhs.ui.components.EmptyState
 import com.thirdparty.xhs.ui.components.FeeBadge
 import com.thirdparty.xhs.ui.components.XhsAsyncImage
 import com.thirdparty.xhs.ui.components.XhsAvatar
-import com.thirdparty.xhs.ui.components.PullToRefreshBox
 import com.thirdparty.xhs.ui.components.XhsWaterfallGrid
 import com.thirdparty.xhs.ui.theme.AvatarSize
 import com.thirdparty.xhs.ui.theme.Spacing
@@ -169,23 +168,21 @@ fun SearchScreen(
                     description = "在下方切换「内容」或「作者」来搜索",
                     icon = Icons.Filled.Search
                 )
+                // No pull-to-refresh here: the list is produced by the query, so
+                // the way to refresh it is to search again — an accidental drag
+                // just wasted a request.
                 state.mode == SearchResultMode.CONTENT && state.results.isNotEmpty() ->
-                    PullToRefreshBox(
-                        refreshing = state.refreshing,
-                        onRefresh = { viewModel.refresh() }
-                    ) {
-                        XhsWaterfallGrid(
-                            items = state.results,
-                            onOpenDetail = onOpenDetail,
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                                start = Spacing.s, end = Spacing.s, top = Spacing.xs, bottom = Spacing.l
-                            ),
-                            hasMore = state.hasMore,
-                            loadingMore = state.loadingMore,
-                            resetKey = state.refreshTick,
-                            onLoadMore = { viewModel.loadMore() }
-                        )
-                    }
+                    XhsWaterfallGrid(
+                        items = state.results,
+                        onOpenDetail = onOpenDetail,
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                            start = Spacing.s, end = Spacing.s, top = Spacing.xs, bottom = Spacing.l
+                        ),
+                        hasMore = state.hasMore,
+                        loadingMore = state.loadingMore,
+                        resetKey = state.refreshTick,
+                        onLoadMore = { viewModel.loadMore() }
+                    )
                 state.mode == SearchResultMode.USER && state.users.isNotEmpty() ->
                     LazyColumn(
                         Modifier.fillMaxSize(),

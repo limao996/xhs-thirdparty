@@ -29,7 +29,6 @@ data class SearchUiState(
     /** true once the user has run at least one search */
     val searched: Boolean = false,
     /** true while a pull-to-refresh is in flight */
-    val refreshing: Boolean = false,
     /** bumped on every refresh / new search so the grid scrolls back to the top */
     val refreshTick: Int = 0
 )
@@ -120,40 +119,6 @@ class SearchViewModel(private val repo: XhsRepository) : ViewModel() {
     fun retry() {
         val q = _ui.value.query.trim()
         if (q.isNotEmpty()) runSearch(q)
-    }
-
-    /**
-     * Pull-to-refresh for the content results: reloads the first page without
-     * blanking the list, and keeps the old results if the request fails.
-     */
-    fun refresh() {
-        val q = _ui.value.query.trim()
-        if (q.isEmpty() || _ui.value.mode != SearchResultMode.CONTENT || loading) {
-            _ui.update { it.copy(refreshing = false) }
-            return
-        }
-        loading = true
-        _ui.update { it.copy(refreshing = true, error = false) }
-        viewModelScope.launch {
-            val list = runCatching { repo.searchNote(q, 1) }.getOrNull()
-            if (list != null) {
-                page = 1
-                paging.reset()
-                _ui.update {
-                    it.copy(
-                        results = list,
-                        refreshing = false,
-                        hasMore = list.isNotEmpty(),
-                        empty = list.isEmpty(),
-                        error = false,
-                        refreshTick = it.refreshTick + 1
-                    )
-                }
-            } else {
-                _ui.update { it.copy(refreshing = false, error = it.results.isEmpty()) }
-            }
-            loading = false
-        }
     }
 
     /** Server-side pagination for content results. */

@@ -16,7 +16,6 @@ data class LocalListUiState(
     val visibleCount: Int = PAGE_SIZE,
     val loading: Boolean = true,
     /** true while a pull-to-refresh is in flight */
-    val refreshing: Boolean = false,
     /** bumped on refresh so the grid scrolls back to the top */
     val refreshTick: Int = 0
 ) {
@@ -48,28 +47,6 @@ class LocalListViewModel(
                 Mode.HISTORY -> repo.history()
             }
             _ui.value = LocalListUiState(all = items, visibleCount = LocalListUiState.PAGE_SIZE, loading = false)
-        }
-    }
-
-    /**
-     * Pull-to-refresh. The data is local, but it can change from other screens
-     * (saving from a detail, browsing new videos), so a manual refresh is useful.
-     */
-    fun refresh() {
-        viewModelScope.launch {
-            _ui.update { it.copy(refreshing = true) }
-            val items = when (mode) {
-                Mode.SAVED -> repo.savedList()
-                Mode.HISTORY -> repo.history()
-            }
-            _ui.value = LocalListUiState(
-                all = items,
-                visibleCount = LocalListUiState.PAGE_SIZE,
-                loading = false,
-                refreshing = false,
-                // a refresh returns the user to the top of the list
-                refreshTick = _ui.value.refreshTick + 1
-            )
         }
     }
 

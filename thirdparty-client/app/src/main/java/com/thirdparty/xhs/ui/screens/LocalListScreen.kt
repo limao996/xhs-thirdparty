@@ -17,7 +17,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.thirdparty.xhs.App
 import com.thirdparty.xhs.ui.components.EmptyState
-import com.thirdparty.xhs.ui.components.PullToRefreshBox
 import com.thirdparty.xhs.ui.components.XhsWaterfallGrid
 import com.thirdparty.xhs.ui.theme.Spacing
 import com.thirdparty.xhs.ui.viewmodel.LocalListViewModel
@@ -60,19 +59,16 @@ fun LocalListScreen(
         return
     }
 
-    PullToRefreshBox(
-        refreshing = state.refreshing,
-        onRefresh = { viewModel.refresh() }
-    ) {
-        XhsWaterfallGrid(
-            items = state.visible,
-            onOpenDetail = onOpenDetail,
-            contentPadding = PaddingValues(
-                start = Spacing.s, end = Spacing.s, top = Spacing.s, bottom = Spacing.l
-            ),
-            hasMore = state.hasMore,
-            resetKey = state.refreshTick,
-            onLoadMore = { viewModel.loadMore() }
-        )
-    }
+    // No pull-to-refresh: this list is local and reloads every time the screen is
+    // entered (`LaunchedEffect(mode) { reload() }`), so a drag could only misfire.
+    XhsWaterfallGrid(
+        items = state.visible,
+        onOpenDetail = onOpenDetail,
+        contentPadding = PaddingValues(
+            start = Spacing.s, end = Spacing.s, top = Spacing.s, bottom = Spacing.l
+        ),
+        hasMore = state.hasMore,
+        resetKey = state.refreshTick,
+        onLoadMore = { viewModel.loadMore() }
+    )
 }

@@ -46,7 +46,6 @@ data class DiscoverUiState(
     val fanGroupHasMore: Boolean = true,
     val followed: List<FollowedEntity> = emptyList(),
     /** true while a pull-to-refresh is in flight */
-    val refreshing: Boolean = false,
     /** bumped on every refresh so the grid scrolls back to the top */
     val refreshTick: Int = 0
 )
@@ -149,7 +148,6 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
         feedLoading = true
         fanGroupPage = 0
         emptyFanGroupPages = 0
-        _ui.update { it.copy(refreshing = true) }
         viewModelScope.launch {
             val cats = runCatching { repo.categories() }.getOrNull()
             val catId = _ui.value.selectedCategory
@@ -158,7 +156,6 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
             if (list != null) emptyPages = 0
             _ui.update { s ->
                 s.copy(
-                    refreshing = false,
                     // a refresh always returns the user to the top of the list
                     refreshTick = s.refreshTick + 1,
                     categories = cats ?: s.categories,

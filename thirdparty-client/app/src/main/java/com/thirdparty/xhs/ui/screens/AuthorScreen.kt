@@ -42,7 +42,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoLibrary
 import com.thirdparty.xhs.ui.components.EmptyState
-import com.thirdparty.xhs.ui.components.PullToRefreshBox
 import com.thirdparty.xhs.ui.components.XhsWaterfallGrid
 import com.thirdparty.xhs.ui.components.XhsAvatar
 import com.thirdparty.xhs.ui.theme.AvatarSize
@@ -148,23 +147,20 @@ fun AuthorScreen(
                     icon = Icons.Filled.PhotoLibrary
                 )
             } else {
-                // waterfall with endless pagination + pull-to-refresh
-                PullToRefreshBox(
-                    refreshing = state.refreshing,
-                    onRefresh = { viewModel.refresh() }
-                ) {
-                    XhsWaterfallGrid(
-                        items = state.notes,
-                        onOpenDetail = onOpenDetail,
-                        contentPadding = PaddingValues(
-                            start = Spacing.s, end = Spacing.s, top = Spacing.s, bottom = Spacing.l
-                        ),
-                        hasMore = state.hasMore,
-                        loadingMore = state.loadingMore,
-                        resetKey = state.refreshTick,
-                        onLoadMore = { viewModel.loadMore() }
-                    )
-                }
+                // waterfall with endless pagination. No pull-to-refresh: the page
+                // reloads on entry (AuthorViewModel loads in init), so a drag here
+                // could only misfire.
+                XhsWaterfallGrid(
+                    items = state.notes,
+                    onOpenDetail = onOpenDetail,
+                    contentPadding = PaddingValues(
+                        start = Spacing.s, end = Spacing.s, top = Spacing.s, bottom = Spacing.l
+                    ),
+                    hasMore = state.hasMore,
+                    loadingMore = state.loadingMore,
+                    resetKey = state.refreshTick,
+                    onLoadMore = { viewModel.loadMore() }
+                )
             }
             }
         }
