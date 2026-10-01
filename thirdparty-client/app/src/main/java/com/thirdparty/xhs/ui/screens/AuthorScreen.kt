@@ -118,18 +118,24 @@ fun AuthorScreen(
                 }
             }
 
+            // weight(1f) gives the works area the REMAINING height (a bare
+            // fillMaxSize child of a Column would claim the parent's full height
+            // and push centred states off-screen)
+            Box(Modifier.fillMaxWidth().weight(1f)) {
             if (state.notesLoading && state.notes.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             } else if (!viewModel.validUserId) {
                 // the caller had no usable author id — a network retry cannot help
                 EmptyState(
                     title = "作者信息不可用",
+                    modifier = Modifier.fillMaxSize(),
                     description = "这条内容没有提供作者信息",
                     icon = Icons.Filled.Person
                 )
             } else if (state.notes.isEmpty() && (state.notesError || state.profileError)) {
                 EmptyState(
                     title = "加载失败",
+                    modifier = Modifier.fillMaxSize(),
                     description = "请检查网络后重试",
                     actionLabel = "重试",
                     onAction = { viewModel.retry() }
@@ -137,6 +143,7 @@ fun AuthorScreen(
             } else if (state.notes.isEmpty()) {
                 EmptyState(
                     title = "作者还没有发布内容",
+                    modifier = Modifier.fillMaxSize(),
                     description = "换个作者看看吧",
                     icon = Icons.Filled.PhotoLibrary
                 )
@@ -157,6 +164,7 @@ fun AuthorScreen(
                         onLoadMore = { viewModel.loadMore() }
                     )
                 }
+            }
             }
         }
     }

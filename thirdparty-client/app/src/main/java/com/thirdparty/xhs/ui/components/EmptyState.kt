@@ -22,6 +22,12 @@ import com.thirdparty.xhs.ui.theme.Spacing
  * Empty / error placeholder with an optional retry action.
  * Used wherever a list can come back empty or a request can fail, so the user
  * always gets an explanation and a way forward instead of a blank screen.
+ *
+ * The caller owns sizing: inside a `Column` that already has siblings pass
+ * `Modifier.fillMaxWidth().weight(1f)`, inside a `Box` pass
+ * `Modifier.fillMaxSize()`. (An earlier version forced `fillMaxSize()` here,
+ * which inside a Column claims the *parent's* full height and pushes the
+ * centred text below the visible area — present in the tree but invisible.)
  */
 @Composable
 fun EmptyState(
@@ -33,7 +39,7 @@ fun EmptyState(
     onAction: (() -> Unit)? = null
 ) {
     Column(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {

@@ -98,12 +98,14 @@ fun VideoFeedScreen(
                 state.firstLoading -> CircularProgressIndicator()
                 state.error -> EmptyState(
                     title = "推荐加载失败",
+                    modifier = Modifier.fillMaxSize(),
                     description = "请检查网络后重试",
                     actionLabel = "重试",
                     onAction = { viewModel.refresh() }
                 )
                 else -> EmptyState(
                     title = "暂无推荐内容",
+                    modifier = Modifier.fillMaxSize(),
                     actionLabel = "刷新",
                     onAction = { viewModel.refresh() }
                 )

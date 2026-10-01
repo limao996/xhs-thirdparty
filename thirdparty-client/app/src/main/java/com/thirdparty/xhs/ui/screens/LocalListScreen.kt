@@ -51,6 +51,7 @@ fun LocalListScreen(
     if (state.all.isEmpty()) {
         EmptyState(
             title = if (mode == LocalListViewModel.Mode.SAVED) "还没有收藏" else "还没有浏览记录",
+            modifier = Modifier.fillMaxSize(),
             description = if (mode == LocalListViewModel.Mode.SAVED) "在详情页点右上角的心形即可收藏"
             else "看过的内容会自动出现在这里",
             icon = if (mode == LocalListViewModel.Mode.SAVED) Icons.Filled.FavoriteBorder

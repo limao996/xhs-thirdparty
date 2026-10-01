@@ -106,15 +106,20 @@ fun DiscoverTabScreen(
                     Tab(selected = tab == t, onClick = { if (tab != t) tab = t }, text = { Text(t.label) })
                 }
             }
-            when (tab) {
-                DiscoverTab.FEED -> FeedTab(state, viewModel, onOpenDetail)
-                DiscoverTab.FAN_GROUP -> FanGroupTab(
-                    state.fanGroup,
-                    state.fanGroupLoading,
-                    onOpenAuthor,
-                    onOpenDetail
-                )
-                DiscoverTab.FOLLOW_LOCAL -> FollowedMineTab(state.followed, onOpenAuthor)
+            // weight(1f) so the tab content gets the REMAINING height; a plain
+            // fillMaxSize() child of a Column would claim the parent's full
+            // height and push centred empty states below the visible area
+            Box(Modifier.fillMaxWidth().weight(1f)) {
+                when (tab) {
+                    DiscoverTab.FEED -> FeedTab(state, viewModel, onOpenDetail)
+                    DiscoverTab.FAN_GROUP -> FanGroupTab(
+                        state.fanGroup,
+                        state.fanGroupLoading,
+                        onOpenAuthor,
+                        onOpenDetail
+                    )
+                    DiscoverTab.FOLLOW_LOCAL -> FollowedMineTab(state.followed, onOpenAuthor)
+                }
             }
         }
         // refresh FAB — lifted above the floating bottom navigation bar
@@ -162,6 +167,7 @@ private fun FeedTab(
         if (state.feed.items.isEmpty() && state.feed.error) {
             EmptyState(
                 title = "内容加载失败",
+                modifier = Modifier.fillMaxSize(),
                 description = "请检查网络后重试",
                 actionLabel = "重试",
                 onAction = { viewModel.retry() }
@@ -172,6 +178,7 @@ private fun FeedTab(
         if (state.feed.items.isEmpty()) {
             EmptyState(
                 title = "这个分类还没有内容",
+                modifier = Modifier.fillMaxSize(),
                 description = "换一个分类试试",
                 icon = Icons.Filled.Search
             )
@@ -211,6 +218,7 @@ private fun FanGroupTab(
     if (recommended.isEmpty()) {
         EmptyState(
             title = "暂无推荐粉丝圈",
+            modifier = Modifier.fillMaxSize(),
             description = "去详情页关注喜欢的作者吧",
             icon = Icons.Filled.Group
         )
@@ -327,6 +335,7 @@ private fun FollowedMineTab(
     if (followed.isEmpty()) {
         EmptyState(
             title = "还没有关注任何作者",
+            modifier = Modifier.fillMaxSize(),
             description = "在作者主页或详情页点「关注」即可",
             icon = Icons.Filled.Group
         )

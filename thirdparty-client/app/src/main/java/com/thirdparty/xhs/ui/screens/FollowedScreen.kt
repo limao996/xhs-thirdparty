@@ -71,6 +71,7 @@ fun FollowedScreen(
             list.isEmpty() -> Box(Modifier.fillMaxSize().padding(pad)) {
                 EmptyState(
                     title = "还没有关注任何作者",
+                    modifier = Modifier.fillMaxSize(),
                     description = "在作者主页或详情页点「关注」即可",
                     icon = Icons.Filled.Group
                 )

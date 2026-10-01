@@ -137,24 +137,30 @@ fun SearchScreen(
                 }
             }
 
+            // weight(1f) gives the results area the REMAINING height, so centred
+            // empty/error states stay on screen
+            Box(Modifier.fillMaxWidth().weight(1f)) {
             when {
                 state.searching -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
                 state.error -> EmptyState(
                     title = "搜索失败",
+                    modifier = Modifier.fillMaxSize(),
                     description = "请检查网络后重试",
                     actionLabel = "重试",
                     onAction = { viewModel.retry() }
                 )
                 state.empty -> EmptyState(
                     title = if (state.mode == SearchResultMode.USER) "没有找到相关作者" else "没有找到相关内容",
+                    modifier = Modifier.fillMaxSize(),
                     description = "换个关键词试试",
                     icon = Icons.Filled.Search
                 )
                 // nothing searched yet and nothing in history -> tell the user what to do
                 !state.searched && state.history.isEmpty() -> EmptyState(
                     title = "搜索短视频 / 笔记 / 作者",
+                    modifier = Modifier.fillMaxSize(),
                     description = "在下方切换「内容」或「作者」来搜索",
                     icon = Icons.Filled.Search
                 )
@@ -183,6 +189,7 @@ fun SearchScreen(
                             UserSearchRow(user, onClick = { onOpenAuthor(user.userId) })
                         }
                     }
+            }
             }
         }
     }
