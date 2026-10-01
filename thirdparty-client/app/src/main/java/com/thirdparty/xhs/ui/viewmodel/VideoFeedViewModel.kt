@@ -55,8 +55,32 @@ class VideoFeedViewModel(private val repo: XhsRepository) : ViewModel() {
         }
     }
 
-    /** Refresh the feed from page 1 (bottom-nav re-tap or swipe). */
-    fun refresh() = loadMore(forceRefresh = true)
+    /**
+     * Refresh from page 1. Keeps the currently playing item on screen while the
+     * request is in flight, and only replaces the list when it succeeds.
+     */
+    fun refresh() {
+        if (loading) return
+        loading = true
+        _ui.update { it.copy(firstLoading = it.items.isEmpty(), error = false) }
+        viewModelScope.launch {
+            val list = runCatching { repo.videoFeedPage(1) }.getOrNull()
+            if (list != null) {
+                page = 1
+                _ui.update {
+                    it.copy(
+                        items = list,
+                        firstLoading = false,
+                        savedIds = repo.savedIds(),
+                        error = list.isEmpty()
+                    )
+                }
+            } else {
+                _ui.update { it.copy(firstLoading = false, error = it.items.isEmpty()) }
+            }
+            loading = false
+        }
+    }
 
     fun onSavedChanged(noteId: Long, nowSaved: Boolean) {
         _ui.update { it.copy(savedIds = if (nowSaved) it.savedIds + noteId else it.savedIds - noteId) }

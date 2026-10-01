@@ -24,7 +24,9 @@ enum class DiscoverTab(val label: String) {
 data class FeedSection(
     val items: List<NoteItem> = emptyList(),
     val firstLoading: Boolean = false,
-    val hasMore: Boolean = true
+    val hasMore: Boolean = true,
+    /** true when the last load failed — the UI shows a retry affordance */
+    val error: Boolean = false
 )
 
 data class DiscoverUiState(
@@ -33,6 +35,7 @@ data class DiscoverUiState(
     val feed: FeedSection = FeedSection(),
     val fanGroup: List<AuthorInfo> = emptyList(),
     val fanGroupLoading: Boolean = false,
+    val fanGroupError: Boolean = false,
     val followed: List<FollowedEntity> = emptyList()
 )
 
@@ -64,56 +67,92 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
         loadMore()
     }
 
+    /** Retry after a failure (used by the error state's button). */
+    fun retry() {
+        if (_ui.value.feed.items.isEmpty()) {
+            feedPage = 0
+            feedLoading = false
+            _ui.update { it.copy(feed = it.feed.copy(error = false, firstLoading = true)) }
+            loadMore(force = true)
+        } else {
+            loadMore(force = true)
+        }
+    }
+
     fun loadMore(force: Boolean = false) {
         if (feedLoading || (!force && !_ui.value.feed.hasMore)) return
         feedLoading = true
-        _ui.update { it.copy(feed = it.feed.copy(firstLoading = it.feed.items.isEmpty())) }
+        _ui.update {
+            it.copy(feed = it.feed.copy(
+                firstLoading = it.feed.items.isEmpty(),
+                error = false
+            ))
+        }
         val catId = _ui.value.selectedCategory
         viewModelScope.launch {
-            try {
-                val list = repo.discoverPage(categoryId = catId, groupId = 0, page = feedPage + 1)
+            val result = runCatching { repo.discoverPage(categoryId = catId, groupId = 0, page = feedPage + 1) }
+            val list = result.getOrNull()
+            if (list != null) {
                 feedPage++
                 _ui.update { s ->
                     s.copy(feed = s.feed.copy(
                         items = s.feed.items + list,
                         firstLoading = false,
-                        hasMore = list.size >= 10
+                        hasMore = list.size >= 10,
+                        error = false
                     ))
                 }
-            } catch (e: Exception) {
-                _ui.update { it.copy(feed = it.feed.copy(firstLoading = false)) }
-            } finally {
-                feedLoading = false
+            } else {
+                // keep whatever we already have; just surface the failure
+                _ui.update { s -> s.copy(feed = s.feed.copy(firstLoading = false, error = true)) }
             }
+            feedLoading = false
         }
     }
 
     /** Full refresh: reload the feed (for the FAB), category list, fan-group recs & followed. */
     fun refresh(onDone: (() -> Unit)? = null) {
-        feedPage = 0
-        feedLoading = false
-        _ui.update { it.copy(feed = FeedSection()) }
+        feedLoading = true
         viewModelScope.launch {
-            val cats = runCatching { repo.categories() }.getOrDefault(emptyList())
+            val cats = runCatching { repo.categories() }.getOrNull()
             val catId = _ui.value.selectedCategory
-            val list = runCatching { repo.discoverPage(categoryId = catId, groupId = 0, page = 1) }.getOrDefault(emptyList())
-            feedPage = 1
-            _ui.update {
-                it.copy(categories = cats, feed = FeedSection(items = list, firstLoading = false, hasMore = list.size >= 10))
+            val list = runCatching { repo.discoverPage(categoryId = catId, groupId = 0, page = 1) }.getOrNull()
+            feedPage = if (list != null) 1 else 0
+            _ui.update { s ->
+                s.copy(
+                    categories = cats ?: s.categories,
+                    // only replace the feed when the refresh actually succeeded
+                    feed = if (list != null) {
+                        s.feed.copy(
+                            items = list,
+                            firstLoading = false,
+                            hasMore = list.size >= 10,
+                            error = false
+                        )
+                    } else {
+                        s.feed.copy(firstLoading = false, error = true)
+                    }
+                )
             }
             myId = runCatching { repo.myUserId() }.getOrDefault(myId)
             loadFanGroup()
             refreshFollowed()
+            feedLoading = false
             onDone?.invoke()
         }
     }
 
     private fun loadFanGroup() {
-        _ui.update { it.copy(fanGroupLoading = true) }
+        _ui.update { it.copy(fanGroupLoading = true, fanGroupError = false) }
         viewModelScope.launch {
-            val recs = if (myId > 0) runCatching { repo.funGroupRecommend(myId) }.getOrDefault(emptyList())
-                else emptyList()
-            _ui.update { it.copy(fanGroup = recs, fanGroupLoading = false) }
+            val recs = if (myId > 0) runCatching { repo.funGroupRecommend(myId) }.getOrNull() else null
+            _ui.update {
+                it.copy(
+                    fanGroup = recs ?: it.fanGroup,
+                    fanGroupLoading = false,
+                    fanGroupError = recs == null
+                )
+            }
         }
     }
 
@@ -124,14 +163,22 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
         }
     }
 
-    /** Auto-refresh a specific sub-tab when the user switches to it. */
+    /**
+     * Auto-refresh a specific sub-tab when the user switches to it.
+     * Keeps the currently displayed items so switching tabs never flashes empty.
+     */
     fun refreshTab(tab: DiscoverTab) {
         when (tab) {
             DiscoverTab.FEED -> {
-                feedPage = 0
-                feedLoading = false
-                _ui.update { it.copy(feed = FeedSection(firstLoading = true)) }
-                loadMore(force = true)
+                if (_ui.value.feed.items.isEmpty()) {
+                    feedPage = 0
+                    feedLoading = false
+                    _ui.update { it.copy(feed = it.feed.copy(firstLoading = true, error = false)) }
+                    loadMore(force = true)
+                } else {
+                    // silent background refresh
+                    refresh()
+                }
             }
             DiscoverTab.FAN_GROUP -> {
                 if (myId <= 0) viewModelScope.launch { myId = runCatching { repo.myUserId() }.getOrDefault(0); loadFanGroup() }

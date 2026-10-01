@@ -50,6 +50,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import com.thirdparty.xhs.App
 import com.thirdparty.xhs.common.RepoViewModelFactory
 import com.thirdparty.xhs.data.NoteItem
+import com.thirdparty.xhs.ui.components.EmptyState
 import com.thirdparty.xhs.ui.components.FeeBadge
 import com.thirdparty.xhs.ui.components.PlayerView
 import com.thirdparty.xhs.ui.components.XhsAsyncImage
@@ -86,7 +87,20 @@ fun VideoFeedScreen(
 
     if (state.items.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            if (state.firstLoading) CircularProgressIndicator()
+            when {
+                state.firstLoading -> CircularProgressIndicator()
+                state.error -> EmptyState(
+                    title = "推荐加载失败",
+                    description = "请检查网络后重试",
+                    actionLabel = "重试",
+                    onAction = { viewModel.refresh() }
+                )
+                else -> EmptyState(
+                    title = "暂无推荐内容",
+                    actionLabel = "刷新",
+                    onAction = { viewModel.refresh() }
+                )
+            }
         }
         return
     }

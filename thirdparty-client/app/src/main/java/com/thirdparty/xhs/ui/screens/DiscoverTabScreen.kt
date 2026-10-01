@@ -24,6 +24,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -53,6 +54,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.thirdparty.xhs.common.RepoViewModelFactory
 import com.thirdparty.xhs.data.AuthorInfo
 import com.thirdparty.xhs.data.NoteItem
+import com.thirdparty.xhs.ui.components.EmptyState
 import com.thirdparty.xhs.ui.components.FeeBadge
 import com.thirdparty.xhs.ui.components.XhsAsyncImage
 import com.thirdparty.xhs.ui.components.XhsAvatar
@@ -142,6 +144,26 @@ private fun FeedTab(
 
         if (state.feed.items.isEmpty() && state.feed.firstLoading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            return
+        }
+
+        // load failed and there is nothing to fall back on -> offer a retry
+        if (state.feed.items.isEmpty() && state.feed.error) {
+            EmptyState(
+                title = "内容加载失败",
+                description = "请检查网络后重试",
+                actionLabel = "重试",
+                onAction = { viewModel.retry() }
+            )
+            return
+        }
+
+        if (state.feed.items.isEmpty()) {
+            EmptyState(
+                title = "这个分类还没有内容",
+                description = "换一个分类试试",
+                icon = Icons.Filled.Search
+            )
             return
         }
 
