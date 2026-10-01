@@ -1063,3 +1063,24 @@ list 仍可能为空。所以调用方必须有**不信它的余地**（这里�
 （哪些操作高频、该放哪里、哪些该收起来），我却当成**排版**问题（怎么挤进去）。
 结果是"两行"依然拥挤。**用户给出的"可以有多个区域"不是排版建议，是结构建议** ——
 当同一处反复调整仍不满意时，该怀疑的不是间距，而是**我是不是在错的那一层改**。
+
+### 第 62 轮 · 剪贴板口令回流
+分享改为**只复制口令**（不再弹系统分享面板）；回到应用时检测剪贴板 → 弹窗询问是否跳转。
+`DeepLink.parseNoteId()` 用正则从**任意文本**里提取 id —— 用户复制的是整条口令
+（标题换行链接，或夹在别的文字里），不能整串精确匹配。按用户口径，**去掉了 intent 深链**
+（Manifest 的 VIEW/BROWSABLE 过滤器与 consumeDeepLink），`pendingNote` 只由弹窗的「打开」设置。
+
+**关键根因**：最初把读取放在 `onResume`，完全没反应。logcat 直接给出原因：
+```
+E ClipboardService: Denying clipboard access to com.thirdparty.xhs, application is not in focus
+```
+Android 10+ 拒绝非焦点应用访问剪贴板，而 **`onResume` 早于窗口获得焦点**，读取被静默拒绝。
+改用 `onWindowFocusChanged(hasFocus=true)` 后 Denying 计数降为 **0**。
+
+验证：分享→复制口令 → 回桌面→回应用 → 弹窗 → 点「打开」→ 进入该作品；0 崩溃。
+
+### 教训
+这次**没有靠猜**：功能"毫无反应"时，我没有反复改代码，而是先去 logcat 找系统给的拒绝理由 ——
+一行 `Denying clipboard access ... not in focus` 就把问题定位到了**调用时机**，
+而不是权限声明或 API 用法。**平台级限制几乎总会在 logcat 里留下明确信号；
+遇到"代码看起来没错但就是不生效"时，先读日志比读代码更省时间。**
