@@ -288,23 +288,61 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
         (0 until arr.length()).map { NoteItem(arr.optJSONObject(it)) }
     }
 
-    /** Recommended fan-group authors for the "粉丝圈" tab (v2/member/fun-group-list). */
-    suspend fun funGroupRecommend(myUserId: Int): List<AuthorInfo> = withContext(Dispatchers.IO) {
+    /**
+     * Recommended fan-group authors for the "粉丝圈" tab
+     * (v2/member/fun-group-list → recommend_list).
+     *
+     * Each entry carries `user_notes` (total works) and a `note_list` preview of
+     * up to 3 works — both are surfaced so the tab shows real content instead of
+     * a bare name list.
+     */
+    suspend fun funGroupRecommend(myUserId: Int): List<FanGroupAuthor> = withContext(Dispatchers.IO) {
         val res = api.call("v2/member/fun-group-list", mapOf("user_id" to myUserId))
         val data = res.optJSONObject("data")
         val arr = data?.optJSONArray("recommend_list") ?: org.json.JSONArray()
-        val out = mutableListOf<AuthorInfo>()
+        val out = mutableListOf<FanGroupAuthor>()
         for (i in 0 until arr.length()) {
             val o = arr.optJSONObject(i) ?: continue
-            val u = o.optJSONObject("user_info")
+            val authorId = o.optInt("user_id")
+            val authorName = o.optString("user_name")
+            val previews = mutableListOf<NoteItem>()
+            val noteArr = o.optJSONArray("note_list")
+            if (noteArr != null) {
+                for (j in 0 until noteArr.length()) {
+                    val nn = noteArr.optJSONObject(j) ?: continue
+                    val cover = nn.optString("note_cover")
+                    if (cover.isEmpty()) continue
+                    previews.add(
+                        NoteItem(
+                            noteId = nn.optLong("note_id"),
+                            userId = authorId,
+                            title = nn.optString("note_title"),
+                            userName = authorName,
+                            cover = cover,
+                            thumbnail = cover,
+                            noteType = nn.optInt("note_type"),
+                            // the preview payload carries no engagement counts;
+                            // 0 keeps the UI honest (the card hides them anyway)
+                            likeCount = 0,
+                            collectCount = 0,
+                            commentCount = 0,
+                            noteCin = nn.optInt("note_cin"),
+                            coverRatio = parseRatio(
+                                nn.optString("note_cover_size"),
+                                NoteItem.DEFAULT_COVER_RATIO
+                            ),
+                            rawJson = nn.toString()
+                        )
+                    )
+                }
+            }
             out.add(
-                AuthorInfo(
-                    userId = o.optInt("user_id"),
-                    userName = u?.optString("user_name").orEmpty().ifEmpty { o.optString("user_name") },
-                    headImg = u?.optString("user_head_img").orEmpty().ifEmpty { o.optString("user_head_img") },
-                    signature = u?.optString("user_signature").orEmpty().ifEmpty { o.optString("user_signature") },
-                    vpStatus = o.optInt("user_vp_status"),
-                    isFollow = o.optInt("is_follow") == 1
+                FanGroupAuthor(
+                    userId = authorId,
+                    userName = authorName,
+                    headImg = o.optString("user_head_img"),
+                    noteCount = o.optInt("user_notes"),
+                    notes = previews
                 )
             )
         }

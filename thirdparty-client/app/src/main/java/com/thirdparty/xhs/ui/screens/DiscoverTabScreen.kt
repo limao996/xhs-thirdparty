@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -23,6 +24,7 @@ import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridS
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.foundation.lazy.LazyRow
@@ -30,12 +32,14 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -53,6 +57,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.thirdparty.xhs.common.RepoViewModelFactory
 import com.thirdparty.xhs.data.AuthorInfo
+import com.thirdparty.xhs.data.FanGroupAuthor
 import com.thirdparty.xhs.data.NoteItem
 import com.thirdparty.xhs.ui.components.EmptyState
 import com.thirdparty.xhs.ui.components.FeeBadge
@@ -103,7 +108,12 @@ fun DiscoverTabScreen(
             }
             when (tab) {
                 DiscoverTab.FEED -> FeedTab(state, viewModel, onOpenDetail)
-                DiscoverTab.FAN_GROUP -> FanGroupTab(state.fanGroup, state.fanGroupLoading, onOpenAuthor)
+                DiscoverTab.FAN_GROUP -> FanGroupTab(
+                    state.fanGroup,
+                    state.fanGroupLoading,
+                    onOpenAuthor,
+                    onOpenDetail
+                )
                 DiscoverTab.FOLLOW_LOCAL -> FollowedMineTab(state.followed, onOpenAuthor)
             }
         }
@@ -189,42 +199,122 @@ private fun FeedTab(
 
 @Composable
 private fun FanGroupTab(
-    recommended: List<AuthorInfo>,
+    recommended: List<FanGroupAuthor>,
     loading: Boolean,
-    onOpenAuthor: (Int) -> Unit
+    onOpenAuthor: (Int) -> Unit,
+    onOpenDetail: (Long) -> Unit
 ) {
     if (loading && recommended.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         return
     }
     if (recommended.isEmpty()) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("暂无推荐粉丝圈，去详情页关注喜欢的作者吧",
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        EmptyState(
+            title = "暂无推荐粉丝圈",
+            description = "去详情页关注喜欢的作者吧",
+            icon = Icons.Filled.Group
+        )
         return
     }
-    LazyColumn(Modifier.fillMaxSize()) {
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = BottomNavClearance)
+    ) {
         items(recommended, key = { it.userId }) { a ->
-            Surface(onClick = { onOpenAuthor(a.userId) }, modifier = Modifier.fillMaxWidth()) {
-                Row(Modifier.padding(horizontal = Spacing.l, vertical = Spacing.s), verticalAlignment = Alignment.CenterVertically) {
-                    XhsAvatar(url = a.headImg, contentDescription = a.userName,
-                        modifier = Modifier.size(AvatarSize.list))
+            Column(Modifier.fillMaxWidth().padding(vertical = Spacing.s)) {
+                // author header
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = Spacing.l),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    XhsAvatar(
+                        url = a.headImg,
+                        contentDescription = a.userName,
+                        modifier = Modifier.size(AvatarSize.list)
+                    )
                     Spacer(Modifier.width(Spacing.m))
                     Column(Modifier.weight(1f)) {
                         Text(a.userName, style = MaterialTheme.typography.bodyLarge)
-                        if (a.signature.isNotBlank()) {
-                            Text(a.signature, maxLines = 1, style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (a.noteCount > 0) {
+                            Text(
+                                "共 ${a.noteCount} 个作品",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                     Surface(
                         onClick = { onOpenAuthor(a.userId) },
                         shape = MaterialTheme.shapes.small,
-                        color = MaterialTheme.colorScheme.secondaryContainer
-                    ) { Text("去看看", Modifier.padding(horizontal = 10.dp, vertical = 5.dp)) }
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    ) {
+                        Text(
+                            "去看看",
+                            Modifier.padding(horizontal = Spacing.m, vertical = Spacing.s),
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    }
                 }
+
+                // the author's latest works (previously discarded by the parser)
+                if (a.notes.isNotEmpty()) {
+                    Spacer(Modifier.height(Spacing.s))
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = Spacing.l),
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.s)
+                    ) {
+                        a.notes.take(3).forEach { n ->
+                            FanGroupNoteCard(
+                                item = n,
+                                onClick = { onOpenDetail(n.noteId) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        // keep the last row left-aligned when fewer than 3 notes
+                        repeat(3 - a.notes.take(3).size) {
+                            Spacer(Modifier.weight(1f))
+                        }
+                    }
+                }
+                Spacer(Modifier.height(Spacing.xs))
+                HorizontalDivider()
             }
+        }
+    }
+}
+
+/** Compact work preview used inside the 粉丝圈 tab. */
+@Composable
+private fun FanGroupNoteCard(
+    item: com.thirdparty.xhs.data.NoteItem,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = modifier
+    ) {
+        Column {
+            Box {
+                XhsAsyncImage(
+                    url = item.cover,
+                    contentDescription = item.title,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(item.coverRatio.coerceIn(0.55f, 1.6f))
+                )
+                FeeBadge(item, compact = true, modifier = Modifier.align(Alignment.TopEnd).padding(Spacing.xs))
+            }
+            Text(
+                item.title,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(Spacing.s)
+            )
         }
     }
 }

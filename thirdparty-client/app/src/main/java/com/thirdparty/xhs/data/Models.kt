@@ -2,6 +2,23 @@ package com.thirdparty.xhs.data
 
 import org.json.JSONObject
 
+/**
+ * A recommended fan-group author (v2/member/fun-group-list → recommend_list).
+ *
+ * The payload also carries a `note_list` preview (up to 3 works) and the
+ * author's total `user_notes`; both used to be discarded, leaving the 粉丝圈 tab
+ * as a bare list of names even though the backend supplies real content.
+ */
+data class FanGroupAuthor(
+    val userId: Int,
+    val userName: String,
+    val headImg: String,
+    /** total works published by this author (`user_notes`) */
+    val noteCount: Int,
+    /** preview works, ready to render as cards */
+    val notes: List<NoteItem> = emptyList()
+)
+
 /** Guest's own profile (v2/mine/user-info) — used by the "我的" screen. */
 data class UserProfile(
     val userId: Int,

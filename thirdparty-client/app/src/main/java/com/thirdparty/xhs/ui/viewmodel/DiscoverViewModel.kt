@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.thirdparty.xhs.data.AuthorInfo
 import com.thirdparty.xhs.data.Category
+import com.thirdparty.xhs.data.FanGroupAuthor
 import com.thirdparty.xhs.data.FollowedEntity
 import com.thirdparty.xhs.data.NoteItem
 import com.thirdparty.xhs.data.XhsRepository
@@ -36,7 +37,7 @@ data class DiscoverUiState(
     val categories: List<Category> = emptyList(),
     val selectedCategory: Int = 0,
     val feed: FeedSection = FeedSection(),
-    val fanGroup: List<AuthorInfo> = emptyList(),
+    val fanGroup: List<FanGroupAuthor> = emptyList(),
     val fanGroupLoading: Boolean = false,
     val fanGroupError: Boolean = false,
     val followed: List<FollowedEntity> = emptyList(),
