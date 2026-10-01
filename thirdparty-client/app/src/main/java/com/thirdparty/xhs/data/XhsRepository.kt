@@ -215,10 +215,6 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
     suspend fun savedList(): List<NoteItem> =
         withContext(Dispatchers.IO) { savedDao.all().map { NoteItem(JSONObject(it.rawJson)) } }
 
-    /** Just the set of locally-saved note ids (for badge lookups). */
-    suspend fun savedIds(): Set<Long> =
-        withContext(Dispatchers.IO) { savedDao.all().map { it.noteId }.toSet() }
-
     /** Wipe all local favourites. */
     suspend fun clearSaved() = withContext(Dispatchers.IO) { savedDao.clearAll() }
 

@@ -60,8 +60,6 @@ data class NoteItem(
     val coverRatio: Float = DEFAULT_COVER_RATIO,
     val rawJson: String = ""
 ) {
-    /** Whether this work is paid (has a coin price). */
-    val isPaid: Boolean get() = noteCin > 0
 
     /** Rehydrate a NoteItem straight from a detail-level JSON object. */
     constructor(o: JSONObject) : this(

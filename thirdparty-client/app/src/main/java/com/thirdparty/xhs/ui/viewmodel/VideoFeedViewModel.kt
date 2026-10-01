@@ -15,8 +15,7 @@ import kotlinx.coroutines.launch
 data class VideoFeedUiState(
     val items: List<NoteItem> = emptyList(),
     val firstLoading: Boolean = false,
-    val error: Boolean = false,
-    val savedIds: Set<Long> = emptySet()
+    val error: Boolean = false
 )
 
 class VideoFeedViewModel(private val repo: XhsRepository) : ViewModel() {
@@ -39,12 +38,10 @@ class VideoFeedViewModel(private val repo: XhsRepository) : ViewModel() {
             try {
                 val list = repo.videoFeedPage(page + 1)
                 page++
-                val saved = repo.savedIds()
                 _ui.update { s ->
                     s.copy(
                         items = s.items.appendUnique(list),
                         firstLoading = false,
-                        savedIds = saved,
                         error = false
                     )
                 }
@@ -70,7 +67,6 @@ class VideoFeedViewModel(private val repo: XhsRepository) : ViewModel() {
                     it.copy(
                         items = list,
                         firstLoading = false,
-                        savedIds = repo.savedIds(),
                         error = list.isEmpty()
                     )
                 }
@@ -79,10 +75,6 @@ class VideoFeedViewModel(private val repo: XhsRepository) : ViewModel() {
             }
             loading = false
         }
-    }
-
-    fun onSavedChanged(noteId: Long, nowSaved: Boolean) {
-        _ui.update { it.copy(savedIds = if (nowSaved) it.savedIds + noteId else it.savedIds - noteId) }
     }
 
     /**
