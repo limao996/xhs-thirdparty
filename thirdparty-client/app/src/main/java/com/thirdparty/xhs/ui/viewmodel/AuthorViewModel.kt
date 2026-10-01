@@ -21,7 +21,9 @@ data class AuthorUiState(
     /** true when the profile request failed */
     val profileError: Boolean = false,
     /** true when the works request failed and there is nothing to show */
-    val notesError: Boolean = false
+    val notesError: Boolean = false,
+    /** true while a pull-to-refresh is in flight */
+    val refreshing: Boolean = false
 )
 
 class AuthorViewModel(
@@ -61,6 +63,43 @@ class AuthorViewModel(
         loading = false
         _ui.update { it.copy(profileError = false, notesError = false, notes = emptyList(), hasMore = true) }
         load()
+    }
+
+    /**
+     * Pull-to-refresh: reload the profile and the first page of works, replacing
+     * the list on success and keeping it on failure.
+     */
+    fun refresh() {
+        page = 0
+        loading = false
+        _ui.update { it.copy(refreshing = true, notesError = false, profileError = false, hasMore = true) }
+        viewModelScope.launch {
+            val author = runCatching { repo.authorProfile(userId) }.getOrNull()
+            _ui.update {
+                if (author != null) {
+                    it.copy(author = author, followed = repo.isFollowed(userId), profileError = false)
+                } else {
+                    it.copy(profileError = it.author == null)
+                }
+            }
+        }
+        viewModelScope.launch {
+            val list = runCatching { repo.authorNotes(userId, 1) }.getOrNull()
+            if (list != null) {
+                if (list.isNotEmpty()) page = 1
+                _ui.update {
+                    it.copy(
+                        notes = list,
+                        notesLoading = false,
+                        refreshing = false,
+                        hasMore = list.size >= 10,
+                        notesError = false
+                    )
+                }
+            } else {
+                _ui.update { it.copy(refreshing = false, notesLoading = false, notesError = it.notes.isEmpty()) }
+            }
+        }
     }
 
     fun loadMore() {

@@ -116,8 +116,10 @@ fun VideoFeedScreen(
     ) { index ->
         val item = state.items[index]
         val isCurrent = pagerState.currentPage == index
-        // prepare the previous/next video too, so swiping starts instantly
-        val nearby = kotlin.math.abs(index - pagerState.currentPage) <= 1
+        // Preload the neighbours, keyed on the *settled* page: `currentPage`
+        // changes continuously while dragging, which would create and destroy
+        // neighbour players repeatedly and cause jank.
+        val nearby = kotlin.math.abs(index - pagerState.settledPage) <= 1
         VideoPage(
             item = item,
             active = isCurrent,
