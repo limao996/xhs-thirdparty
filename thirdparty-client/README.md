@@ -334,3 +334,27 @@ app/src/main/java/com/thirdparty/xhs/
 从推荐流进入详情再返回，仍停留在原视频（示例 @煮熟的生蚝），
 说明 `rememberPagerState` 的可保存状态 + Navigation 的 SaveableStateHolder
 工作正常，无需额外处理。
+
+### 第 20 轮 · 最近浏览被预加载污染（行为正确性）
+- `videoFeedPage` 拉取一页时会把该页**全部**视频写进本地浏览历史。
+  推荐流一页 6 条且还会预取相邻页，用户可能一条都没看，「最近浏览」
+  却已多出十几条 —— 它反映的是"服务器返回了什么"而非"我看过什么"。
+- 移除批量写入，改为新增 `recordView(item)`：仅在视频真正成为当前
+  播放页时记录（独立 `LaunchedEffect(active)`，预加载页 active=false
+  不会记录；与播放控制分离，避免播放器重建重复写 viewedAt 打乱排序）。
+- 验证（干净数据 + 精确断言）：`pm clear` 后启动不滑动 → 最近浏览
+  **1 条**（修复前为整页 6 条）；再滑动 2 次 → **3 条**，与观看数精确一致。
+
+### 第 21 轮 · 全屏返回与并发保护
+- 详情页全屏时 AppBar 隐藏，系统返回手势会**直接 pop 整个详情页**。
+  新增 `BackHandler(enabled = fullscreen)`，先退出全屏。
+  验证：全屏（顶栏隐藏）→ 按返回 → 仍停留在"内容详情"。
+- `GuestViewModel.rotate()` 缺重入保护，快速连点会并发发起多个游客登录；
+  加入 `_rotating` 守卫。
+
+### 已排除的疑虑（实测确认无需修改）
+- **Pager 列表收缩越界**：深度滑到第 14 个视频后再点「推荐」触发刷新
+  （列表被替换为更短的第一页），未出现 IndexOutOfBounds，Compose
+  Pager 自行处理了 pageCount 收缩。
+- **返回后位置丢失**：从推荐流进详情再返回仍停留在原视频，
+  `rememberPagerState` 的可保存状态生效。
