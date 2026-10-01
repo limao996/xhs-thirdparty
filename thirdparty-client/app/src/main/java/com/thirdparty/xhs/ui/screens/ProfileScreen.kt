@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Favorite
@@ -38,9 +39,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.thirdparty.xhs.App
 import com.thirdparty.xhs.common.RepoViewModelFactory
+import com.thirdparty.xhs.ui.theme.AvatarSize
 import com.thirdparty.xhs.ui.theme.Corners
 import com.thirdparty.xhs.ui.theme.Spacing
 import com.thirdparty.xhs.ui.theme.ThemeMode
+import com.thirdparty.xhs.ui.components.XhsAvatar
 import com.thirdparty.xhs.ui.viewmodel.ProfileViewModel
 
 /**
@@ -68,31 +71,50 @@ fun ProfileScreen(
         // account header
         Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
             Column(Modifier.fillMaxWidth().padding(Spacing.l)) {
-                Text(
-                    state.profile?.userName ?: "游客",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Spacer(Modifier.height(Spacing.xs))
-                Text(
-                    "游客 ID：${state.profile?.userId ?: 0}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(Spacing.m))
-                val vip = state.profile?.isVip == true
-                Surface(
-                    shape = Corners.small,
-                    color = if (vip) MaterialTheme.colorScheme.tertiaryContainer
-                    else MaterialTheme.colorScheme.surfaceVariant,
-                    contentColor = if (vip) MaterialTheme.colorScheme.onTertiaryContainer
-                    else MaterialTheme.colorScheme.onSurfaceVariant
-                ) {
-                    Text(
-                        if (vip) "会员 VIP" else "普通用户",
-                        Modifier.padding(horizontal = Spacing.m, vertical = Spacing.xs),
-                        style = MaterialTheme.typography.labelMedium
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    XhsAvatar(
+                        url = state.profile?.headImg,
+                        contentDescription = "头像",
+                        modifier = Modifier.size(AvatarSize.profile)
                     )
+                    Spacer(Modifier.width(Spacing.m))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            state.profile?.userName ?: "游客",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(Modifier.height(Spacing.xs))
+                        Text(
+                            "游客 ID：${state.profile?.userId ?: 0}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    val vip = state.profile?.isVip == true
+                    Surface(
+                        shape = Corners.small,
+                        color = if (vip) MaterialTheme.colorScheme.tertiaryContainer
+                        else MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = if (vip) MaterialTheme.colorScheme.onTertiaryContainer
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+                    ) {
+                        Text(
+                            if (vip) "会员 VIP" else "普通用户",
+                            Modifier.padding(horizontal = Spacing.m, vertical = Spacing.xs),
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+                }
+
+                // account stats (real values from v2/mine/user-info)
+                state.profile?.let { p ->
+                    Spacer(Modifier.height(Spacing.l))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                        ProfileStat("关注", p.follows)
+                        ProfileStat("粉丝", p.fans)
+                        ProfileStat("作品", p.notes)
+                    }
                 }
             }
         }
@@ -118,6 +140,22 @@ fun ProfileScreen(
 
         HorizontalDivider()
         ThemeSwitcher()
+    }
+}
+
+@Composable
+private fun ProfileStat(label: String, value: Int) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            value.toString(),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
