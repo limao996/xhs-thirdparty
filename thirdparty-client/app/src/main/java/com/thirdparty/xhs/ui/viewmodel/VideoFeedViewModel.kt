@@ -56,10 +56,8 @@ class VideoFeedViewModel(private val repo: XhsRepository) : ViewModel() {
         }
     }
 
-    /**
-     * Refresh from page 1. Keeps the currently playing item on screen while the
-     * request is in flight, and only replaces the list when it succeeds.
-     */
+    /** Refresh from page 1. Keeps the currently playing item on screen while the
+     *  request is in flight, and only replaces the list when it succeeds. */
     fun refresh() {
         if (loading) return
         loading = true
@@ -85,5 +83,13 @@ class VideoFeedViewModel(private val repo: XhsRepository) : ViewModel() {
 
     fun onSavedChanged(noteId: Long, nowSaved: Boolean) {
         _ui.update { it.copy(savedIds = if (nowSaved) it.savedIds + noteId else it.savedIds - noteId) }
+    }
+
+    /**
+     * The page actually became the one being watched — record it in 最近浏览.
+     * Preloaded neighbours deliberately do NOT get recorded.
+     */
+    fun recordView(item: NoteItem) {
+        viewModelScope.launch { runCatching { repo.recordView(item) } }
     }
 }

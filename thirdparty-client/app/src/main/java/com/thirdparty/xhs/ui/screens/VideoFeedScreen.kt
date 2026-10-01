@@ -127,6 +127,7 @@ fun VideoFeedScreen(
             item = item,
             active = isCurrent,
             nearby = nearby,
+            onWatched = { viewModel.recordView(item) },
             onClickDetail = { onOpenDetail(item.noteId) }
         )
     }
@@ -144,6 +145,7 @@ private fun VideoPage(
     item: NoteItem,
     active: Boolean,
     nearby: Boolean,
+    onWatched: () -> Unit,
     onClickDetail: () -> Unit
 ) {
     var infoVisible by remember { mutableStateOf(true) }
@@ -166,6 +168,9 @@ private fun VideoPage(
             p.pause()
         }
     }
+    // recording the view is a separate effect so a player rebuild does not
+    // re-stamp viewedAt and reshuffle 最近浏览
+    LaunchedEffect(active) { if (active) onWatched() }
     LaunchedEffect(active) { if (!active) paused = false }
 
     Box(

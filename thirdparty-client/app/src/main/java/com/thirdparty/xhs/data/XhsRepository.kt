@@ -92,23 +92,31 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
                 if (data.optString("note_media_url").isNotEmpty()) videos.add(NoteItem(data))
             }
 
-            // persist browsing history (serialized DB writes)
-            videos.forEach { full ->
-                historyDao.upsert(
-                    HistoryEntity(
-                        noteId = full.noteId,
-                        title = full.title,
-                        userName = full.userName,
-                        cover = full.cover,
-                        noteType = full.noteType,
-                        rawJson = full.rawJson,
-                        viewedAt = System.currentTimeMillis()
-                    )
-                )
-            }
-            historyDao.trim()
+            // NOTE: no history write here. A page is fetched (and neighbours are
+            // preloaded) before the user watches anything, so recording the whole
+            // page would pollute 最近浏览 with unwatched videos. History is
+            // recorded in recordView() when a page actually becomes current.
             videos
         }
+
+    /**
+     * Record that the user actually watched [item] (the feed's current page, or
+     * a note they opened). This is what 最近浏览 should reflect.
+     */
+    suspend fun recordView(item: NoteItem) = withContext(Dispatchers.IO) {
+        historyDao.upsert(
+            HistoryEntity(
+                noteId = item.noteId,
+                title = item.title,
+                userName = item.userName,
+                cover = item.cover,
+                noteType = item.noteType,
+                rawJson = item.rawJson,
+                viewedAt = System.currentTimeMillis()
+            )
+        )
+        historyDao.trim()
+    }
 
     /**
      * Open a note detail over the network. On success the snapshot is written
