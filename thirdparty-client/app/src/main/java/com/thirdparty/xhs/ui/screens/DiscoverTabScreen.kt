@@ -180,6 +180,7 @@ private fun FeedTab(
                     start = Spacing.s, end = Spacing.s, top = Spacing.xs, bottom = BottomNavClearance
                 ),
                 hasMore = state.feed.hasMore,
+                loadingMore = state.feed.loadingMore,
                 onLoadMore = { viewModel.loadMore() }
             )
         }

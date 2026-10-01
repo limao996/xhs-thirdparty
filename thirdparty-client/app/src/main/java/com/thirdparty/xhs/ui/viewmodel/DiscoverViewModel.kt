@@ -26,6 +26,8 @@ data class FeedSection(
     val items: List<NoteItem> = emptyList(),
     val firstLoading: Boolean = false,
     val hasMore: Boolean = true,
+    /** true while the next page is in flight (drives the trailing spinner) */
+    val loadingMore: Boolean = false,
     /** true when the last load failed — the UI shows a retry affordance */
     val error: Boolean = false
 )
@@ -88,6 +90,9 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
         _ui.update {
             it.copy(feed = it.feed.copy(
                 firstLoading = it.feed.items.isEmpty(),
+                // when there is already content we are paginating, so show the
+                // trailing spinner instead of the full-screen one
+                loadingMore = it.feed.items.isNotEmpty(),
                 error = false
             ))
         }
@@ -103,13 +108,14 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
                         // would crash the staggered grid
                         items = s.feed.items.appendUnique(list),
                         firstLoading = false,
+                        loadingMore = false,
                         hasMore = list.size >= 10,
                         error = false
                     ))
                 }
             } else {
                 // keep whatever we already have; just surface the failure
-                _ui.update { s -> s.copy(feed = s.feed.copy(firstLoading = false, error = true)) }
+                _ui.update { s -> s.copy(feed = s.feed.copy(firstLoading = false, loadingMore = false, error = true)) }
             }
             feedLoading = false
         }
