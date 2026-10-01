@@ -56,6 +56,7 @@ import com.thirdparty.xhs.data.AuthorInfo
 import com.thirdparty.xhs.data.NoteItem
 import com.thirdparty.xhs.ui.components.EmptyState
 import com.thirdparty.xhs.ui.components.FeeBadge
+import com.thirdparty.xhs.ui.components.PullToRefreshBox
 import com.thirdparty.xhs.ui.components.XhsAsyncImage
 import com.thirdparty.xhs.ui.components.XhsAvatar
 import com.thirdparty.xhs.ui.components.XhsWaterfallGrid
@@ -167,16 +168,21 @@ private fun FeedTab(
             return
         }
 
-        // shared masonry grid with endless pagination
-        XhsWaterfallGrid(
-            items = state.feed.items,
-            onOpenDetail = onOpenDetail,
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                start = Spacing.s, end = Spacing.s, top = Spacing.xs, bottom = BottomNavClearance
-            ),
-            hasMore = state.feed.hasMore,
-            onLoadMore = { viewModel.loadMore() }
-        )
+        // shared masonry grid with endless pagination + pull-to-refresh
+        PullToRefreshBox(
+            refreshing = state.refreshing,
+            onRefresh = { viewModel.refresh() }
+        ) {
+            XhsWaterfallGrid(
+                items = state.feed.items,
+                onOpenDetail = onOpenDetail,
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    start = Spacing.s, end = Spacing.s, top = Spacing.xs, bottom = BottomNavClearance
+                ),
+                hasMore = state.feed.hasMore,
+                onLoadMore = { viewModel.loadMore() }
+            )
+        }
     }
 }
 

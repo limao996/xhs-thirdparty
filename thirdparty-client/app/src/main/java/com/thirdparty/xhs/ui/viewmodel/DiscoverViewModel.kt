@@ -36,7 +36,9 @@ data class DiscoverUiState(
     val fanGroup: List<AuthorInfo> = emptyList(),
     val fanGroupLoading: Boolean = false,
     val fanGroupError: Boolean = false,
-    val followed: List<FollowedEntity> = emptyList()
+    val followed: List<FollowedEntity> = emptyList(),
+    /** true while a pull-to-refresh is in flight */
+    val refreshing: Boolean = false
 )
 
 class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
@@ -113,6 +115,7 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
     /** Full refresh: reload the feed (for the FAB), category list, fan-group recs & followed. */
     fun refresh(onDone: (() -> Unit)? = null) {
         feedLoading = true
+        _ui.update { it.copy(refreshing = true) }
         viewModelScope.launch {
             val cats = runCatching { repo.categories() }.getOrNull()
             val catId = _ui.value.selectedCategory
@@ -120,6 +123,7 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
             feedPage = if (list != null) 1 else 0
             _ui.update { s ->
                 s.copy(
+                    refreshing = false,
                     categories = cats ?: s.categories,
                     // only replace the feed when the refresh actually succeeded
                     feed = if (list != null) {
