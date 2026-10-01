@@ -255,3 +255,36 @@ app/src/main/java/com/thirdparty/xhs/
 
 > 说明：本轮迭代共 18 个提交，自基线起 26 个文件变更（+1221 / -215 行），
 > 每条修复均有「接口实测」或「截图判读」证据。
+
+### 第 11 轮 · 会话自愈（重要）
+- `XhsApi.call()` 完全不处理失败响应。实测摸清失效矩阵后发现 `result=-1`
+  被复用为「资源不存在」和「身份失效」两种含义（`筆記不存在` vs
+  `用戶ID錯誤 请重新登录`），必须按 message 区分。
+- 命中身份失效时自动重跑 `login-with-guest` 并重试一次；
+  登录请求强制使用设备身份而非可能失效的 user_hash。
+- 端到端验证：篡改本地 `user_hash` 为 `ZZZZ` 后启动 → 自动重登、
+  hash 恢复、token 换新、推荐流与瀑布流正常。修复前会永久空白。
+
+### 第 12 轮 · 网络层与启动体验
+- 原先存在两个 OkHttpClient（图片与接口各一个），且**没有磁盘缓存**，
+  每次启动所有封面重新下载。实测图片 CDN 响应带
+  `Cache-Control: max-age=31536000`，属强缓存资源。
+  合并为单一共享 client + 64MB 磁盘缓存；数据层不再依赖 App 单例。
+  验证：浏览后 `cache/http_cache` 出现 8 条缓存条目（约 1.1MB）。
+- 深色模式冷启动会闪白：主题 XML 无 `values-night`、窗口背景为浅色、
+  导航栏写死白色。补齐 night 资源，并把窗口背景与应用主题模式对齐
+  （含应用内主题切换时的同步）。验证：系统深色下启动 300ms 截图
+  背景即 `#1B1114`。
+
+### 第 13 轮 · Compose 正确性与抖动
+- 全项目扫描发现两处「条件 return 之后才调用 remember/effect」：
+  `XhsAsyncImage`（`XhsAvatar` 的 url 必然经历 null→有值，每次都会
+  改变调用结构）与 `ImageGallery`。已把 remember/LaunchedEffect 全部
+  无条件前置，扫描结果归零。
+- 推荐流预加载触发值由 `currentPage` 改为 `settledPage`，避免拖动期间
+  相邻页播放器被反复创建/销毁造成抖动。
+- 评论加载失败不再误显示为"还没有评论"（新增 commentsError + 重试）。
+
+### 第 14 轮 · 刷新与内存压力
+- 作者主页接入下拉刷新（重载资料 + 作品首页，成功才替换）。
+- 新增 `onTrimMemory`/`onLowMemory`：内存紧张时释放位图缓存。
