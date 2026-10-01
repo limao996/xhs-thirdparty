@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark counterparts so the launch window matches the dark ColorScheme
+         instead of flashing a light background before Compose draws. -->
+    <color name="activity_bg">#1B1114</color>
+</resources>

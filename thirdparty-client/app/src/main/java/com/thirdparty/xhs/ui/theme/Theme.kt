@@ -77,11 +77,7 @@ fun XhsTheme(
     content: @Composable () -> Unit
 ) {
     val systemDark = isSystemInDarkTheme()
-    val dark = when (mode) {
-        ThemeMode.SYSTEM -> systemDark
-        ThemeMode.LIGHT -> false
-        ThemeMode.DARK -> true
-    }
+    val dark = mode.isDark(systemDark)
     val colorScheme = when {
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
@@ -99,6 +95,23 @@ fun XhsTheme(
 }
 
 val XhsTypography = Typography()
+
+/**
+ * Launch-window backgrounds. Must stay in sync with [LightColors.background] and
+ * [DarkColors.background]; the Activity paints the window with these before
+ * Compose draws, so a mismatch shows up as a colour flash on cold start.
+ */
+object XhsWindowColors {
+    const val LIGHT = 0xFFFFF8F8.toInt()
+    const val DARK = 0xFF1B1114.toInt()
+}
+
+/** Resolve a [ThemeMode] against the current system setting. */
+fun ThemeMode.isDark(systemDark: Boolean): Boolean = when (this) {
+    ThemeMode.SYSTEM -> systemDark
+    ThemeMode.LIGHT -> false
+    ThemeMode.DARK -> true
+}
 
 val XhsShapes = Shapes(
     small = RoundedCornerShape(8.dp),
