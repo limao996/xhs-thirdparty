@@ -66,10 +66,11 @@ fun ProfileScreen(
     onOpenHistory: () -> Unit,
     onOpenFollowed: () -> Unit,
     onRotateGuest: (() -> Unit)? = null,
-    onScanAccounts: (() -> Unit)? = null,
     rotating: Boolean = false,
     /** changes whenever the guest account changes, forcing a profile reload */
     reloadKey: Any? = Unit,
+    /** size of the guessed candidate pool, shown on the switch row */
+    poolSize: Int = 0,
     viewModel: ProfileViewModel = viewModel(factory = RepoViewModelFactory())
 ) {
     val state by viewModel.ui.collectAsStateWithLifecycle()
@@ -164,26 +165,22 @@ fun ProfileScreen(
             HorizontalDivider()
             ListItem(
                 headlineContent = { Text("切换游客账号") },
-                supportingContent = { Text(if (rotating) "切换中…" else "随机换一个可用游客账号") },
+                supportingContent = {
+                    Text(
+                        when {
+                            rotating -> "切换中…"
+                            poolSize > 0 -> "随机换一个游客账号 · 候选池 $poolSize 个"
+                            else -> "随机换一个可用游客账号"
+                        }
+                    )
+                },
                 leadingContent = {
                     if (rotating) CircularProgressIndicator(Modifier.size(24.dp))
                     else Icon(Icons.Filled.SwitchAccount, null, tint = MaterialTheme.colorScheme.primary)
                 },
                 colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
                 modifier = Modifier.clickable { onRotateGuest() }
-            )
-            if (onScanAccounts != null) {
-                ListItem(
-                    headlineContent = { Text("扫描 VIP 账号") },
-                    supportingContent = { Text("逐个探测可用游客账号并标出 VIP") },
-                    leadingContent = {
-                        Icon(Icons.Filled.Search, null, tint = MaterialTheme.colorScheme.primary)
-                    },
-                    colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-                    modifier = Modifier.clickable { onScanAccounts() }
-                )
-            }
-        }
+            )        }
 
         HorizontalDivider()
 

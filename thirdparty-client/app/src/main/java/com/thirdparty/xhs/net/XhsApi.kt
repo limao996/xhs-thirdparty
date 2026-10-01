@@ -40,7 +40,7 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
      * [CredentialStore.DEVICE_POOL] — anything else answers `result=-1
      * 用戶ID錯誤`. `CredentialStore` owns which pool entry is current.
      */
-    private fun deviceUserId(): String = credentialStore.deviceId + "889X"
+    private fun deviceUserId(): String = credentialStore.deviceId
 
     /** Perform a POST to an API path with the given business params. */
     fun call(path: String, params: Map<String, Any> = emptyMap()): JSONObject {
@@ -208,13 +208,15 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
     }
 
     /**
-     * Probe one candidate device identity WITHOUT touching the stored session.
+     * Probe one candidate identity WITHOUT touching the stored session.
+     *
+     * [identity] is the complete `User-Id` string including its form suffix
+     * (e.g. "AABBCCDDEEFF889X", "0000000000000000I").
      *
      * Returns null when the backend has no account for it (the usual case — it
      * never creates accounts). Otherwise the account's id, name and VIP window.
      */
-    fun probeAccount(mac: String): AccountProbe? {
-        val identity = mac + "889X"
+    fun probeAccount(identity: String): AccountProbe? {
         val login = try {
             doCallOnce(LOGIN_PATH, emptyMap(), userIdOverride = identity)
         } catch (e: Exception) {
@@ -240,9 +242,9 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
         val info = d.optJSONObject("user_info") ?: return null
         val vp = d.optJSONObject("user_vp") ?: JSONObject()
         // a probe that produced an account is by definition a usable identity
-        credentialStore.rememberDevice(mac)
+        credentialStore.rememberDevice(identity)
         return AccountProbe(
-            mac = mac,
+            mac = identity,
             userId = info.optInt("user_id"),
             userName = info.optString("user_name"),
             vipStatus = vp.optInt("vp_status"),
@@ -250,9 +252,9 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
         )
     }
 
-    /** Log in as one specific pooled identity (used by the manual switch). */
-    fun loginAsDevice(mac: String): JSONObject {
-        credentialStore.setDevice(mac)
+    /** Log in as one specific identity (used by the manual switch). */
+    fun loginAsDevice(identity: String): JSONObject {
+        credentialStore.setDevice(identity)
         credentialStore.userHash = ""
         return loginAsGuest(advanceDevice = false)
     }

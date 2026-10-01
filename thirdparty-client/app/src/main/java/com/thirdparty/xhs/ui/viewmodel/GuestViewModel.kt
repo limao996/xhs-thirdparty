@@ -10,15 +10,21 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.update
+import com.thirdparty.xhs.net.IdentityGuess
 
 /**
- * Guest account state: the current account, manual switching, and the VIP scan.
+ * Guest account state: the current account and manual switching.
  *
  * The backend never creates accounts (see CredentialStore), so the app keeps the
  * guest it already has and only changes when the user asks. Switching is manual
  * and may reuse any previously seen account.
  */
 class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
+
+    private companion object {
+        /** how many pool candidates a manual switch tries before falling back */
+        const val GUESS_ATTEMPTS = 5
+    }
 
     private val _accountLabel = MutableStateFlow("游客ID：加载中…")
     val accountLabel: StateFlow<String> = _accountLabel.asStateFlow()
@@ -29,6 +35,9 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
     private val _applied = MutableStateFlow(false)
     val applied: StateFlow<Boolean> = _applied.asStateFlow()
 
+    /** Size of the guessed candidate pool, for display. */
+    val poolSize: Int get() = IdentityGuess.all.size
+
     private val _vip = MutableStateFlow(false)
     /** whether the account currently in use carries VIP */
     val vip: StateFlow<Boolean> = _vip.asStateFlow()
@@ -37,23 +46,10 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
     val vipEnd: StateFlow<Long> = _vipEnd.asStateFlow()
 
     // ---- VIP scan -----------------------------------------------------------
-
-    data class ScanState(
-        val running: Boolean = false,
-        val done: Int = 0,
-        val total: Int = 0,
-        val scanning: String = "",
-        /** how many freshly generated random ids have been probed so far */
-        val randomTried: Int = 0,
-        val found: List<AccountProbe> = emptyList(),
-        /** set when the scan stopped early because it hit a VIP account */
-        val stoppedAtVip: AccountProbe? = null,
-        /** whether the app managed to log in as that VIP account */
-        val switched: Boolean = false
-    )
-
-    private val _scan = MutableStateFlow(ScanState())
-    val scan: StateFlow<ScanState> = _scan.asStateFlow()
+    // REMOVED on purpose. Logging in as a guest appears to start/consume a
+    // ~9 hour VIP window on that account, so scanning the candidate space would
+    // burn exactly the accounts it is meant to find. Candidates are now guessed
+    // on demand (IdentityGuess) and only ever tried when the user switches.
 
     /**
      * Called once on cold start. Logs in with the account already stored — no
@@ -86,33 +82,45 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
     }
 
     /**
-     * Manual switch, random-id first.
+     * Manual switch, guessed-id first.
      *
-     * Tries a freshly generated random device id, and only when the backend
-     * refuses it (verified: it never issues accounts for new ids, so this is the
-     * normal outcome) falls back to a randomly chosen known-good account. The
-     * random path is kept so the app starts using such an id automatically if the
-     * backend ever begins handing out accounts.
+     * Tries a few RANDOMLY GUESSED identities first (see [IdentityGuess]) — these
+     * are never pre-scanned, because a guest login appears to start/consume a
+     * ~9 hour VIP window, so probing a list up front would burn exactly the
+     * accounts we want to hand out. The first guess that the backend accepts is
+     * used and remembered; otherwise we fall back to one of the already-verified
+     * identities so the switch always succeeds.
      */
     fun switchRandom(onToast: (String) -> Unit = {}) {
         if (_rotating.value) return
         viewModelScope.launch {
             _rotating.value = true
-            val fresh = repo.freshRandomMac()
-            val freshProbe = runCatching { repo.probeAccount(fresh) }.getOrNull()
-            val usedFresh = if (freshProbe != null) {
-                runCatching { repo.switchGuestTo(freshProbe.mac) }.getOrDefault(false)
-            } else false
-            val mac = if (usedFresh) freshProbe!!.mac else repo.randomDeviceMac()
-            val ok = if (usedFresh) true
-            else runCatching { repo.switchGuestTo(mac) }.getOrDefault(false)
+            val candidates = buildList {
+                // a fully random id first, so the random-id path stays live
+                add(IdentityGuess.randomFresh())
+                addAll(IdentityGuess.all.shuffled().take(GUESS_ATTEMPTS))
+            }
+            var probe: AccountProbe? = null
+            var usedRandom = false
+            for ((i, id) in candidates.withIndex()) {
+                probe = runCatching { repo.probeAccount(id) }.getOrNull()
+                if (probe != null) {
+                    usedRandom = i == 0
+                    break
+                }
+            }
+            val ok = when {
+                probe != null -> runCatching { repo.switchGuestTo(probe!!.mac) }.getOrDefault(false)
+                else -> runCatching { repo.switchGuestTo(repo.randomDeviceMac()) }.getOrDefault(false)
+            }
             refreshLabel()
             refreshVip()
             _rotating.value = false
             onToast(
                 when {
                     !ok -> "切换失败，沿用当前账号"
-                    usedFresh -> "已切换到随机新账号 ${freshProbe!!.userId}"
+                    usedRandom -> "已切到随机新账号 ${probe!!.userId}"
+                    probe != null -> "已切到猜测账号 ${probe!!.userId}"
                     else -> "已随机切换游客账号"
                 }
             )
@@ -135,78 +143,7 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
         }
     }
 
-    /**
-     * Scan candidate identities and STOP at the first one carrying VIP, switching
-     * to it immediately — no need to walk the whole candidate list.
-     *
-     * Probing never touches the session in use (see XhsApi.probeAccount), and
-     * every identity a probe confirms is persisted by CredentialStore, so the
-     * account pool grows with use instead of staying a fixed hardcoded list.
-     * The candidate order is shuffled so repeated scans do not repeat the same
-     * path.
-     */
-    fun startScan() {
-        if (_scan.value.running) return
-        // Random ids first, as requested. Verified: the backend answers
-        // `result=-1 用戶ID錯誤` for every freshly generated id, so the known-good
-        // identities are interleaved — otherwise the scan could never find
-        // anything. The random attempts are kept so a backend that starts
-        // issuing accounts for new ids is picked up with no code change.
-        val randomCount = 24
-        val randomIds = List(randomCount) { repo.freshRandomMac() }
-        val candidates = buildList {
-            val known = repo.knownDeviceMacs().shuffled().iterator()
-            randomIds.forEach { r ->
-                add(r)
-                if (known.hasNext()) add(known.next())
-            }
-            while (known.hasNext()) add(known.next())
-        }
-        _scan.value = ScanState(running = true, total = candidates.size)
-        viewModelScope.launch {
-            val found = mutableListOf<AccountProbe>()
-            var triedRandom = 0
-            for ((i, mac) in candidates.withIndex()) {
-                if (randomIds.contains(mac)) triedRandom++
-                _scan.update { it.copy(done = i, scanning = mac, randomTried = triedRandom) }
-                val probe = runCatching { repo.probeAccount(mac) }.getOrNull()
-                if (probe != null) {
-                    found.add(probe)
-                    _scan.update { it.copy(found = found.sortedByDescending { p -> p.isVip }) }
-                    if (probe.isVip) {
-                        // found a VIP — log in with it and stop scanning
-                        val switched = runCatching { repo.switchGuestTo(probe.mac) }
-                            .getOrDefault(false)
-                        refreshLabel()
-                        refreshVip()
-                        _scan.update {
-                            it.copy(
-                                running = false,
-                                done = i + 1,
-                                scanning = "",
-                                randomTried = triedRandom,
-                                stoppedAtVip = probe,
-                                switched = switched
-                            )
-                        }
-                        return@launch
-                    }
-                }
-                // be gentle: this is a lot of sequential requests
-                kotlinx.coroutines.delay(120)
-            }
-            _scan.update {
-                it.copy(running = false, done = candidates.size, scanning = "", randomTried = triedRandom)
-            }
-        }
-    }
-
-    fun clearScan() {
-        if (_scan.value.running) return
-        _scan.value = ScanState()
-    }
-
-    /** The MAC of the identity currently in use (for marking the scan list row). */
+    /** The identity currently in use. */
     fun currentDeviceMac(): String = repo.currentDeviceMac()
 
     private fun refreshLabel() {

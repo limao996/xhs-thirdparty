@@ -32,14 +32,23 @@ class CredentialStore(context: Context) {
         get() = prefs.getString(KEY_HASH, "") ?: ""
         set(v) = prefs.edit().putString(KEY_HASH, v).apply()
 
-    /** The device identity currently in use (a MAC; "889X" is appended later). */
+    /**
+     * The device identity currently in use.
+     *
+     * NOTE: this is the COMPLETE `User-Id` string, suffix included (e.g.
+     * "AABBCCDDEEFF889X" or "0000000000000000I"). The examined client builds it
+     * in four different forms depending on which hardware id it can read:
+     *   <mac>889X · <imei>X · <android_id>AI (len>30) · <android_id>I
+     * Accounts exist in every one of those forms, so the identity has to be
+     * stored whole rather than as a bare MAC.
+     */
     val deviceId: String
         get() = prefs.getString(KEY_DEVICE, null)
-            ?: SEED_DEVICES.first()
+            ?: SEED_IDENTITIES.first()
 
     /** Switch to a specific identity (used by the manual account switch). */
-    fun setDevice(mac: String) {
-        prefs.edit().putString(KEY_DEVICE, mac).apply()
+    fun setDevice(identity: String) {
+        prefs.edit().putString(KEY_DEVICE, identity).apply()
     }
 
     /**
@@ -51,7 +60,7 @@ class CredentialStore(context: Context) {
         get() = prefs.getString(KEY_DISCOVERED, null)
             ?.split(',')?.filter { it.isNotBlank() }
             ?.takeIf { it.isNotEmpty() }
-            ?: SEED_DEVICES
+            ?: SEED_IDENTITIES
 
     /** Remember an identity that a probe confirmed works. */
     fun rememberDevice(mac: String) {
@@ -85,7 +94,14 @@ class CredentialStore(context: Context) {
      */
     fun generateRandomDevice(): String {
         val hex = "0123456789ABCDEF"
-        return (1..12).map { hex.random() }.joinToString("")
+        val dig = "0123456789"
+        // one of the four forms the original client uses, chosen at random
+        return when ((0..3).random()) {
+            0 -> (1..12).map { hex.random() }.joinToString("") + "889X"
+            1 -> (1..15).map { dig.random() }.joinToString("") + "X"
+            2 -> (1..32).map { hex.random() }.joinToString("").lowercase() + "AI"
+            else -> (1..16).map { hex.random() }.joinToString("").lowercase() + "I"
+        }
     }
 
     /** Advance to the next known identity and return it. */
@@ -115,21 +131,30 @@ class CredentialStore(context: Context) {
          * persisted in [KEY_DISCOVERED] and joins the set, and switching picks
          * randomly from the whole set.
          */
-        val SEED_DEVICES = listOf(
-            "AABBCCDDEEFF", // uid 3684088
-            "111111111111", // uid 56347336
-            "FFFFFFFFFFFF", // uid 1135580
-            "123456789ABC", // uid 211839
-            "123456789012", // uid 3338000
-            "112233445566", // uid 1843711
-            "000000000000", // uid 58077
-            "000000000001", // uid 159493
-            "000000000003", // uid 52605634
-            // found by the hypervisor-OUI discovery sweep: devices that ran the
-            // original client from a VM/emulator used these prefixes
-            "00155D000000", // uid 51530196  (Hyper-V)
-            "525400123456"  // uid 4117963   (QEMU/KVM default MAC)
+        val SEED_IDENTITIES = listOf(
+            "AABBCCDDEEFF889X",      // uid 3684088
+            "111111111111889X",      // uid 56347336
+            "FFFFFFFFFFFF889X",      // uid 1135580
+            "123456789ABC889X",      // uid 211839
+            "123456789012889X",      // uid 3338000
+            "112233445566889X",      // uid 1843711
+            "000000000000889X",      // uid 58077
+            "000000000001889X",      // uid 159493
+            "000000000003889X",      // uid 52605634
+            "00155D000000889X",      // uid 51530196  (Hyper-V prefix)
+            "525400123456889X",      // uid 4117963   (QEMU/KVM default MAC)
+            // discovered after testing the OTHER identity forms the client builds
+            // (the suffix is part of the key: the same value with a different
+            // suffix is a different account, and usually does not exist)
+            "000000000000000X",      // uid 86436     all-zero IMEI form, VIP
+            "0000000000000000I",     // uid 65648199  all-zero android_id form, VIP
+            "333333333333333X",      // uid 50322803  repeated-digit IMEI form
+            "666666666666666X",      // uid 1150443   repeated-digit IMEI form
+            "888888888888888X"       // uid 2051895   repeated-digit IMEI form
         )
+
+        /** @Deprecated use [SEED_IDENTITIES] (these are full identities, not MACs) */
+        val SEED_DEVICES = SEED_IDENTITIES
 
         /** @Deprecated use [SEED_DEVICES] / [knownDevices] */
         val DEVICE_POOL = SEED_DEVICES
@@ -138,22 +163,23 @@ class CredentialStore(context: Context) {
         const val DEFAULT_DEVICE_MAC = "AABBCCDDEEFF"
 
         /**
-         * Candidate identities handed to the scanner.
+         * Candidate identities handed to the scanner — full `User-Id` strings,
+         * suffix included, spanning all four forms the original client builds.
          *
          * The backend only serves accounts that already exist, and empirically
-         * those are the "classic dummy" device ids the original app falls back
-         * to when it cannot read a real MAC. So the scan space is exactly this
-         * family of well-known values — random MACs are never accepted.
+         * those sit on the "degenerate" values devices fall back to when they
+         * cannot read real hardware ids (all-zero, all-same-digit, the classic
+         * dummy MACs, hypervisor OUIs). Both the value AND the suffix matter: the
+         * same value with a different suffix is a different account.
          */
         val SCAN_CANDIDATES: List<String> = buildList {
-            addAll(SEED_DEVICES)
-            // repeated nibbles: 000000000000 … FFFFFFFFFFFF
-            for (c in "0123456789ABCDEF") add(c.toString().repeat(12))
-            // repeated nibbles + incrementing last char
+            addAll(SEED_IDENTITIES)
+
+            // --- MAC form: <12 hex>889X ---
+            for (c in "0123456789ABCDEF") add(c.toString().repeat(12) + "889X")
             for (c in listOf('0', '1', 'F', 'A', '9')) {
-                for (t in "0123456789ABCDEF") add(c.toString().repeat(11) + t)
+                for (t in "0123456789ABCDEF") add(c.toString().repeat(11) + t + "889X")
             }
-            // the canonical "looks fake but pretty" MACs
             addAll(
                 listOf(
                     "AABBCCDDEEFF", "AABBCCDDEE00", "AABBCCDDEE11", "AABBCCDDEE22",
@@ -161,10 +187,25 @@ class CredentialStore(context: Context) {
                     "ABCDEFABCDEF", "ABABABABABAB", "121212121212", "010203040506",
                     "0A0B0C0D0E0F", "001122334455", "987654321ABC", "FEDCBA987654",
                     "DEADBEEFDEAD", "CAFEBABECAFE", "BAADF00DBAAD", "FEEDFACE0000",
-                    "A1B2C3D4E5F6", "1A2B3C4D5E6F", "0F1E2D3C4B5A", "020000000000",
-                    "000000000001", "000000000003", "0000000000FF", "FFFFFFFF0000"
-                )
+                    "A1B2C3D4E5F6", "1A2B3C4D5E6F", "020000000000",
+                    "FFFFFF000000", "FFFFFFFF0000"
+                ).map { it + "889X" }
             )
+            // hypervisor / emulator OUIs — these devices ran the original client
+            for (oui in listOf("00155D", "525400", "080027", "000C29", "005056",
+                               "001C42", "00163E", "0A0027", "020000")) {
+                for (tail in listOf("000000", "000001", "123456", "ABCDEF", "FFFFFF")) {
+                    add(oui + tail + "889X")
+                }
+            }
+
+            // --- IMEI form: <15 digits>X ---
+            for (d in "0123456789") add(d.toString().repeat(15) + "X")
+            for (c in "0123456789ABCDEFX") add("0".repeat(14) + c + "X")
+
+            // --- android_id form: <16 hex>I ---
+            for (d in "0123456789abcdef") add(d.toString().repeat(16) + "I")
+            for (c in "0123456789abcdef") add("0".repeat(15) + c + "I")
         }.distinct()
 
         private const val KEY_TOKEN = "user_token"
