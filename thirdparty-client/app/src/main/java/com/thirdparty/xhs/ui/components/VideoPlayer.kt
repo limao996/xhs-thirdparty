@@ -72,7 +72,7 @@ fun buildVideoPlayer(context: Context, url: String, autoPlay: Boolean = true): E
  * (and keeps its audio) after the user presses Home.
  */
 @Composable
-fun PauseWhenNotStarted(player: Player?) {
+fun PauseWhenNotStarted(player: Player?, pauseOnDispose: Boolean = true) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val current by rememberUpdatedState(player)
     DisposableEffect(lifecycleOwner, player) {
@@ -94,8 +94,16 @@ fun PauseWhenNotStarted(player: Player?) {
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            // leaving the screen entirely: never leave audio running
-            current?.pause()
+            // Never leave audio running when leaving the screen — but ONLY when
+            // this component owns the player.
+            //
+            // This used to fire unconditionally, which broke things badly once the
+            // windowed and fullscreen layouts started sharing one player: toggling
+            // fullscreen disposed the outgoing layout, which paused the SHARED
+            // player, so entering/leaving fullscreen stopped the video and left the
+            // control bar showing a stale play/pause state. A shared player's
+            // lifetime (including pausing) belongs to its owner.
+            if (pauseOnDispose) current?.pause()
         }
     }
 }

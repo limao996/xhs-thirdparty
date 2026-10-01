@@ -28,6 +28,18 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- Shared-note links: xhstp://note/<noteId>.
+                 A custom scheme rather than an https App Link because an App Link
+                 would need assetlinks.json on a domain we do not own; this needs no
+                 verification and opens the app straight on the shared note.
+                 BROWSABLE + DEFAULT so it is tappable from messaging apps. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="xhstp" android:host="note" />
+            </intent-filter>
         </activity>
     </application>
 

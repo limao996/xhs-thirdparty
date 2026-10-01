@@ -52,6 +52,9 @@ import androidx.compose.material.icons.filled.Replay5
 import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.width
 
 /**
  * Detail page player: media3 surface + custom controller.
@@ -103,8 +106,10 @@ fun MediaPlayer(
             delay(500)
         }
     }
-    // stop playback/audio when the app leaves the foreground
-    PauseWhenNotStarted(player)
+    // stop playback/audio when the app leaves the foreground. Only pause on
+    // dispose when we own the player — a shared one is paused by its owner, and
+    // pausing here would stop the video every time the layout switches.
+    PauseWhenNotStarted(player, pauseOnDispose = ownsPlayer)
     // report the natural aspect ratio so callers can size the container
     DisposableEffect(player, onAspect) {
         val listener = if (onAspect == null) null else object : Player.Listener {
@@ -290,6 +295,9 @@ private fun AutoHideController(
                         inactiveTrackColor = Scrim.onMediaVariant
                     )
                 )
+                // Main row: icon-only controls plus the clock. The two text chips
+                // (微调 / 变速) used to live here too, which made eight items fight
+                // for a phone's width in portrait — they now get their own row.
                 Row(Modifier.fillMaxWidth().padding(horizontal = Spacing.xs), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { locked = true }) {
                         Icon(Icons.Filled.Lock, "锁定", tint = Scrim.onMedia)
@@ -309,26 +317,40 @@ private fun AutoHideController(
                         color = Scrim.onMedia, style = MaterialTheme.typography.labelSmall,
                         modifier = Modifier.padding(start = Spacing.xs))
                     Spacer(Modifier.weight(1f))
+                    IconButton(onClick = onToggleFullscreen) {
+                        Icon(if (fullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
+                            "全屏", tint = Scrim.onMedia)
+                    }
+                }
+                // Secondary row: 微调 step toggle + 变速, right-aligned and compact
+                Row(
+                    Modifier.fillMaxWidth().padding(start = Spacing.xs, end = Spacing.m, bottom = Spacing.xs),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     // 微调: switch the step buttons between ±5s and ±1s
-                    TextButton(onClick = { fineStep = !fineStep; interaction++ }) {
+                    TextButton(
+                        onClick = { fineStep = !fineStep; interaction++ },
+                        contentPadding = PaddingValues(horizontal = Spacing.s, vertical = 0.dp)
+                    ) {
                         Text(
-                            if (fineStep) "微调 ±1s" else "微调",
+                            if (fineStep) "微调 ±1s" else "微调 ±5s",
                             color = if (fineStep) MaterialTheme.colorScheme.primary else Scrim.onMedia,
                             style = MaterialTheme.typography.labelSmall
                         )
                     }
+                    Spacer(Modifier.width(Spacing.s))
                     // 变速: cycle 0.5x → 0.75x → 1x → 1.25x → 1.5x → 2x
-                    TextButton(onClick = { speedIdx = (speedIdx + 1) % SPEEDS.size; interaction++ }) {
+                    TextButton(
+                        onClick = { speedIdx = (speedIdx + 1) % SPEEDS.size; interaction++ },
+                        contentPadding = PaddingValues(horizontal = Spacing.s, vertical = 0.dp)
+                    ) {
                         Text(
                             "${SPEEDS[speedIdx]}x",
                             color = if (speedIdx == DEFAULT_SPEED_IDX) Scrim.onMedia
                             else MaterialTheme.colorScheme.primary,
                             style = MaterialTheme.typography.labelSmall
                         )
-                    }
-                    IconButton(onClick = onToggleFullscreen) {
-                        Icon(if (fullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
-                            "全屏", tint = Scrim.onMedia)
                     }
                 }
             }

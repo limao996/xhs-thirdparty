@@ -165,6 +165,26 @@ fun DetailScreen(
             else -> {
                 val item = state.item!!
                 val isVideo = item.isVideo && item.mediaUrl.isNotEmpty()
+                // Hoisted so the fullscreen branch below can pick the orientation
+                // that matches the video instead of assuming portrait.
+                var videoAspect by remember(item.noteId) { mutableFloatStateOf(9f / 16f) }
+                // Fullscreen orientation follows the VIDEO's shape: a landscape clip
+                // should fill a landscape screen, a portrait clip should stay
+                // portrait. Restored to unspecified when leaving fullscreen/screen.
+                val activity = context as? android.app.Activity
+                DisposableEffect(fullscreen, videoAspect, activity) {
+                    if (fullscreen && isVideo) {
+                        activity?.requestedOrientation = if (videoAspect > 1f) {
+                            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                        } else {
+                            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                        }
+                    }
+                    onDispose {
+                        activity?.requestedOrientation =
+                            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                    }
+                }
                 // ONE player for both layouts. The windowed and fullscreen branches
                 // are different composables, so if each built its own player then
                 // toggling fullscreen would tear one down and start the other from
@@ -205,12 +225,13 @@ fun DetailScreen(
                             url = item.mediaUrl,
                             externalPlayer = sharedPlayer,
                             fullscreen = true,
+                            onAspect = { r -> if (r > 0f) videoAspect = r },
                             onToggleFullscreen = { fullscreen = !fullscreen },
                             modifier = Modifier.fillMaxSize()
                         )
                     }
                 } else {
-                    DetailContent(state, viewModel, onOpenAuthor, pad, isVideo, onEnterFullscreen = { fullscreen = true }, sharedPlayer = sharedPlayer)
+                    DetailContent(state, viewModel, onOpenAuthor, pad, isVideo, onEnterFullscreen = { fullscreen = true }, sharedPlayer = sharedPlayer, videoAspect = videoAspect, onAspect = { videoAspect = it })
                 }
             }
         }
@@ -226,7 +247,9 @@ private fun DetailContent(
     pad: androidx.compose.foundation.layout.PaddingValues,
     isVideo: Boolean,
     onEnterFullscreen: () -> Unit = {},
-    sharedPlayer: androidx.media3.exoplayer.ExoPlayer? = null
+    sharedPlayer: androidx.media3.exoplayer.ExoPlayer? = null,
+    videoAspect: Float = 9f / 16f,
+    onAspect: (Float) -> Unit = {}
 ) {
     val item = state.item!!
     // which comment's reply thread is open in the dialog (null = none).
@@ -241,7 +264,6 @@ private fun DetailContent(
         if (isVideo) {
             // Size the container to the video's real ratio (portrait default for
             // short video); avoids huge black bars from a fixed 16:9 box.
-            var videoAspect by remember(item.noteId) { mutableFloatStateOf(9f / 16f) }
             // In landscape, sizing by WIDTH would compute a height far taller than
             // the window (a portrait ratio at 2400px wide is ~5200px tall), so the
             // video overflowed the screen with black on one side and cropped on the
@@ -265,7 +287,7 @@ private fun DetailContent(
                     // without this the in-player fullscreen button is inert:
                     // MediaPlayer defaults the callback to a no-op
                     onToggleFullscreen = onEnterFullscreen,
-                    onAspect = { r -> if (r > 0f) videoAspect = r },
+                    onAspect = onAspect,
                     // windowed playback starts with the bar hidden; a tap reveals it
                     controlsHiddenInitially = true,
                     modifier = if (landscape) {
@@ -486,7 +508,9 @@ private fun timeStr(ms: Long): String =
  */
 private fun shareNote(context: android.content.Context, item: NoteItem?) {
     if (item == null) return
-    val link = item.shareUrl.ifBlank { "https://${com.thirdparty.xhs.net.CredentialStore.DEFAULT_HOST}" }
+    // A custom-scheme link that opens THIS app on this note. The backend's
+        // share_url is a web page, which would not come back to the app.
+        val link = com.thirdparty.xhs.DeepLink.noteUrl(item.noteId)
     val text = buildString {
         if (item.title.isNotBlank()) append(item.title).append('\n')
         append(link)

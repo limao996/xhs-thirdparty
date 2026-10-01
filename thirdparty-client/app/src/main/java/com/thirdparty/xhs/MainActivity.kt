@@ -15,10 +15,38 @@ import com.thirdparty.xhs.ui.theme.XhsTheme
 import com.thirdparty.xhs.ui.theme.XhsWindowColors
 import com.thirdparty.xhs.ui.theme.isDark
 
-/** Single-Activity Compose app. Theme follows the persisted mode (default system). */
+/**
+ * Single-Activity Compose app. Theme follows the persisted mode (default system).
+ *
+ * Also the entry point for shared notes: the share sheet emits a
+ * [DeepLink.SCHEME] link, and opening it lands here (see [shareNote]).
+ */
 class MainActivity : ComponentActivity() {
+
+    /**
+     * Note id from an incoming share link, consumed once by the nav host.
+     * Kept in a plain field because it is read from `onCreate`/`onNewIntent` and
+     * only handed to Compose.
+     */
+    private val pendingNote = androidx.compose.runtime.mutableStateOf<Long?>(null)
+
+    private fun consumeDeepLink(intent: android.content.Intent?) {
+        val data = intent?.data ?: return
+        // xhstp://note/<noteId>
+        if (data.scheme == DeepLink.SCHEME && data.host == DeepLink.HOST) {
+            data.lastPathSegment?.toLongOrNull()?.let { pendingNote.value = it }
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        consumeDeepLink(intent)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        consumeDeepLink(intent)
         enableEdgeToEdge()
         // Paint the launch window with the colour the user will actually land on,
         // so an in-app 深色/浅色 override does not flash the system default.
@@ -45,7 +73,9 @@ class MainActivity : ComponentActivity() {
             XhsTheme(mode = themeMode) {
                 Surface(Modifier.fillMaxSize()) {
                     val navController = rememberNavController()
-                    AppNavHost(navController)
+                    AppNavHost(navController, deepLinkNoteId = pendingNote.value) {
+                        pendingNote.value = null
+                    }
                 }
             }
         }

@@ -106,7 +106,19 @@ private fun LocalListNav(title: String, mode: LocalListViewModel.Mode, onBack: (
 
 /** Top-level Navigation Compose graph with polished enter/exit transitions. */
 @Composable
-fun AppNavHost(nav: NavHostController) {
+fun AppNavHost(
+    nav: NavHostController,
+    /** a note id arriving from a share link; consumed once */
+    deepLinkNoteId: Long? = null,
+    onDeepLinkConsumed: () -> Unit = {}
+) {
+    // opening a shared link should land ON that note, not just on the app
+    androidx.compose.runtime.LaunchedEffect(deepLinkNoteId) {
+        deepLinkNoteId?.let {
+            nav.navigate(Routes.detail(it))
+            onDeepLinkConsumed()
+        }
+    }
     NavHost(
         navController = nav,
         startDestination = Routes.HOME,
