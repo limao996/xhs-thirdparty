@@ -325,12 +325,18 @@ private fun FollowedMineTab(
     onOpenAuthor: (Int) -> Unit
 ) {
     if (followed.isEmpty()) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("还没有关注任何作者", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        EmptyState(
+            title = "还没有关注任何作者",
+            description = "在作者主页或详情页点「关注」即可",
+            icon = Icons.Filled.Group
+        )
         return
     }
-    LazyColumn(Modifier.fillMaxSize()) {
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        // clear the floating bottom navigation bar
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = BottomNavClearance)
+    ) {
         items(followed, key = { it.userId }) { f ->
             Surface(onClick = { onOpenAuthor(f.userId) }, modifier = Modifier.fillMaxWidth()) {
                 Row(Modifier.padding(horizontal = Spacing.l, vertical = Spacing.s), verticalAlignment = Alignment.CenterVertically) {
