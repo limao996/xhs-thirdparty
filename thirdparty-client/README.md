@@ -418,3 +418,21 @@ app/src/main/java/com/thirdparty/xhs/
   翻页时用户看不到任何反馈。（搜索页/作者页此前已传该参数，唯独发现页漏了。）
 - 修复：FeedSection 新增 loadingMore，loadMore 开始时置位（仅当已有内容、
   即分页而非首屏），成功/失败都清零；界面传入该参数。
+
+### 第 28 轮 · 粉丝圈展示真实内容（接口数据被整段丢弃）
+- 需求是"粉丝圈要有独立内容"，但实现只渲染了一个作者名列表、大片空白。
+  核对真实响应发现 `recommend_list` 的每一项除作者信息外还带：
+  `user_notes`（作品总数，如 642 / 2465）与 `note_list`（最多 3 条作品预览，
+  含 note_id / note_title / note_cover / note_cover_size / note_cin）——
+  **后端本来就在下发内容，解析时被全丢了**。
+- 新增 `FanGroupAuthor`；`funGroupRecommend` 改为解析这两项，并把每条预览
+  还原成 `NoteItem`（借作者信息补 user_name，用 note_cover_size 得真实比例；
+  预览无点赞/收藏/评论数故置 0 且卡片不显示）。
+- 粉丝圈改为：作者行（头像 / 名称 / "共 N 个作品" / 去看看）+ 最多 3 张作品
+  预览卡（封面 + 费用标签 + 标题，可点进详情）。
+- 验证：三位作者分别显示"共 642 / 80 / 2465 个作品"，各带 3 张作品卡；
+  点击预览卡成功打开"内容详情"。
+
+### 第 29 轮 · 关注 tab 细节
+- 空态由裸 Text 改为 EmptyState（含引导文案），与其他 tab 一致；
+- `LazyColumn` 补 `BottomNavClearance` —— 此前最后一项会被浮层底部导航遮住。
