@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -138,8 +139,12 @@ fun SearchScreen(
             }
 
             // weight(1f) gives the results area the REMAINING height, so centred
-            // empty/error states stay on screen
-            Box(Modifier.fillMaxWidth().weight(1f)) {
+            // empty/error states stay on screen.
+            // imePadding: with enableEdgeToEdge() the window draws behind the IME
+            // and android:windowSoftInputMode="adjustResize" no longer shrinks the
+            // layout — without this the results / empty state sit behind the
+            // keyboard while the user is typing.
+            Box(Modifier.fillMaxWidth().weight(1f).imePadding()) {
             when {
                 state.searching -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
