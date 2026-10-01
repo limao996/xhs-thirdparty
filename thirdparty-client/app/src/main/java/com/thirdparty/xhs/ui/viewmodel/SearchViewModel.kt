@@ -22,7 +22,11 @@ data class SearchUiState(
     val loadingMore: Boolean = false,
     val hasMore: Boolean = true,
     val empty: Boolean = false,
-    val history: List<String> = emptyList()
+    /** true when the last request failed (distinct from "no results") */
+    val error: Boolean = false,
+    val history: List<String> = emptyList(),
+    /** true once the user has run at least one search */
+    val searched: Boolean = false
 )
 
 class SearchViewModel(private val repo: XhsRepository) : ViewModel() {
@@ -39,7 +43,13 @@ class SearchViewModel(private val repo: XhsRepository) : ViewModel() {
 
     fun setMode(mode: SearchResultMode) {
         if (_ui.value.mode == mode) return
-        _ui.value = _ui.value.copy(mode = mode, results = emptyList(), users = emptyList(), empty = false)
+        _ui.value = _ui.value.copy(
+            mode = mode,
+            results = emptyList(),
+            users = emptyList(),
+            empty = false,
+            error = false
+        )
         if (_ui.value.query.isNotBlank()) runSearch(_ui.value.query)
     }
 
@@ -59,27 +69,47 @@ class SearchViewModel(private val repo: XhsRepository) : ViewModel() {
     private fun runSearch(q: String) {
         page = 1
         loading = true
-        _ui.update { it.copy(searching = true, empty = false, hasMore = true, results = emptyList(), users = emptyList()) }
+        _ui.update {
+            it.copy(
+                searching = true, empty = false, error = false, hasMore = true,
+                results = emptyList(), users = emptyList(), searched = true
+            )
+        }
         viewModelScope.launch {
             when (_ui.value.mode) {
                 SearchResultMode.CONTENT -> {
-                    val list = runCatching { repo.searchNote(q, 1) }.getOrNull() ?: emptyList()
+                    val list = runCatching { repo.searchNote(q, 1) }.getOrNull()
                     _ui.update {
                         it.copy(
-                            searching = false, results = list,
-                            empty = list.isEmpty(), hasMore = list.size >= 10
+                            searching = false,
+                            results = list ?: it.results,
+                            empty = list != null && list.isEmpty(),
+                            error = list == null,
+                            hasMore = list != null && list.size >= 10
                         )
                     }
                 }
                 SearchResultMode.USER -> {
-                    val users = runCatching { repo.searchUsers(q, 1) }.getOrNull() ?: emptyList()
+                    val users = runCatching { repo.searchUsers(q, 1) }.getOrNull()
                     _ui.update {
-                        it.copy(searching = false, users = users, empty = users.isEmpty(), hasMore = false)
+                        it.copy(
+                            searching = false,
+                            users = users ?: it.users,
+                            empty = users != null && users.isEmpty(),
+                            error = users == null,
+                            hasMore = false
+                        )
                     }
                 }
             }
             loading = false
         }
+    }
+
+    /** Re-run the current query (used by the error state's retry button). */
+    fun retry() {
+        val q = _ui.value.query.trim()
+        if (q.isNotEmpty()) runSearch(q)
     }
 
     /** Server-side pagination for content results. */

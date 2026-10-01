@@ -45,6 +45,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import com.thirdparty.xhs.common.RepoViewModelFactory
 import com.thirdparty.xhs.data.AuthorInfo
 import com.thirdparty.xhs.data.NoteItem
+import com.thirdparty.xhs.ui.components.EmptyState
 import com.thirdparty.xhs.ui.components.FeeBadge
 import com.thirdparty.xhs.ui.components.XhsAsyncImage
 import com.thirdparty.xhs.ui.components.XhsAvatar
@@ -132,10 +133,23 @@ fun SearchScreen(
                 state.searching -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
-                state.empty -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(if (state.mode == SearchResultMode.USER) "没有找到相关作者" else "没有找到相关内容",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                state.error -> EmptyState(
+                    title = "搜索失败",
+                    description = "请检查网络后重试",
+                    actionLabel = "重试",
+                    onAction = { viewModel.retry() }
+                )
+                state.empty -> EmptyState(
+                    title = if (state.mode == SearchResultMode.USER) "没有找到相关作者" else "没有找到相关内容",
+                    description = "换个关键词试试",
+                    icon = Icons.Filled.Search
+                )
+                // nothing searched yet and nothing in history -> tell the user what to do
+                !state.searched && state.history.isEmpty() -> EmptyState(
+                    title = "搜索短视频 / 笔记 / 作者",
+                    description = "在下方切换「内容」或「作者」来搜索",
+                    icon = Icons.Filled.Search
+                )
                 state.mode == SearchResultMode.CONTENT && state.results.isNotEmpty() ->
                     XhsWaterfallGrid(
                         items = state.results,
@@ -156,31 +170,6 @@ fun SearchScreen(
                             UserSearchRow(user, onClick = { onOpenAuthor(user.userId) })
                         }
                     }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SearchRow(item: NoteItem, onClick: () -> Unit) {
-    Surface(
-        onClick = onClick, shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.s, vertical = Spacing.xs)
-    ) {
-        Row(Modifier.padding(Spacing.s), verticalAlignment = Alignment.CenterVertically) {
-            Box {
-                XhsAsyncImage(url = item.cover.ifEmpty { item.thumbnail }, contentDescription = item.title,
-                    modifier = Modifier.width(Thumb.width).height(Thumb.height)
-                        .clip(MaterialTheme.shapes.small))
-                FeeBadge(item, compact = true, modifier = Modifier.align(Alignment.TopEnd).padding(Spacing.xs))
-            }
-            Spacer(Modifier.width(Spacing.m))
-            Column(Modifier.weight(1f)) {
-                Text(item.title, style = MaterialTheme.typography.bodyLarge, maxLines = 2)
-                Spacer(Modifier.height(Spacing.xs))
-                Text("@${item.userName}", style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
