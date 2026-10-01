@@ -47,8 +47,10 @@ import com.thirdparty.xhs.ui.theme.Scrim
 import com.thirdparty.xhs.ui.theme.Spacing
 import com.thirdparty.xhs.ui.theme.ThemeMode
 import com.thirdparty.xhs.ui.theme.XhsTheme
+import com.thirdparty.xhs.ui.components.AccountScanDialog
 import com.thirdparty.xhs.ui.viewmodel.GuestViewModel
 import android.widget.Toast
+import androidx.compose.runtime.remember
 
 /**
  * Root shell. The 推荐 tab is full-bleed immersive: the header and bottom nav
@@ -68,6 +70,8 @@ fun HomeScreen(
     val context = LocalContext.current
     val guest by guestViewModel.accountLabel.collectAsStateWithLifecycle()
     val rotating by guestViewModel.rotating.collectAsStateWithLifecycle()
+    val scan by guestViewModel.scan.collectAsStateWithLifecycle()
+    var showScan by remember { mutableStateOf(false) }
     var tab by rememberSaveable { mutableStateOf(HomeTab.FEED) }
     var feedRefreshTick by rememberSaveable { mutableStateOf(0) }
 
@@ -122,8 +126,18 @@ fun HomeScreen(
                             onOpenSaved = onOpenSaved,
                             onOpenHistory = onOpenHistory,
                             onOpenFollowed = onOpenFollowed,
-                            onRotateGuest = { guestViewModel.rotate { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() } },
-                            rotating = rotating
+                            onRotateGuest = {
+                                guestViewModel.switchRandom {
+                                    Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            onScanAccounts = {
+                                guestViewModel.clearScan()
+                                guestViewModel.startScan()
+                                showScan = true
+                            },
+                            rotating = rotating,
+                            reloadKey = guest
                         )
                     }
                 }
@@ -174,6 +188,23 @@ fun HomeScreen(
                     )
                 }
             }
+        }
+
+        if (showScan) {
+            AccountScanDialog(
+                running = scan.running,
+                done = scan.done,
+                total = scan.total,
+                scanning = scan.scanning,
+                found = scan.found,
+                currentMac = guestViewModel.currentDeviceMac(),
+                onSwitch = { probe ->
+                    guestViewModel.switchTo(probe) {
+                        Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+                    }
+                },
+                onDismiss = { showScan = false }
+            )
         }
     }
 }

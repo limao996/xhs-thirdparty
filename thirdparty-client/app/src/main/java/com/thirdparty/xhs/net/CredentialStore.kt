@@ -32,27 +32,34 @@ class CredentialStore(context: Context) {
         get() = prefs.getString(KEY_HASH, "") ?: ""
         set(v) = prefs.edit().putString(KEY_HASH, v).apply()
 
-    /** Index into [DEVICE_POOL] for the identity in use. */
-    private var deviceIndex: Int
-        get() = prefs.getInt(KEY_DEVICE_INDEX, 0)
-        set(v) = prefs.edit().putInt(KEY_DEVICE_INDEX, v).apply()
-
     /** The device identity currently in use (a MAC; "889X" is appended later). */
     val deviceId: String
-        get() = DEVICE_POOL[deviceIndex.coerceIn(0, DEVICE_POOL.size - 1)]
+        get() = prefs.getString(KEY_DEVICE, null)
+            ?: DEVICE_POOL.first()
+
+    /** Switch to a specific identity (used by the manual account switch). */
+    fun setDevice(mac: String) {
+        prefs.edit().putString(KEY_DEVICE, mac).apply()
+    }
 
     /**
-     * Advance to the next pooled identity and return it. Called once per launch
-     * (or per day) so consecutive runs use different guest accounts.
+     * Advance to the next pooled identity and return it.
+     * Kept for the pool rotation path; switching is manual nowadays.
      */
     fun nextDevice(): String {
-        deviceIndex = (deviceIndex + 1) % DEVICE_POOL.size
+        val cur = DEVICE_POOL.indexOf(deviceId)
+        setDevice(DEVICE_POOL[(cur + 1).mod(DEVICE_POOL.size)])
         return deviceId
     }
 
-    /** Reset to the first (original) identity. */
-    fun resetDevice() {
-        deviceIndex = 0
+    /** Pick a random pooled identity different from the current one. */
+    fun randomDevice(): String {
+        if (DEVICE_POOL.size <= 1) return deviceId
+        val cur = DEVICE_POOL.indexOf(deviceId)
+        var pick = cur
+        while (pick == cur) pick = (0 until DEVICE_POOL.size).random()
+        setDevice(DEVICE_POOL[pick])
+        return deviceId
     }
 
     companion object {
@@ -79,8 +86,38 @@ class CredentialStore(context: Context) {
         /** Kept for compatibility; the first pool entry. */
         const val DEFAULT_DEVICE_MAC = "AABBCCDDEEFF"
 
+        /**
+         * Candidate identities handed to the scanner.
+         *
+         * The backend only serves accounts that already exist, and empirically
+         * those are the "classic dummy" device ids the original app falls back
+         * to when it cannot read a real MAC. So the scan space is exactly this
+         * family of well-known values — random MACs are never accepted.
+         */
+        val SCAN_CANDIDATES: List<String> = buildList {
+            addAll(DEVICE_POOL)
+            // repeated nibbles: 000000000000 … FFFFFFFFFFFF
+            for (c in "0123456789ABCDEF") add(c.toString().repeat(12))
+            // repeated nibbles + incrementing last char
+            for (c in listOf('0', '1', 'F', 'A', '9')) {
+                for (t in "0123456789ABCDEF") add(c.toString().repeat(11) + t)
+            }
+            // the canonical "looks fake but pretty" MACs
+            addAll(
+                listOf(
+                    "AABBCCDDEEFF", "AABBCCDDEE00", "AABBCCDDEE11", "AABBCCDDEE22",
+                    "112233445566", "112233445577", "123456789ABC", "123456789012",
+                    "ABCDEFABCDEF", "ABABABABABAB", "121212121212", "010203040506",
+                    "0A0B0C0D0E0F", "001122334455", "987654321ABC", "FEDCBA987654",
+                    "DEADBEEFDEAD", "CAFEBABECAFE", "BAADF00DBAAD", "FEEDFACE0000",
+                    "A1B2C3D4E5F6", "1A2B3C4D5E6F", "0F1E2D3C4B5A", "020000000000",
+                    "000000000001", "000000000003", "0000000000FF", "FFFFFFFF0000"
+                )
+            )
+        }.distinct()
+
         private const val KEY_TOKEN = "user_token"
         private const val KEY_HASH = "user_hash"
-        private const val KEY_DEVICE_INDEX = "device_index"
+        private const val KEY_DEVICE = "device_mac"
     }
 }

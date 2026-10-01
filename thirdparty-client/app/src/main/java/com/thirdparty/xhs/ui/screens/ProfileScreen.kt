@@ -51,6 +51,7 @@ import com.thirdparty.xhs.ui.theme.Spacing
 import com.thirdparty.xhs.ui.theme.ThemeMode
 import com.thirdparty.xhs.ui.components.XhsAvatar
 import com.thirdparty.xhs.ui.viewmodel.ProfileViewModel
+import androidx.compose.material.icons.filled.Search
 
 /**
  * 我的：账号信息（用户名/ID/VIP）+ 收藏 / 最近浏览 / 我关注的作者 / 切换游客 / 外观主题。
@@ -62,11 +63,16 @@ fun ProfileScreen(
     onOpenHistory: () -> Unit,
     onOpenFollowed: () -> Unit,
     onRotateGuest: (() -> Unit)? = null,
+    onScanAccounts: (() -> Unit)? = null,
     rotating: Boolean = false,
+    /** changes whenever the guest account changes, forcing a profile reload */
+    reloadKey: Any? = Unit,
     viewModel: ProfileViewModel = viewModel(factory = RepoViewModelFactory())
 ) {
     val state by viewModel.ui.collectAsStateWithLifecycle()
-    LaunchedEffect(Unit) { viewModel.load() }
+    // keyed on the account: after a guest switch the cached profile would
+    // otherwise keep showing the previous account's id and VIP state
+    LaunchedEffect(reloadKey) { viewModel.load() }
 
     if (state.loading && state.profile == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -97,6 +103,17 @@ fun ProfileScreen(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        // VIP expiry, when the account has one
+                        val end = state.profile?.vipEnd ?: 0L
+                        if (end > System.currentTimeMillis() / 1000) {
+                            Text(
+                                "会员有效期至 " + java.text.SimpleDateFormat(
+                                    "MM-dd HH:mm", java.util.Locale.getDefault()
+                                ).format(java.util.Date(end * 1000)),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.tertiary
+                            )
+                        }
                     }
                     val vip = state.profile?.isVip == true
                     Surface(
@@ -135,7 +152,7 @@ fun ProfileScreen(
             HorizontalDivider()
             ListItem(
                 headlineContent = { Text("切换游客账号") },
-                supportingContent = { Text(if (rotating) "切换中…" else "在可用游客账号之间轮换") },
+                supportingContent = { Text(if (rotating) "切换中…" else "随机换一个可用游客账号") },
                 leadingContent = {
                     if (rotating) CircularProgressIndicator(Modifier.size(24.dp))
                     else Icon(Icons.Filled.SwitchAccount, null, tint = MaterialTheme.colorScheme.primary)
@@ -143,6 +160,17 @@ fun ProfileScreen(
                 colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
                 modifier = Modifier.clickable { onRotateGuest() }
             )
+            if (onScanAccounts != null) {
+                ListItem(
+                    headlineContent = { Text("扫描 VIP 账号") },
+                    supportingContent = { Text("逐个探测可用游客账号并标出 VIP") },
+                    leadingContent = {
+                        Icon(Icons.Filled.Search, null, tint = MaterialTheme.colorScheme.primary)
+                    },
+                    colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
+                    modifier = Modifier.clickable { onScanAccounts() }
+                )
+            }
         }
 
         HorizontalDivider()

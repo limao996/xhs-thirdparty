@@ -9,6 +9,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import org.json.JSONObject
+import com.thirdparty.xhs.net.CredentialStore
 
 /**
  * Coordinates network fetches with the purely local favorite/history storage.
@@ -270,6 +271,28 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
         val h = Math.round(w / r).coerceAtLeast(1)
         return "$w*$h"
     }
+
+    /**
+     * Log in as one specific identity (manual account switch).
+     * Unlike [rotateGuest] this targets a chosen pooled account.
+     */
+    suspend fun switchGuestTo(mac: String): Boolean = withContext(Dispatchers.IO) {
+        api.loginAsDevice(mac).optInt("result") == 1
+    }
+
+    /** Probe one candidate identity without disturbing the current session. */
+    suspend fun probeAccount(mac: String): AccountProbe? = withContext(Dispatchers.IO) {
+        api.probeAccount(mac)
+    }
+
+    /** Pick a random pooled identity (may be one used before) and return it. */
+    fun randomDeviceMac(): String = api.randomDeviceMac()
+
+    /** The MAC of the identity currently in use. */
+    fun currentDeviceMac(): String = api.currentDeviceMac()
+
+    /** Identities already known to work (the pool). */
+    fun knownDeviceMacs(): List<String> = CredentialStore.DEVICE_POOL
 
     // ---- guest session ------------------------------------------------------
     suspend fun rotateGuest() = withContext(Dispatchers.IO) { api.loginAsGuest() }

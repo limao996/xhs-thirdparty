@@ -5,6 +5,7 @@ import com.thirdparty.xhs.BuildConfig
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import com.thirdparty.xhs.data.AccountProbe
 
 /**
  * Thin client for the examined app's HTTP API.
@@ -87,13 +88,21 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
         throw lastError ?: java.io.IOException("request failed: $path")
     }
 
-    private fun doCallOnce(path: String, params: Map<String, Any>): JSONObject {
-        val token = credentialStore.userToken
+    private fun doCallOnce(
+        path: String,
+        params: Map<String, Any>,
+        // Overrides used by the account scanner, which must probe other identities
+        // WITHOUT disturbing the session currently stored in CredentialStore.
+        userIdOverride: String? = null,
+        tokenOverride: String? = null
+    ): JSONObject {
+        val token = tokenOverride ?: credentialStore.userToken
         val hash = credentialStore.userHash
         // The login call must re-establish identity from the *device*, never
         // from a possibly-stale user_hash, otherwise a stale hash would keep
         // being echoed back and re-auth would never recover.
-        val userIdHeader = if (path == LOGIN_PATH) deviceUserId() else hash.ifEmpty { deviceUserId() }
+        val userIdHeader = userIdOverride
+            ?: if (path == LOGIN_PATH) deviceUserId() else hash.ifEmpty { deviceUserId() }
 
         val body = JSONObject()
         body.put("s_time", System.currentTimeMillis())
@@ -180,7 +189,7 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
      * `getUserId()` prefers it over the device identity, and a stale hash would
      * pin us to the previous account.
      */
-    fun loginAsGuest(advanceDevice: Boolean = true): JSONObject {
+    fun loginAsGuest(advanceDevice: Boolean = false): JSONObject {
         if (advanceDevice) {
             credentialStore.nextDevice()
             credentialStore.userHash = ""
@@ -198,6 +207,60 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
         return res
     }
 
+    /**
+     * Probe one candidate device identity WITHOUT touching the stored session.
+     *
+     * Returns null when the backend has no account for it (the usual case — it
+     * never creates accounts). Otherwise the account's id, name and VIP window.
+     */
+    fun probeAccount(mac: String): AccountProbe? {
+        val identity = mac + "889X"
+        val login = try {
+            doCallOnce(LOGIN_PATH, emptyMap(), userIdOverride = identity)
+        } catch (e: Exception) {
+            return null
+        }
+        if (login.optInt("result") != 1) return null
+        val data = login.optJSONObject("data") ?: return null
+        val token = data.optString("user_token")
+        val hash = data.optString("user_hash")
+        if (token.isEmpty()) return null
+        val me = try {
+            doCallOnce(
+                "v2/mine/user-info",
+                emptyMap(),
+                userIdOverride = hash.ifEmpty { identity },
+                tokenOverride = token
+            )
+        } catch (e: Exception) {
+            return null
+        }
+        if (me.optInt("result") != 1) return null
+        val d = me.optJSONObject("data") ?: return null
+        val info = d.optJSONObject("user_info") ?: return null
+        val vp = d.optJSONObject("user_vp") ?: JSONObject()
+        return AccountProbe(
+            mac = mac,
+            userId = info.optInt("user_id"),
+            userName = info.optString("user_name"),
+            vipStatus = vp.optInt("vp_status"),
+            vipEnd = vp.optLong("vp_end")
+        )
+    }
+
+    /** Log in as one specific pooled identity (used by the manual switch). */
+    fun loginAsDevice(mac: String): JSONObject {
+        credentialStore.setDevice(mac)
+        credentialStore.userHash = ""
+        return loginAsGuest(advanceDevice = false)
+    }
+
     /** Current account identity (server-echoed user_hash), for UI display. */
     fun currentUserHash(): String = credentialStore.userHash
+
+    /** The MAC of the identity currently in use. */
+    fun currentDeviceMac(): String = credentialStore.deviceId
+
+    /** Pick a random identity different from the current one. */
+    fun randomDeviceMac(): String = credentialStore.randomDevice()
 }

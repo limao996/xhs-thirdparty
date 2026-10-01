@@ -3,6 +3,22 @@ package com.thirdparty.xhs.data
 import org.json.JSONObject
 
 /**
+ * Result of probing one candidate guest identity (see XhsApi.probeAccount).
+ * Only identities the backend already has an account for produce a value.
+ */
+data class AccountProbe(
+    val mac: String,
+    val userId: Int,
+    val userName: String,
+    /** `user_vp.vp_status` — 1 means the account currently carries VIP */
+    val vipStatus: Int,
+    /** `user_vp.vp_end`, seconds; 0 when the account never had VIP */
+    val vipEnd: Long
+) {
+    val isVip: Boolean get() = vipStatus >= 1 || vipEnd > System.currentTimeMillis() / 1000
+}
+
+/**
  * A recommended fan-group author (v2/member/fun-group-list → recommend_list).
  *
  * The payload also carries a `note_list` preview (up to 3 works) and the
