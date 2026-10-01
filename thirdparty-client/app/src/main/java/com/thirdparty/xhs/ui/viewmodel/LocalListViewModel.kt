@@ -54,4 +54,15 @@ class LocalListViewModel(
             else it.copy(visibleCount = (it.visibleCount + LocalListUiState.PAGE_SIZE).coerceAtMost(it.all.size))
         }
     }
+
+    /** Wipe the underlying local table (收藏 / 最近浏览) and reset the list. */
+    fun clear() {
+        viewModelScope.launch {
+            when (mode) {
+                Mode.SAVED -> repo.clearSaved()
+                Mode.HISTORY -> repo.clearHistory()
+            }
+            _ui.value = LocalListUiState(all = emptyList(), loading = false)
+        }
+    }
 }

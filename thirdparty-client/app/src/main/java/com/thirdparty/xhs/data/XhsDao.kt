@@ -23,6 +23,9 @@ interface SavedNoteDao {
 
     @Query("DELETE FROM saved_notes WHERE noteId = :noteId")
     suspend fun remove(noteId: Long)
+
+    @Query("DELETE FROM saved_notes")
+    suspend fun clearAll()
 }
 
 /**
@@ -41,4 +44,7 @@ interface HistoryDao {
 
     @Query("DELETE FROM history WHERE noteId != 0 AND noteId NOT IN (SELECT noteId FROM history ORDER BY viewedAt DESC LIMIT 100)")
     suspend fun trim()
+
+    @Query("DELETE FROM history")
+    suspend fun clearAll()
 }

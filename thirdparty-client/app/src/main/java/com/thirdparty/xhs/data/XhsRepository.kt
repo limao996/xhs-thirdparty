@@ -194,9 +194,15 @@ class XhsRepository(context: Context) {
     suspend fun savedIds(): Set<Long> =
         withContext(Dispatchers.IO) { savedDao.all().map { it.noteId }.toSet() }
 
+    /** Wipe all local favourites. */
+    suspend fun clearSaved() = withContext(Dispatchers.IO) { savedDao.clearAll() }
+
     // ---- browsing history, purely local ------------------------------------
     suspend fun history(): List<NoteItem> =
         withContext(Dispatchers.IO) { historyDao.recent().map { NoteItem(JSONObject(it.rawJson)) } }
+
+    /** Wipe all local browsing history. */
+    suspend fun clearHistory() = withContext(Dispatchers.IO) { historyDao.clearAll() }
 
     /** Build a full detail JSON snapshot for a summary-level item (used when saving a feed item). */
     private suspend fun fullSnapshot(item: NoteItem): JSONObject {

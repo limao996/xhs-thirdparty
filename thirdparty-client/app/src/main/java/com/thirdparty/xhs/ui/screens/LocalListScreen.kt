@@ -3,9 +3,10 @@ package com.thirdparty.xhs.ui.screens
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -15,6 +16,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.thirdparty.xhs.App
+import com.thirdparty.xhs.ui.components.EmptyState
 import com.thirdparty.xhs.ui.components.XhsWaterfallGrid
 import com.thirdparty.xhs.ui.theme.Spacing
 import com.thirdparty.xhs.ui.viewmodel.LocalListViewModel
@@ -26,9 +28,8 @@ import com.thirdparty.xhs.ui.viewmodel.LocalListViewModel
 @Composable
 fun LocalListScreen(
     mode: LocalListViewModel.Mode,
-    onOpenDetail: (Long) -> Unit
-) {
-    val viewModel: LocalListViewModel = viewModel(
+    onOpenDetail: (Long) -> Unit,
+    viewModel: LocalListViewModel = viewModel(
         key = mode.name,
         factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
@@ -36,6 +37,7 @@ fun LocalListScreen(
                 LocalListViewModel(App.repo, mode) as T
         }
     )
+) {
     val state by viewModel.ui.collectAsStateWithLifecycle()
 
     LaunchedEffect(mode) { viewModel.reload() }
@@ -46,13 +48,13 @@ fun LocalListScreen(
     }
 
     if (state.all.isEmpty()) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(
-                if (mode == LocalListViewModel.Mode.SAVED) "还没有收藏，去发现页点收藏吧"
-                else "还没有浏览记录",
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+        EmptyState(
+            title = if (mode == LocalListViewModel.Mode.SAVED) "还没有收藏" else "还没有浏览记录",
+            description = if (mode == LocalListViewModel.Mode.SAVED) "在详情页点右上角的心形即可收藏"
+            else "看过的内容会自动出现在这里",
+            icon = if (mode == LocalListViewModel.Mode.SAVED) Icons.Filled.FavoriteBorder
+            else Icons.Filled.History
+        )
         return
     }
 
