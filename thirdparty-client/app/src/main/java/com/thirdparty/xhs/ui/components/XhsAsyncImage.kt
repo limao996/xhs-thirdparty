@@ -160,4 +160,9 @@ private object BitmapCache {
     operator fun set(key: String, bmp: Bitmap) {
         if (bmp.byteCount / 1024 <= maxKb / 4) lru.put(key, bmp)
     }
+
+    fun clear() = lru.evictAll()
 }
+
+/** Drop all decoded bitmaps (called when the system reports memory pressure). */
+fun clearImageMemoryCache() = BitmapCache.clear()

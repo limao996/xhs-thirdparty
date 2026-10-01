@@ -53,6 +53,23 @@ class App : Application() {
             .edit().putString("theme_mode", mode.key).apply()
     }
 
+    /**
+     * Release decoded bitmaps when the system is under memory pressure.
+     * They are re-fetched (from the OkHttp disk cache when possible), so
+     * dropping them costs nothing but a re-decode.
+     */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+            com.thirdparty.xhs.ui.components.clearImageMemoryCache()
+        }
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        com.thirdparty.xhs.ui.components.clearImageMemoryCache()
+    }
+
     companion object {
         lateinit var INSTANCE: App
             private set
