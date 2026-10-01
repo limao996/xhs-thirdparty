@@ -73,6 +73,7 @@ import com.thirdparty.xhs.ui.viewmodel.DiscoverViewModel
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.lazy.rememberLazyListState
 
 /** Clearance for the floating bottom NavigationBar (see theme/BottomNavClearance). */
 
@@ -113,10 +114,13 @@ fun DiscoverTabScreen(
                 when (tab) {
                     DiscoverTab.FEED -> FeedTab(state, viewModel, onOpenDetail)
                     DiscoverTab.FAN_GROUP -> FanGroupTab(
-                        state.fanGroup,
-                        state.fanGroupLoading,
-                        onOpenAuthor,
-                        onOpenDetail
+                        recommended = state.fanGroup,
+                        loading = state.fanGroupLoading,
+                        hasMore = state.fanGroupHasMore,
+                        loadingMore = state.fanGroupMore,
+                        onLoadMore = { viewModel.loadMoreFanGroup() },
+                        onOpenAuthor = onOpenAuthor,
+                        onOpenDetail = onOpenDetail
                     )
                     DiscoverTab.FOLLOW_LOCAL -> FollowedMineTab(state.followed, onOpenAuthor)
                 }
@@ -209,6 +213,9 @@ private fun FeedTab(
 private fun FanGroupTab(
     recommended: List<FanGroupAuthor>,
     loading: Boolean,
+    hasMore: Boolean,
+    loadingMore: Boolean,
+    onLoadMore: () -> Unit,
     onOpenAuthor: (Int) -> Unit,
     onOpenDetail: (Long) -> Unit
 ) {
@@ -225,8 +232,24 @@ private fun FanGroupTab(
         )
         return
     }
+    val listState = rememberLazyListState()
+    // Endless pagination, keyed on the item count so it re-evaluates after every
+    // batch — the backend serves only 3 authors per page here.
+    if (hasMore) {
+        LaunchedEffect(listState, recommended.size, loadingMore) {
+            snapshotFlow {
+                val info = listState.layoutInfo
+                val total = info.totalItemsCount
+                val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
+                total > 0 && last >= total - 2
+            }
+                .distinctUntilChanged()
+                .collect { nearEnd -> if (nearEnd) onLoadMore() }
+        }
+    }
     LazyColumn(
-        Modifier.fillMaxSize(),
+        state = listState,
+        modifier = Modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = BottomNavClearance)
     ) {
         items(recommended, key = { it.userId }) { a ->
@@ -288,6 +311,27 @@ private fun FanGroupTab(
                 }
                 Spacer(Modifier.height(Spacing.xs))
                 HorizontalDivider()
+            }
+        }
+        // trailing row: spinner while the next batch is in flight, or the end note
+        if (hasMore) {
+            item(key = "__more__") {
+                Box(
+                    Modifier.fillMaxWidth().padding(Spacing.l),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (loadingMore) CircularProgressIndicator(Modifier.size(24.dp))
+                }
+            }
+        } else {
+            item(key = "__end__") {
+                Box(Modifier.fillMaxWidth().padding(Spacing.l), contentAlignment = Alignment.Center) {
+                    Text(
+                        "没有更多了",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }

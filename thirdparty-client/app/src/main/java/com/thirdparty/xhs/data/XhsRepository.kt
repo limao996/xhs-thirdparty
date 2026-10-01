@@ -342,12 +342,21 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
      * Recommended fan-group authors for the "粉丝圈" tab
      * (v2/member/fun-group-list → recommend_list).
      *
+     * Paginated — but on `page_num`, NOT `page`: with `page` the backend ignores
+     * the argument and every request returns the same first batch (verified; page
+     * 2+ comes back empty). `page_num` returns a fresh batch of 3 authors per
+     * page.
+     *
      * Each entry carries `user_notes` (total works) and a `note_list` preview of
      * up to 3 works — both are surfaced so the tab shows real content instead of
      * a bare name list.
      */
-    suspend fun funGroupRecommend(myUserId: Int): List<FanGroupAuthor> = withContext(Dispatchers.IO) {
-        val res = api.call("v2/member/fun-group-list", mapOf("user_id" to myUserId))
+    suspend fun funGroupRecommend(myUserId: Int, page: Int = 1): List<FanGroupAuthor> =
+        withContext(Dispatchers.IO) {
+            val res = api.call(
+                "v2/member/fun-group-list",
+                mapOf("user_id" to myUserId, "page_num" to page)
+            )
         val data = res.optJSONObject("data")
         val arr = data?.optJSONArray("recommend_list") ?: org.json.JSONArray()
         val out = mutableListOf<FanGroupAuthor>()

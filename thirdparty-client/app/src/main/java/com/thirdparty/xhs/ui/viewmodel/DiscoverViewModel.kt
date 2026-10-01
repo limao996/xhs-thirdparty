@@ -40,6 +40,10 @@ data class DiscoverUiState(
     val fanGroup: List<FanGroupAuthor> = emptyList(),
     val fanGroupLoading: Boolean = false,
     val fanGroupError: Boolean = false,
+    /** true while the next batch of fan-group authors is in flight */
+    val fanGroupMore: Boolean = false,
+    /** whether another fan-group page exists (the backend serves 3 per page) */
+    val fanGroupHasMore: Boolean = true,
     val followed: List<FollowedEntity> = emptyList(),
     /** true while a pull-to-refresh is in flight */
     val refreshing: Boolean = false,
@@ -56,6 +60,10 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
     private var feedLoading = false
     /** consecutive pages that added nothing new — two in a row ends pagination */
     private var emptyPages = 0
+    /** fan-group authors paginate on `page_num`, 3 per page */
+    private var fanGroupPage = 0
+    private var fanGroupLoading = false
+    private var emptyFanGroupPages = 0
     private var myId = 0
 
     init {
@@ -139,6 +147,8 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
     /** Full refresh: reload the feed (for the FAB), category list, fan-group recs & followed. */
     fun refresh(onDone: (() -> Unit)? = null) {
         feedLoading = true
+        fanGroupPage = 0
+        emptyFanGroupPages = 0
         _ui.update { it.copy(refreshing = true) }
         viewModelScope.launch {
             val cats = runCatching { repo.categories() }.getOrNull()
@@ -173,19 +183,56 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
         }
     }
 
-    private fun loadFanGroup() {
-        _ui.update { it.copy(fanGroupLoading = true, fanGroupError = false) }
+    private fun loadFanGroup(reset: Boolean = true) {
+        if (fanGroupLoading) return
+        val next = if (reset) 1 else fanGroupPage + 1
+        if (!reset && !_ui.value.fanGroupHasMore) return
+        fanGroupLoading = true
+        _ui.update {
+            it.copy(
+                fanGroupLoading = it.fanGroup.isEmpty(),
+                fanGroupMore = it.fanGroup.isNotEmpty(),
+                fanGroupError = false
+            )
+        }
         viewModelScope.launch {
-            val recs = if (myId > 0) runCatching { repo.funGroupRecommend(myId) }.getOrNull() else null
-            _ui.update {
-                it.copy(
-                    fanGroup = recs ?: it.fanGroup,
-                    fanGroupLoading = false,
-                    fanGroupError = recs == null
-                )
+            val recs = if (myId > 0) {
+                runCatching { repo.funGroupRecommend(myId, next) }.getOrNull()
+            } else null
+            if (recs != null) {
+                fanGroupPage = next
+                _ui.update { s ->
+                    val before = s.fanGroup.size
+                    // the backend repeats authors across page boundaries
+                    val merged = (s.fanGroup + recs).distinctBy { it.userId }
+                    if (reset) emptyFanGroupPages = 0
+                    emptyFanGroupPages =
+                        if (merged.size == before && !reset) emptyFanGroupPages + 1 else 0
+                    s.copy(
+                        fanGroup = merged,
+                        fanGroupLoading = false,
+                        fanGroupMore = false,
+                        fanGroupError = false,
+                        // a short page is normal here (3 authors per page) — only an
+                        // empty page, or two pages that add nothing, is the end
+                        fanGroupHasMore = recs.isNotEmpty() && emptyFanGroupPages < 2
+                    )
+                }
+            } else {
+                _ui.update {
+                    it.copy(
+                        fanGroupLoading = false,
+                        fanGroupMore = false,
+                        fanGroupError = it.fanGroup.isEmpty()
+                    )
+                }
             }
+            fanGroupLoading = false
         }
     }
+
+    /** Endless scroll from the 粉丝圈 tab. */
+    fun loadMoreFanGroup() = loadFanGroup(reset = false)
 
     private fun refreshFollowed() {
         viewModelScope.launch {
