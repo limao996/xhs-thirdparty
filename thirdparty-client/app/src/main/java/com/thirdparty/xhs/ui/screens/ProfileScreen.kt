@@ -69,8 +69,6 @@ fun ProfileScreen(
     rotating: Boolean = false,
     /** changes whenever the guest account changes, forcing a profile reload */
     reloadKey: Any? = Unit,
-    /** size of the guessed candidate pool, shown on the switch row */
-    poolSize: Int = 0,
     viewModel: ProfileViewModel = viewModel(factory = RepoViewModelFactory())
 ) {
     val state by viewModel.ui.collectAsStateWithLifecycle()
@@ -165,15 +163,7 @@ fun ProfileScreen(
             HorizontalDivider()
             ListItem(
                 headlineContent = { Text("切换游客账号") },
-                supportingContent = {
-                    Text(
-                        when {
-                            rotating -> "切换中…"
-                            poolSize > 0 -> "随机换一个游客账号 · 候选池 $poolSize 个"
-                            else -> "随机换一个可用游客账号"
-                        }
-                    )
-                },
+                supportingContent = { Text(if (rotating) "正在创建新的随机账号…" else "生成一个全新的随机游客账号（每次不同）") },
                 leadingContent = {
                     if (rotating) CircularProgressIndicator(Modifier.size(24.dp))
                     else Icon(Icons.Filled.SwitchAccount, null, tint = MaterialTheme.colorScheme.primary)

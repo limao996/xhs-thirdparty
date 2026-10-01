@@ -5,7 +5,6 @@ import com.thirdparty.xhs.BuildConfig
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
-import com.thirdparty.xhs.data.AccountProbe
 
 /**
  * Thin client for the examined app's HTTP API.
@@ -29,6 +28,12 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
 
     private companion object {
         const val LOGIN_PATH = "v2/user/login-with-guest"
+        /**
+         * Registers the device identity with the backend — this is what actually
+         * creates the guest account (see [loginAsGuest]). Easy to mistake for a
+         * startup-ads call, which is how it was missed for so long.
+         */
+        const val APP_INIT_PATH = "v2/app/init"
         const val NETWORK_ATTEMPTS = 2
         const val RETRY_BACKOFF_MS = 350L
     }
@@ -36,9 +41,9 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
     /**
      * The identity sent in the `User-Id` header for the guest login.
      *
-     * The backend does not create accounts, so this must be one of the ids in
-     * [CredentialStore.DEVICE_POOL] — anything else answers `result=-1
-     * 用戶ID錯誤`. `CredentialStore` owns which pool entry is current.
+     * Any identity can be *registered* via [APP_INIT_PATH] (verified: brand-new
+     * random ids succeed 8/8 once `app/init` runs first), so this does not have to
+     * be one of the legacy device ids — `CredentialStore` owns which is current.
      */
     private fun deviceUserId(): String = credentialStore.deviceId
 
@@ -191,10 +196,16 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
      */
     fun loginAsGuest(advanceDevice: Boolean = false): JSONObject {
         if (advanceDevice) {
-            credentialStore.nextDevice()
+            credentialStore.freshDevice()
             credentialStore.userHash = ""
         }
-        val res = call("v2/user/login-with-guest", emptyMap())
+        // CREATE the account first. `app/init` is what registers the device
+        // identity with the backend — without it every new identity answers
+        // `result=-1 用戶ID錯誤` from the account endpoints and it looks like the
+        // backend never issues accounts. Verified: 8/8 fresh random identities
+        // succeed when this runs first, 0/4 when it does not.
+        runCatching { call(APP_INIT_PATH, emptyMap()) }
+        val res = call(LOGIN_PATH, emptyMap())
         if (res.optInt("result") == 1) {
             val data = res.optJSONObject("data") ?: JSONObject()
             val token = data.optString("user_token")
@@ -208,51 +219,9 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
     }
 
     /**
-     * Probe one candidate identity WITHOUT touching the stored session.
-     *
-     * [identity] is the complete `User-Id` string including its form suffix
-     * (e.g. "AABBCCDDEEFF889X", "0000000000000000I").
-     *
-     * Returns null when the backend has no account for it (the usual case — it
-     * never creates accounts). Otherwise the account's id, name and VIP window.
+     * Log in as one specific identity (used by the manual switch), registering it
+     * first so the backend creates the account.
      */
-    fun probeAccount(identity: String): AccountProbe? {
-        val login = try {
-            doCallOnce(LOGIN_PATH, emptyMap(), userIdOverride = identity)
-        } catch (e: Exception) {
-            return null
-        }
-        if (login.optInt("result") != 1) return null
-        val data = login.optJSONObject("data") ?: return null
-        val token = data.optString("user_token")
-        val hash = data.optString("user_hash")
-        if (token.isEmpty()) return null
-        val me = try {
-            doCallOnce(
-                "v2/mine/user-info",
-                emptyMap(),
-                userIdOverride = hash.ifEmpty { identity },
-                tokenOverride = token
-            )
-        } catch (e: Exception) {
-            return null
-        }
-        if (me.optInt("result") != 1) return null
-        val d = me.optJSONObject("data") ?: return null
-        val info = d.optJSONObject("user_info") ?: return null
-        val vp = d.optJSONObject("user_vp") ?: JSONObject()
-        // a probe that produced an account is by definition a usable identity
-        credentialStore.rememberDevice(identity)
-        return AccountProbe(
-            mac = identity,
-            userId = info.optInt("user_id"),
-            userName = info.optString("user_name"),
-            vipStatus = vp.optInt("vp_status"),
-            vipEnd = vp.optLong("vp_end")
-        )
-    }
-
-    /** Log in as one specific identity (used by the manual switch). */
     fun loginAsDevice(identity: String): JSONObject {
         credentialStore.setDevice(identity)
         credentialStore.userHash = ""
@@ -262,18 +231,9 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
     /** Current account identity (server-echoed user_hash), for UI display. */
     fun currentUserHash(): String = credentialStore.userHash
 
-    /** The MAC of the identity currently in use. */
+    /** The identity currently in use. */
     fun currentDeviceMac(): String = credentialStore.deviceId
 
-    /** Pick a random identity from the discovered set. */
-    fun randomDeviceMac(): String = credentialStore.randomDevice()
-
-    /** A brand-new randomly generated device id (see [CredentialStore]). */
-    fun freshRandomMac(): String = credentialStore.generateRandomDevice()
-
-    /** Identities known to work (discovered so far + the verified seed). */
-    fun knownDeviceMacs(): List<String> = credentialStore.knownDevices
-
-    /** Remember an identity a probe confirmed. */
-    fun rememberDeviceMac(mac: String) = credentialStore.rememberDevice(mac)
+    /** A brand-new randomly generated identity (the manual switch path). */
+    fun freshRandomMac(): String = credentialStore.freshDevice()
 }

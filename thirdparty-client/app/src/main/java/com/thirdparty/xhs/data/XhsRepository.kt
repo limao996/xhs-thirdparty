@@ -280,22 +280,11 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
         api.loginAsDevice(mac).optInt("result") == 1
     }
 
-    /** Probe one candidate identity without disturbing the current session. */
-    suspend fun probeAccount(mac: String): AccountProbe? = withContext(Dispatchers.IO) {
-        api.probeAccount(mac)
-    }
-
-    /** Pick a random pooled identity (may be one used before) and return it. */
-    fun randomDeviceMac(): String = api.randomDeviceMac()
-
-    /** A brand-new randomly generated device id. */
+    /** A brand-new randomly generated identity (the manual switch path). */
     fun freshRandomMac(): String = api.freshRandomMac()
 
-    /** The MAC of the identity currently in use. */
+    /** The identity currently in use. */
     fun currentDeviceMac(): String = api.currentDeviceMac()
-
-    /** Identities known to work (discovered so far + the verified seed). */
-    fun knownDeviceMacs(): List<String> = api.knownDeviceMacs()
 
     // ---- guest session ------------------------------------------------------
     suspend fun rotateGuest() = withContext(Dispatchers.IO) { api.loginAsGuest() }

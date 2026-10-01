@@ -2,7 +2,6 @@ package com.thirdparty.xhs.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.thirdparty.xhs.data.AccountProbe
 import com.thirdparty.xhs.data.XhsRepository
 import com.thirdparty.xhs.net.CredentialStore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,12 +19,6 @@ import com.thirdparty.xhs.net.IdentityGuess
  * and may reuse any previously seen account.
  */
 class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
-
-    private companion object {
-        /** how many pool candidates a manual switch tries before falling back */
-        const val GUESS_ATTEMPTS = 5
-    }
-
     private val _accountLabel = MutableStateFlow("游客ID：加载中…")
     val accountLabel: StateFlow<String> = _accountLabel.asStateFlow()
 
@@ -34,10 +27,6 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
 
     private val _applied = MutableStateFlow(false)
     val applied: StateFlow<Boolean> = _applied.asStateFlow()
-
-    /** Size of the guessed candidate pool, for display. */
-    val poolSize: Int get() = IdentityGuess.all.size
-
     private val _vip = MutableStateFlow(false)
     /** whether the account currently in use carries VIP */
     val vip: StateFlow<Boolean> = _vip.asStateFlow()
@@ -82,64 +71,21 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
     }
 
     /**
-     * Manual switch, guessed-id first.
+     * Manual switch: a brand-new RANDOM identity every time.
      *
-     * Tries a few RANDOMLY GUESSED identities first (see [IdentityGuess]) — these
-     * are never pre-scanned, because a guest login appears to start/consume a
-     * ~9 hour VIP window, so probing a list up front would burn exactly the
-     * accounts we want to hand out. The first guess that the backend accepts is
-     * used and remembered; otherwise we fall back to one of the already-verified
-     * identities so the switch always succeeds.
+     * `app/init` registers the identity and that creates the account, so no pool
+     * or probing is needed — each switch simply becomes a new guest.
      */
     fun switchRandom(onToast: (String) -> Unit = {}) {
         if (_rotating.value) return
         viewModelScope.launch {
             _rotating.value = true
-            val candidates = buildList {
-                // a fully random id first, so the random-id path stays live
-                add(IdentityGuess.randomFresh())
-                addAll(IdentityGuess.all.shuffled().take(GUESS_ATTEMPTS))
-            }
-            var probe: AccountProbe? = null
-            var usedRandom = false
-            for ((i, id) in candidates.withIndex()) {
-                probe = runCatching { repo.probeAccount(id) }.getOrNull()
-                if (probe != null) {
-                    usedRandom = i == 0
-                    break
-                }
-            }
-            val ok = when {
-                probe != null -> runCatching { repo.switchGuestTo(probe!!.mac) }.getOrDefault(false)
-                else -> runCatching { repo.switchGuestTo(repo.randomDeviceMac()) }.getOrDefault(false)
-            }
+            val fresh = repo.freshRandomMac()
+            val ok = runCatching { repo.switchGuestTo(fresh) }.getOrDefault(false)
             refreshLabel()
             refreshVip()
             _rotating.value = false
-            onToast(
-                when {
-                    !ok -> "切换失败，沿用当前账号"
-                    usedRandom -> "已切到随机新账号 ${probe!!.userId}"
-                    probe != null -> "已切到猜测账号 ${probe!!.userId}"
-                    else -> "已随机切换游客账号"
-                }
-            )
-        }
-    }
-
-    /** Switch to an account found by the scanner. */
-    fun switchTo(probe: AccountProbe, onToast: (String) -> Unit = {}) {
-        if (_rotating.value) return
-        viewModelScope.launch {
-            _rotating.value = true
-            val ok = runCatching { repo.switchGuestTo(probe.mac) }.getOrDefault(false)
-            refreshLabel()
-            refreshVip()
-            _rotating.value = false
-            onToast(
-                if (!ok) "切换失败，沿用当前账号"
-                else if (probe.isVip) "已切换到 VIP 账号 ${probe.userId}" else "已切换到账号 ${probe.userId}"
-            )
+            onToast(if (ok) "已切换到新的随机账号" else "切换失败，沿用当前账号")
         }
     }
 

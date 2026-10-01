@@ -129,8 +129,7 @@ fun HomeScreen(
                                 }
                             },
                             rotating = rotating,
-                            reloadKey = guest,
-                            poolSize = guestViewModel.poolSize
+                            reloadKey = guest
                         )
                     }
                 }
