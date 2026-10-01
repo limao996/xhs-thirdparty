@@ -72,9 +72,7 @@ fun HomeScreen(
     var feedRefreshTick by rememberSaveable { mutableStateOf(0) }
 
     LaunchedEffect(Unit) {
-        guestViewModel.ensureFreshGuest { msg ->
-            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-        }
+        guestViewModel.ensureFreshGuest()
     }
 
     val immersive = tab == HomeTab.FEED

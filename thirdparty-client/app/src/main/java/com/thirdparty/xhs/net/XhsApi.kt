@@ -35,9 +35,11 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
     /** The identity sent in the User-Id header before the first guest login. */
     private fun deviceUserId(): String {
         // The backend only serves account endpoints (mine/user-info etc.) for
-        // *established* guest device ids. A brand-new device id gets "用戶ID錯誤".
-        // So the device identity must be stable & persistent across launches
-        // (only the token/session rotates each launch = fresh guest account).
+        // *established* guest device ids; every other id returns "用戶ID錯誤".
+        // So the identity must stay stable across launches. Only the session
+        // token rotates — the guest ACCOUNT cannot be changed (verified by
+        // probing other device ids, other suffixes and extra login params; all
+        // either fail or merely echo the device id back as user_hash).
         credentialStore.deviceId.let { if (it.isNotEmpty()) return it + "889X" }
         // seed from android_id when possible, so each install is stable
         val mac = macLikeId()

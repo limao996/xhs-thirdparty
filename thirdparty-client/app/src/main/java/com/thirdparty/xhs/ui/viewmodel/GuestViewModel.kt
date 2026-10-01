@@ -9,8 +9,16 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
- * Manages the "fresh guest account every launch" requirement and exposes the
- * current guest ID for the top bar (e.g. "游客 3684088").
+ * Manages the guest session and exposes the current guest ID for the top bar
+ * (e.g. "游客ID：3684088").
+ *
+ * VERIFIED LIMITATION: the guest *account* cannot be rotated. Every experiment
+ * against the live backend (different device ids, different suffixes, extra
+ * login params) either returns `result=-1` 用戶ID錯誤 or a `user_hash` that is
+ * merely the echoed device id — the backend only serves account endpoints for
+ * the one already-established device identity, so `user_id` is always the same.
+ * What DOES change on each launch is the session token. The wording here says so
+ * instead of claiming an account switch that does not happen.
  */
 class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
 
@@ -23,22 +31,24 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
     private val _applied = MutableStateFlow(false)
     val applied: StateFlow<Boolean> = _applied.asStateFlow()
 
-    /** Called once on cold start: fetch a brand-new guest credential. */
-    fun ensureFreshGuest(onToast: (String) -> Unit = {}) {
+    /**
+     * Called once on cold start: fetch a fresh guest session token.
+     * Deliberately silent — a new session token is not user-visible news, and
+     * the account itself does not change.
+     */
+    fun ensureFreshGuest() {
         if (_applied.value) return
         _applied.value = true
         viewModelScope.launch {
             _rotating.value = true
             refreshLabel()
-            val ok = runCatching { repo.rotateGuest() }
-                .getOrNull()?.optInt("result") == 1
+            runCatching { repo.rotateGuest() }
             _rotating.value = false
-            if (ok) onToast("已切换新的游客账号")
             refreshLabel()
         }
     }
 
-    /** Manual rotate triggered from the 我的 screen. */
+    /** Manual session refresh triggered from the 我的 screen. */
     fun rotate(onToast: (String) -> Unit = {}) {
         // guard against parallel logins from repeated taps
         if (_rotating.value) return
@@ -47,7 +57,7 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
             val ok = runCatching { repo.rotateGuest() }
                 .getOrNull()?.optInt("result") == 1
             _rotating.value = false
-            onToast(if (ok) "已切换新的游客账号" else "切换失败，沿用当前账号")
+            onToast(if (ok) "已刷新游客会话" else "刷新失败，沿用当前会话")
             refreshLabel()
         }
     }

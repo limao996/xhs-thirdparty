@@ -134,8 +134,8 @@ fun ProfileScreen(
         if (onRotateGuest != null) {
             HorizontalDivider()
             ListItem(
-                headlineContent = { Text("切换游客账号") },
-                supportingContent = { Text(if (rotating) "切换中…" else "获取一个新的游客会话") },
+                headlineContent = { Text("刷新游客会话") },
+                supportingContent = { Text(if (rotating) "刷新中…" else "重新获取访客凭证（账号由设备决定）") },
                 leadingContent = {
                     if (rotating) CircularProgressIndicator(Modifier.size(24.dp))
                     else Icon(Icons.Filled.SwitchAccount, null, tint = MaterialTheme.colorScheme.primary)
