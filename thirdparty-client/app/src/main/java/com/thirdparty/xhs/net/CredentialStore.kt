@@ -109,7 +109,11 @@ class CredentialStore(context: Context) {
             "112233445566", // uid 1843711
             "000000000000", // uid 58077
             "000000000001", // uid 159493
-            "000000000003"  // uid 52605634
+            "000000000003", // uid 52605634
+            // found by the hypervisor-OUI discovery sweep: devices that ran the
+            // original client from a VM/emulator used these prefixes
+            "00155D000000", // uid 51530196  (Hyper-V)
+            "525400123456"  // uid 4117963   (QEMU/KVM default MAC)
         )
 
         /** @Deprecated use [SEED_DEVICES] / [knownDevices] */

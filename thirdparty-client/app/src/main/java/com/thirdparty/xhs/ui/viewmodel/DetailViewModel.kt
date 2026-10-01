@@ -74,16 +74,24 @@ class DetailViewModel(
         if (commentsInFlight) return
         if (!reset && !_ui.value.commentsHasMore) return
         commentsInFlight = true
+        if (reset) commentPage = 0
         viewModelScope.launch {
             val next = if (reset) 1 else commentPage + 1
             _ui.value = _ui.value.copy(commentsLoading = true, commentsError = false)
             val page = runCatching { repo.comments(noteId, next) }.getOrNull()
             if (page != null) {
                 if (page.isNotEmpty()) commentPage = next
+                val merged = if (reset) page else _ui.value.comments + page
+                // Comment paging has a better signal than the lists do: the note
+                // itself carries the total comment count. Comparing against it is
+                // exact, whereas "fewer than 10 items" is wrong both ways — the
+                // backend returns short pages mid-list, and a note with fewer
+                // than 10 comments would look like it has more.
+                val total = _ui.value.item?.commentCount ?: 0
                 _ui.value = _ui.value.copy(
-                    comments = if (reset) page else _ui.value.comments + page,
+                    comments = merged,
                     commentsLoading = false,
-                    commentsHasMore = page.size >= 10,
+                    commentsHasMore = page.isNotEmpty() && (total <= 0 || merged.size < total),
                     commentsError = false
                 )
             } else {
