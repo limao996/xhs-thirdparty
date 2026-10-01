@@ -398,3 +398,23 @@ app/src/main/java/com/thirdparty/xhs/
   都白跑一次 `SELECT * FROM saved_notes`**。
 - 一并清理：`VideoFeedUiState.savedIds`、两处 `repo.savedIds()`、
   `onSavedChanged()`、`XhsRepository.savedIds()`、无引用的 `NoteItem.isPaid`。
+
+### 第 26 轮 · HTTP 错误路径使重试机制形同虚设
+- `doCallOnce` **从不检查 `response.isSuccessful`**，直接把响应体送去
+  `XhsCrypto.decrypt`。CDN 返回 502/503/504 或 4xx 时，响应体可能是 HTML
+  错误页或空，解密抛的是 BadPadding/IllegalBlockSize 这类**加密异常而非
+  IOException** —— 后果有二：
+  1. 第 16 轮加入的网络重试只捕获 IOException，对**最常见的瞬时故障
+     （HTTP 5xx）完全无效**；用户拿到的是无从诊断的加密异常。
+- 修复：在解密前判断状态 —— 非 2xx → `IOException("HTTP <code> for <path>")`；
+  空 body → `IOException("empty response body ...")`；解密失败（截断/非加密体）
+  → `IOException("undecodable response ...", cause)`。三者都汇入已实测过的重试路径。
+- 验证：正常网络下推荐流/发现页/游客 ID 均正常，logcat 无 FATAL、
+  无 undecodable、无 HTTP 4|5 记录。
+
+### 第 27 轮 · 发现页缺少"加载更多"反馈
+- `FeedSection` 没有 loadingMore 字段，`DiscoverTabScreen` 也就没传 ——
+  瀑布流底部那行（hasMore 时渲染）永远拿到 false，即**渲染成空白 Box**。
+  翻页时用户看不到任何反馈。（搜索页/作者页此前已传该参数，唯独发现页漏了。）
+- 修复：FeedSection 新增 loadingMore，loadMore 开始时置位（仅当已有内容、
+  即分页而非首屏），成功/失败都清零；界面传入该参数。
