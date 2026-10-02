@@ -39,13 +39,22 @@ import com.thirdparty.xhs.ui.theme.Spacing
 enum class FeeKind { IMAGE, FREE, PAID, FAN_GROUP }
 
 val NoteItem.feeKind: FeeKind
-    get() = when (noteType) {
-        // 1 = gallery / 图文. Authoritative, and present in list payloads too.
-        1 -> FeeKind.IMAGE
-        // 2 = video. 粉丝圈 needs group_id, which only the detail carries.
-        2 -> feeForVideo()
-        // note_type absent: fall back to whatever else the payload can tell us.
-        else -> if (!isVideo) FeeKind.IMAGE else feeForVideo()
+    get() = when {
+        // `note_type == 1` is the ONLY gallery type. Measured across the feed and
+        // several author pages, then confirmed against v2/note/view
+        // (tools/probe_note_type_all.py):
+        //     type 1 -> image_list 6/6, media 0/6   = 图文
+        //     type 2 -> media 6/6,   image_list 0/6 = video
+        //     type 3 -> media 1/1                   = video
+        //     type 4 -> media 6/6,   image_list 0/6 = video
+        // The earlier `when(noteType) { 1 -> …; 2 -> …; else -> … }` sent 3 and 4
+        // down the fallback branch, where a list payload (no media URL) made them
+        // look like 图文. That is the author-page bug. Only 1 is an image.
+        noteType == 1 -> FeeKind.IMAGE
+        // 0 / absent: the payload did not say, so fall back to the media URL.
+        noteType == 0 -> if (isVideo) feeForVideo() else FeeKind.IMAGE
+        // 2, 3, 4 and anything else the backend adds later are video.
+        else -> feeForVideo()
     }
 
 private fun NoteItem.feeForVideo(): FeeKind = when {
