@@ -28,7 +28,7 @@ import com.thirdparty.xhs.ui.theme.isDark
  * Also the entry point for shared notes: the share sheet emits a
  * [DeepLink.SCHEME] link, and opening it lands here (see [shareNote]).
  */
-class MainActivity : androidx.fragment.app.FragmentActivity() {
+open class MainActivity : androidx.fragment.app.FragmentActivity() {
 
     /**
      * Note id from an incoming share link, consumed once by the nav host.
@@ -104,6 +104,25 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         }
     }
 
+    /**
+     * Volume keys page the full-screen image viewer while it is open.
+     *
+     * Handled here rather than in the composable because volume keys are
+     * delivered to the Activity before any composable sees them. When no viewer
+     * is registered the event is passed on, so the keys keep their normal meaning
+     * everywhere else — which is exactly the "only in full screen" requirement.
+     */
+    override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent?): Boolean {
+        val step = when (keyCode) {
+            android.view.KeyEvent.KEYCODE_VOLUME_UP -> 1
+            android.view.KeyEvent.KEYCODE_VOLUME_DOWN -> -1
+            else -> 0
+        }
+        if (step != 0 && com.thirdparty.xhs.ui.components.ImageViewerKeys.handle(step)) {
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -183,6 +202,23 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                     }
                     androidx.compose.runtime.LaunchedEffect(locked) {
                         if (locked) requestUnlock { locked = false }
+                    }
+                    // FLAG_SECURE while locked.
+                    //
+                    // The cover alone was not enough: the frame the system snapshots
+                    // when the app goes to the background is the last frame the user
+                    // was ACTUALLY looking at, so returning showed the content for an
+                    // instant before the cover was composed. FLAG_SECURE blanks both
+                    // the window and that snapshot — which also keeps this app out of
+                    // screenshots and the recents thumbnail.
+                    androidx.compose.runtime.DisposableEffect(locked) {
+                        val w = window
+                        if (locked) {
+                            w.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+                        } else {
+                            w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+                        }
+                        onDispose { }
                     }
                     // the toggle takes effect at once: ON locks now, OFF unlocks
                     val lockEpoch by App.INSTANCE.lockEpoch.collectAsStateWithLifecycle()

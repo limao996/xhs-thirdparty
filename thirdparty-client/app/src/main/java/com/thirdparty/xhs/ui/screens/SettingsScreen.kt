@@ -1,0 +1,226 @@
+package com.thirdparty.xhs.ui.screens
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Autorenew
+import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import com.thirdparty.xhs.ui.theme.Spacing
+import com.thirdparty.xhs.ui.theme.ThemeMode
+
+/**
+ * 设置.
+ *
+ * Everything that is a *preference* lives here; 我的 keeps the account card and
+ * the user's own content (收藏 / 最近浏览 / 关注的作者). Mixing the two made 我的 a
+ * long list where the account controls and the app settings were interleaved.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsScreen(
+    onBack: () -> Unit,
+    themeMode: ThemeMode,
+    onSetTheme: (ThemeMode) -> Unit,
+    biometricLock: Boolean,
+    biometricAvailable: Boolean,
+    onSetBiometricLock: (Boolean) -> Unit,
+    historyLimit: Int,
+    onSetHistoryLimit: (Int) -> Unit,
+    autoVip: Boolean,
+    onSetAutoVip: (Boolean) -> Unit,
+    onOpenBackup: () -> Unit
+) {
+    var pickTheme by remember { mutableStateOf(false) }
+    var pickLimit by remember { mutableStateOf(false) }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("设置") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回")
+                    }
+                }
+            )
+        }
+    ) { pad ->
+        Column(Modifier.fillMaxSize().padding(pad).verticalScroll(rememberScrollState())) {
+
+            // ---- 外观 ----
+            ListItem(
+                headlineContent = { Text("外观主题") },
+                supportingContent = { Text(themeMode.label()) },
+                leadingContent = { Icon(Icons.Filled.Palette, null, tint = MaterialTheme.colorScheme.primary) },
+                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.clickable { pickTheme = true }
+            )
+
+            HorizontalDivider()
+            Text(
+                "安全",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = Spacing.l, top = Spacing.m, bottom = Spacing.xs)
+            )
+
+            ListItem(
+                headlineContent = { Text("指纹解锁") },
+                supportingContent = {
+                    Text(
+                        if (biometricAvailable) "打开或切回本应用需要验证指纹或设备密码"
+                        else "此设备未录入指纹或锁屏密码，无法启用"
+                    )
+                },
+                leadingContent = { Icon(Icons.Filled.Lock, null, tint = MaterialTheme.colorScheme.primary) },
+                trailingContent = {
+                    Switch(
+                        checked = biometricLock,
+                        enabled = biometricAvailable,
+                        onCheckedChange = { onSetBiometricLock(it) }
+                    )
+                },
+                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.clickable {
+                    // never let the toggle be flipped on where it cannot be honoured
+                    if (biometricAvailable) onSetBiometricLock(!biometricLock)
+                }
+            )
+
+            HorizontalDivider()
+            Text(
+                "内容",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = Spacing.l, top = Spacing.m, bottom = Spacing.xs)
+            )
+
+            ListItem(
+                headlineContent = { Text("最近浏览上限") },
+                supportingContent = { Text("当前保留 $historyLimit 条，超出后自动清理最旧的") },
+                leadingContent = { Icon(Icons.Filled.History, null, tint = MaterialTheme.colorScheme.primary) },
+                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.clickable { pickLimit = true }
+            )
+
+            ListItem(
+                headlineContent = { Text("VIP 到期自动切换") },
+                supportingContent = { Text("当前账号 VIP 到期时自动切换到有 VIP 的账号") },
+                leadingContent = { Icon(Icons.Filled.Autorenew, null, tint = MaterialTheme.colorScheme.primary) },
+                trailingContent = {
+                    Switch(checked = autoVip, onCheckedChange = { onSetAutoVip(it) })
+                },
+                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.clickable { onSetAutoVip(!autoVip) }
+            )
+
+            HorizontalDivider()
+            Text(
+                "数据",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = Spacing.l, top = Spacing.m, bottom = Spacing.xs)
+            )
+
+            ListItem(
+                headlineContent = { Text("备份与恢复") },
+                supportingContent = { Text("本地文件或 WebDAV，含账号 / 收藏 / 浏览 / 关注") },
+                leadingContent = { Icon(Icons.Filled.CloudUpload, null, tint = MaterialTheme.colorScheme.primary) },
+                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.clickable { onOpenBackup() }
+            )
+        }
+    }
+
+    if (pickTheme) {
+        AlertDialog(
+            onDismissRequest = { pickTheme = false },
+            title = { Text("外观主题") },
+            text = {
+                Column {
+                    ThemeMode.entries.forEach { mode ->
+                        ListItem(
+                            headlineContent = { Text(mode.label()) },
+                            leadingContent = {
+                                RadioButton(selected = mode == themeMode, onClick = {
+                                    onSetTheme(mode)
+                                    pickTheme = false
+                                })
+                            },
+                            colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
+                            modifier = Modifier.clickable {
+                                onSetTheme(mode)
+                                pickTheme = false
+                            }
+                        )
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { pickTheme = false }) { Text("关闭") } }
+        )
+    }
+
+    if (pickLimit) {
+        AlertDialog(
+            onDismissRequest = { pickLimit = false },
+            title = { Text("最近浏览上限") },
+            text = {
+                Column {
+                    listOf(500, 1000, 2000, 5000, 10000).forEach { n ->
+                        ListItem(
+                            headlineContent = { Text("$n 条" + if (n == historyLimit) "（当前）" else "") },
+                            leadingContent = {
+                                RadioButton(selected = n == historyLimit, onClick = {
+                                    onSetHistoryLimit(n)
+                                    pickLimit = false
+                                })
+                            },
+                            colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
+                            modifier = Modifier.clickable {
+                                onSetHistoryLimit(n)
+                                pickLimit = false
+                            }
+                        )
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { pickLimit = false }) { Text("关闭") } }
+        )
+    }
+
+}
+
+private fun ThemeMode.label(): String = when (this) {
+    ThemeMode.SYSTEM -> "跟随系统"
+    ThemeMode.LIGHT -> "浅色"
+    ThemeMode.DARK -> "深色"
+}

@@ -42,6 +42,34 @@ class WebDavClient(
             }
         }
 
+    /**
+     * Upload raw bytes (creates or overwrites). Used for the gzipped backup, which
+     * is why the media type is application/gzip rather than json.
+     */
+    suspend fun upload(name: String, content: ByteArray): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = content.toRequestBody("application/gzip".toMediaType())
+            val req = authed(Request.Builder().url(fileUrl(name)).put(body)).build()
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) {
+                    throw IOException("上传失败 HTTP ${resp.code} ${resp.message}")
+                }
+            }
+        }
+    }
+
+    /** Download raw bytes. */
+    suspend fun downloadBytes(name: String): Result<ByteArray> = withContext(Dispatchers.IO) {
+        runCatching {
+            val req = authed(Request.Builder().url(fileUrl(name)).get()).build()
+            client.newCall(req).execute().use { resp ->
+                if (resp.code == 404) throw IOException("云端还没有备份文件")
+                if (!resp.isSuccessful) throw IOException("下载失败 HTTP ${resp.code} ${resp.message}")
+                resp.body?.bytes() ?: throw IOException("云端返回了空内容")
+            }
+        }
+    }
+
     /** Upload (creates or overwrites). Returns a human-readable result. */
     suspend fun upload(name: String, content: String): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
@@ -99,7 +127,7 @@ class WebDavClient(
 
     companion object {
         /** Backup file name on the drive. */
-        const val FILE_NAME = "xhs-thirdparty-backup.json"
+        const val FILE_NAME = "xhs-thirdparty-backup.json.gz"
 
         fun config(context: Context): WebDavConfig {
             val p = context.getSharedPreferences("webdav", Context.MODE_PRIVATE)

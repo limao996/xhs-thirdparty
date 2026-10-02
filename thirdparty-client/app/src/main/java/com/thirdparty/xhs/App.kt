@@ -50,6 +50,14 @@ class App : Application() {
      */
     val feedImmersive = MutableStateFlow(false)
 
+    /**
+     * Bridge for the settings screen to toggle VIP auto-switch on the SAME
+     * GuestViewModel instance HomeScreen owns — that instance drives the 5s poll,
+     * so writing the pref directly would leave the running loop out of step.
+     * HomeScreen registers the setter while it is composed.
+     */
+    var autoVipSetter: ((Boolean) -> Unit)? = null
+
     override fun onCreate() {
         super.onCreate()
         INSTANCE = this

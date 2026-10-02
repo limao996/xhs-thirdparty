@@ -38,6 +38,9 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 
 /**
  * Full-screen image viewer.
@@ -81,6 +84,19 @@ fun FullscreenImageViewer(
     }
 
     BackHandler { onDismiss() }
+
+    // Volume keys page through the set while the viewer is up. Registered on
+    // entry and cleared on exit, so the keys are untouched everywhere else.
+    val keyScope = rememberCoroutineScope()
+    DisposableEffect(pagerState, images.size) {
+        ImageViewerKeys.register { step ->
+            val target = (pagerState.currentPage + step).coerceIn(0, images.lastIndex)
+            if (target != pagerState.currentPage) {
+                keyScope.launch { pagerState.animateScrollToPage(target) }
+            }
+        }
+        onDispose { ImageViewerKeys.unregister() }
+    }
 
     Column(modifier.fillMaxSize().background(Color.Black)) {
         Row(

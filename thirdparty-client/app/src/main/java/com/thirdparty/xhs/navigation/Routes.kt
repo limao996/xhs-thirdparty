@@ -18,6 +18,8 @@ object Routes {
     const val FANS = "fans"
     /** 备份与恢复 */
     const val BACKUP = "backup"
+    /** 设置 */
+    const val SETTINGS = "settings"
 
     fun detail(noteId: Long): String = "detail/$noteId"
     fun author(userId: Int): String = "author/$userId"

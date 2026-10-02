@@ -49,6 +49,9 @@ import com.thirdparty.xhs.ui.screens.BackupScreen
 import com.thirdparty.xhs.ui.theme.isDark
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import com.thirdparty.xhs.ui.screens.SettingsScreen
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
 
 /**
  * A Scaffold wrapper hosting the local (Room) list for a given mode.
@@ -179,6 +182,7 @@ fun AppNavHost(
                 // 作品 on the account card opens that account's own author page
                 onOpenMyNotes = { uid -> nav.navigate(Routes.author(uid)) },
                 onOpenBackup = { nav.navigate(Routes.BACKUP) },
+                onOpenSettings = { nav.navigate(Routes.SETTINGS) },
                 onSetBiometricLock = { on ->
                     App.repo.biometricLock = on
                     App.INSTANCE.notifyLockChanged()
@@ -226,6 +230,37 @@ fun AppNavHost(
             )
         }
 
+        composable(Routes.SETTINGS) {
+            val settingsContext = LocalContext.current
+            SettingsScreen(
+                onBack = { nav.popBackStack() },
+                themeMode = App.INSTANCE.themeState.collectAsStateWithLifecycle().value,
+                onSetTheme = { App.INSTANCE.setThemeMode(it) },
+                biometricLock = App.repo.biometricLock,
+                biometricAvailable = androidx.biometric.BiometricManager.from(settingsContext)
+                    .canAuthenticate(
+                        androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK or
+                            androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
+                    ) == androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS,
+                onSetBiometricLock = { on ->
+                    App.repo.biometricLock = on
+                    App.INSTANCE.notifyLockChanged()
+                },
+                historyLimit = App.repo.historyLimit,
+                onSetHistoryLimit = { n ->
+                    App.repo.historyLimit = n
+                    CoroutineScope(Dispatchers.IO).launch {
+                        App.INSTANCE.repository.trimHistory()
+                    }
+                },
+                autoVip = App.repo.autoSwitchOnVipExpiry,
+                onSetAutoVip = { on ->
+                    App.INSTANCE.autoVipSetter?.invoke(on)
+                        ?: run { App.repo.autoSwitchOnVipExpiry = on }
+                },
+                onOpenBackup = { nav.navigate(Routes.BACKUP) }
+            )
+        }
         composable(Routes.BACKUP) {
             BackupScreen(onBack = { nav.popBackStack() })
         }

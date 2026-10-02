@@ -30,6 +30,34 @@ object BackupManager {
 
     data class Result(val ok: Boolean, val detail: String)
 
+    /**
+     * Everything, gzipped.
+     *
+     * The payload is mostly raw note JSON, which compresses very well (typ. 4-8x),
+     * so this is about the bytes actually sent over WebDAV rather than local disk.
+     * Gzip is auto-detected on the way back in, so uncompressed backups from an
+     * earlier version still restore.
+     */
+    suspend fun exportCompressed(context: Context): ByteArray = withContext(Dispatchers.IO) {
+        val raw = export(context).toByteArray(Charsets.UTF_8)
+        java.io.ByteArrayOutputStream(raw.size / 4).use { out ->
+            java.util.zip.GZIPOutputStream(out).use { gz -> gz.write(raw) }
+            out.toByteArray()
+        }
+    }
+
+    /** Accepts either gzipped or plain-text payloads and returns the JSON. */
+    fun decode(bytes: ByteArray): String {
+        val gzipped = bytes.size >= 2 &&
+            bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()
+        return if (gzipped) {
+            java.util.zip.GZIPInputStream(java.io.ByteArrayInputStream(bytes))
+                .use { it.readBytes().toString(Charsets.UTF_8) }
+        } else {
+            bytes.toString(Charsets.UTF_8)
+        }
+    }
+
     /** Everything, as pretty-printed JSON. */
     suspend fun export(context: Context): String = withContext(Dispatchers.IO) {
         val db = XhsDatabase.get(context)

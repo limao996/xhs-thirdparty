@@ -67,6 +67,8 @@ fun BackupScreen(onBack: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
     var merge by remember { mutableStateOf(true) }
+    // restore replaces local favourites/history/follows, so it asks before acting
+    var confirmRestore by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     var url by remember { mutableStateOf(WebDavClient.config(context).url) }
     var user by remember { mutableStateOf(WebDavClient.config(context).user) }
@@ -86,16 +88,16 @@ fun BackupScreen(onBack: () -> Unit) {
     // System pickers instead of a hard-coded path: works on every Android version
     // and needs no storage permission.
     val saveLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json")
+        ActivityResultContracts.CreateDocument("application/gzip")
     ) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
         run("正在写入本地文件") {
-            val json = BackupManager.export(context)
+            val bytes = BackupManager.exportCompressed(context)
             withContext(Dispatchers.IO) {
-                context.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
+                context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
                     ?: throw java.io.IOException("无法写入所选位置")
             }
-            "已备份到本地（${json.length / 1024} KB）"
+            "已备份到本地（压缩后 ${bytes.size / 1024} KB）"
         }
     }
 
@@ -104,10 +106,13 @@ fun BackupScreen(onBack: () -> Unit) {
     ) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
         run("正在读取本地文件") {
-            val text = withContext(Dispatchers.IO) {
-                context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+            // read as bytes and let BackupManager detect gzip, so backups written
+            // by an older uncompressed build still restore
+            val bytes = withContext(Dispatchers.IO) {
+                context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
                     ?: throw java.io.IOException("无法读取所选文件")
             }
+            val text = BackupManager.decode(bytes)
             BackupManager.restore(context, text, merge).let {
                 if (!it.ok) throw java.io.IOException(it.detail)
                 it.detail
@@ -127,6 +132,27 @@ fun BackupScreen(onBack: () -> Unit) {
             )
         }
     ) { pad ->
+        // Restore replaces local favourites / history / follows, so it always asks
+        // first — the merge-vs-replace choice alone is easy to miss.
+        confirmRestore?.let { action ->
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { confirmRestore = null },
+                title = { Text("确定恢复备份？") },
+                text = {
+                    Text(if (merge) "将把备份内容合并进当前数据，现有收藏/浏览/关注会保留。" else "将先清空本机收藏/浏览/关注，再写入备份内容，且不可撤销。")
+                },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = {
+                        val act = action
+                        confirmRestore = null
+                        act()
+                    }) { Text("恢复") }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(onClick = { confirmRestore = null }) { Text("取消") }
+                }
+            )
+        }
         Column(
             Modifier.fillMaxSize().padding(pad).verticalScroll(rememberScrollState())
                 .imePadding().padding(horizontal = Spacing.l)
@@ -157,9 +183,13 @@ fun BackupScreen(onBack: () -> Unit) {
             )
             Spacer(Modifier.height(Spacing.s))
             Row {
-                Button(onClick = { saveLauncher.launch(WebDavClient.FILE_NAME) }) { Text("备份到文件") }
+                Button(onClick = { saveLauncher.launch("xhs-thirdparty-backup.json.gz") }) { Text("备份到文件") }
                 Spacer(Modifier.size(Spacing.s))
-                OutlinedButton(onClick = { openLauncher.launch(arrayOf("application/json", "*/*")) }) {
+                OutlinedButton(onClick = {
+                    confirmRestore = {
+                        openLauncher.launch(arrayOf("application/gzip", "application/json", "*/*"))
+                    }
+                }) {
                     Text("从文件恢复")
                 }
             }
@@ -227,7 +257,7 @@ fun BackupScreen(onBack: () -> Unit) {
                         if (cfg.url.isBlank()) throw java.io.IOException("请先填写服务器地址")
                         val dav = WebDavClient(App.INSTANCE.httpClient, cfg)
                         dav.ensureDir().getOrThrow()
-                        dav.upload(WebDavClient.FILE_NAME, BackupManager.export(context))
+                        dav.upload(WebDavClient.FILE_NAME, BackupManager.exportCompressed(context))
                             .getOrThrow()
                         "已上传到 WebDAV"
                     }
@@ -235,16 +265,17 @@ fun BackupScreen(onBack: () -> Unit) {
                 Spacer(Modifier.size(Spacing.s))
                 OutlinedButton(onClick = {
                     WebDavClient.save(context, WebDavClient.WebDavConfig(url, user, pass))
-                    run("正在从云端恢复") {
+                    confirmRestore = { run("正在从云端恢复") {
                         val cfg = WebDavClient.WebDavConfig(url, user, pass)
                         if (cfg.url.isBlank()) throw java.io.IOException("请先填写服务器地址")
                         val dav = WebDavClient(App.INSTANCE.httpClient, cfg)
-                        val text = dav.download(WebDavClient.FILE_NAME).getOrThrow()
+                        val bytes = dav.downloadBytes(WebDavClient.FILE_NAME).getOrThrow()
+                        val text = BackupManager.decode(bytes)
                         BackupManager.restore(context, text, merge).let {
                             if (!it.ok) throw java.io.IOException(it.detail)
                             "云端恢复完成：${it.detail}"
                         }.also { App.INSTANCE.notifyDataRestored() }
-                    }
+                    } }
                 }) { Text("从云端恢复") }
             }
 

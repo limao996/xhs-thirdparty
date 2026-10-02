@@ -143,14 +143,18 @@ fun BufferingIndicator(
 ) {
     var buffering by remember(player) {
         androidx.compose.runtime.mutableStateOf(
-            player?.playbackState == Player.STATE_BUFFERING
+            // IDLE counts too: before prepare() (and while the first frame loads)
+            // there is otherwise no spinner at all, which looked like a frozen video.
+            player == null || player.playbackState == Player.STATE_IDLE ||
+                player.playbackState == Player.STATE_BUFFERING
         )
     }
     DisposableEffect(player) {
         val p = player
         val listener = if (p == null) null else object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
-                buffering = playbackState == Player.STATE_BUFFERING
+                buffering = playbackState == Player.STATE_IDLE ||
+                    playbackState == Player.STATE_BUFFERING
             }
         }
         if (p != null && listener != null) p.addListener(listener)

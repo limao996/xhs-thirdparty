@@ -70,6 +70,7 @@ fun HomeScreen(
     onOpenFans: () -> Unit,
     onOpenMyNotes: (Int) -> Unit,
     onOpenBackup: () -> Unit,
+    onOpenSettings: () -> Unit,
     onSetBiometricLock: ((Boolean) -> Unit)? = null,
     onSetHistoryLimit: ((Int) -> Unit)? = null,
     guestViewModel: GuestViewModel = viewModel(factory = RepoViewModelFactory())
@@ -111,6 +112,11 @@ fun HomeScreen(
     // left the feed's white-on-light bars in place: this effect is keyed on
     // `immersive`, which does not change on the way out, and its onDispose did
     // nothing. One owner, keyed on the current destination, cannot drift.
+    androidx.compose.runtime.DisposableEffect(guestViewModel) {
+        App.INSTANCE.autoVipSetter = { guestViewModel.setAutoVip(it) { } }
+        onDispose { App.INSTANCE.autoVipSetter = null }
+    }
+
     androidx.compose.runtime.LaunchedEffect(immersive) {
         App.INSTANCE.feedImmersive.value = immersive
     }
@@ -162,7 +168,7 @@ fun HomeScreen(
                             onOpenFollowing = onOpenFollowing,
                             onOpenFans = onOpenFans,
                             onOpenMyNotes = { uid -> onOpenMyNotes(uid) },
-                            onOpenBackup = onOpenBackup,
+                            onOpenSettings = onOpenSettings,
                             biometricLock = App.INSTANCE.repository.biometricLock,
                             biometricAvailable = androidx.biometric.BiometricManager.from(context).canAuthenticate(androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK or androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL) == androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS,
                             onSetBiometricLock = onSetBiometricLock,

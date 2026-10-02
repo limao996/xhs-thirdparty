@@ -60,6 +60,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Settings
 
 /**
  * 我的：账号信息（用户名/ID/VIP）+ 收藏 / 最近浏览 / 我关注的作者 / 切换游客 / 外观主题。
@@ -78,7 +79,7 @@ fun ProfileScreen(
     onOpenFans: (() -> Unit)? = null,
     onOpenMyNotes: ((Int) -> Unit)? = null,
     /** 备份与恢复 */
-    onOpenBackup: (() -> Unit)? = null,
+
     /** VIP-expiry auto switch */
     autoVip: Boolean = false,
     onSetAutoVip: ((Boolean) -> Unit)? = null,
@@ -89,6 +90,8 @@ fun ProfileScreen(
     /** 最近浏览 keep limit */
     historyLimit: Int = 2000,
     onSetHistoryLimit: ((Int) -> Unit)? = null,
+    /** 设置 entry */
+    onOpenSettings: (() -> Unit)? = null,
     rotating: Boolean = false,
     /** changes whenever the guest account changes, forcing a profile reload */
     reloadKey: Any? = Unit,
@@ -189,15 +192,35 @@ fun ProfileScreen(
         ProfileEntry(Icons.Filled.Favorite, "我的收藏", "${state.savedCount} 条", onOpenSaved)
         ProfileEntry(Icons.Filled.History, "最近浏览", "${state.historyCount} 条", onOpenHistory)
         ProfileEntry(Icons.Filled.Group, "我关注的作者", "${state.followedCount} 位", onOpenFollowed)
-        if (onOpenBackup != null) {
+        if (onOpenSettings != null) {
             ProfileEntry(
-                Icons.Filled.CloudUpload, "备份与恢复",
-                "本地文件或 WebDAV，含账号 / 收藏 / 浏览 / 关注",
-                onOpenBackup
+                Icons.Filled.Settings, "设置",
+                "外观 / 指纹解锁 / 软件伪装 / 最近浏览 / 备份",
+                onOpenSettings
             )
         }
 
         if (onRotateGuest != null) {
+            // confirm first: switching creates a brand-new account; the previous
+            // one is only reachable through 历史账号, so a stray tap is not
+            // trivially undone.
+            var confirmRotate by remember { mutableStateOf(false) }
+            if (confirmRotate) {
+                AlertDialog(
+                    onDismissRequest = { confirmRotate = false },
+                    title = { Text("切换游客账号？") },
+                    text = { Text("将创建一个全新的随机账号；当前账号会进入「历史账号」以便切回。") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            confirmRotate = false
+                            onRotateGuest()
+                        }) { Text("切换") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { confirmRotate = false }) { Text("取消") }
+                    }
+                )
+            }
             HorizontalDivider()
             ListItem(
                 headlineContent = { Text("切换游客账号") },
@@ -207,7 +230,10 @@ fun ProfileScreen(
                     else Icon(Icons.Filled.SwitchAccount, null, tint = MaterialTheme.colorScheme.primary)
                 },
                 colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-                modifier = Modifier.clickable { onRotateGuest() }
+                    // confirm first: switching creates a brand-new account and the
+                    // previous one is only reachable through 历史账号, so an
+                    // accidental tap is not trivially undone.
+                    modifier = Modifier.clickable { confirmRotate = true }
             )
             if (onOpenAccountHistory != null) {
                 ListItem(
@@ -232,79 +258,7 @@ fun ProfileScreen(
                     modifier = Modifier.clickable { onOpenAccountHistory() }
                 )
             }
-            if (onSetAutoVip != null) {
-                ListItem(
-                    headlineContent = { Text("VIP 到期自动切换") },
-                    supportingContent = {
-                        Text("开启后，当前账号 VIP 到期时自动切换到有 VIP 的账号")
-                    },
-                    leadingContent = {
-                        Icon(Icons.Filled.Autorenew, null, tint = MaterialTheme.colorScheme.primary)
-                    },
-                    trailingContent = {
-                        Switch(checked = autoVip, onCheckedChange = { onSetAutoVip(it) })
-                    },
-                    colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-                    modifier = Modifier.clickable { onSetAutoVip(!autoVip) }
-                )
-            }
-            if (onSetBiometricLock != null) {
-                ListItem(
-                    headlineContent = { Text("指纹解锁") },
-                    supportingContent = {
-                        Text(
-                            if (biometricAvailable) "开启后，打开或切回本应用需要验证指纹或设备密码"
-                            else "此设备未录入指纹或锁屏密码，无法启用"
-                        )
-                    },
-                    leadingContent = {
-                        Icon(Icons.Filled.Lock, null, tint = MaterialTheme.colorScheme.primary)
-                    },
-                    trailingContent = {
-                        Switch(
-                            checked = biometricLock,
-                            enabled = biometricAvailable,
-                            onCheckedChange = { onSetBiometricLock(it) }
-                        )
-                    },
-                    colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-                    modifier = Modifier.clickable {
-                        // never let the toggle be flipped on where it cannot be honoured
-                        if (biometricAvailable) onSetBiometricLock(!biometricLock)
-                    }
-                )
-            }
-            if (onSetHistoryLimit != null) {
-                var pickLimit by remember { mutableStateOf(false) }
-                ListItem(
-                    headlineContent = { Text("最近浏览上限") },
-                    supportingContent = { Text("当前保留 $historyLimit 条，超出后自动清理最旧的") },
-                    leadingContent = {
-                        Icon(Icons.Filled.History, null, tint = MaterialTheme.colorScheme.primary)
-                    },
-                    colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-                    modifier = Modifier.clickable { pickLimit = true }
-                )
-                if (pickLimit) {
-                    androidx.compose.material3.AlertDialog(
-                        onDismissRequest = { pickLimit = false },
-                        title = { Text("最近浏览上限") },
-                        text = {
-                            Column {
-                                listOf(500, 1000, 2000, 5000, 10000).forEach { n ->
-                                    TextButton(onClick = {
-                                        onSetHistoryLimit(n)
-                                        pickLimit = false
-                                    }) { Text("$n 条" + if (n == historyLimit) "（当前）" else "") }
-                                }
-                            }
-                        },
-                        confirmButton = {
-                            TextButton(onClick = { pickLimit = false }) { Text("取消") }
-                        }
-                    )
-                }
-            }
+
         }
 
         // image cache management (the disk cache can hold up to 64MB)
