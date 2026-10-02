@@ -201,15 +201,15 @@ fun BackupScreen(onBack: () -> Unit) {
             Text("WebDAV", style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(Spacing.xs))
             Text(
-                "支持坚果云 / Nextcloud 等。坚果云请在「安全选项」里为应用生成专用密码。",
+                "支持坚果云 / Nextcloud 等。填服务器根地址即可，备份固定存放在 " + WebDavClient.DIR + "/ 目录下（不存在时会自动创建）。坚果云请在「安全选项」里为应用生成专用密码。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(Modifier.height(Spacing.s))
             OutlinedTextField(
                 value = url, onValueChange = { url = it },
-                label = { Text("服务器地址（含目录）") },
-                placeholder = { Text("https://dav.jianguoyun.com/dav/xhs/") },
+                label = { Text("服务器地址（根目录）") },
+                placeholder = { Text("https://dav.jianguoyun.com/dav/") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )

@@ -31,8 +31,21 @@ class WebDavClient(
         val configured: Boolean get() = url.isNotBlank()
     }
 
-    /** `/dir/sub` + `file.json` -> a full, single-slash-joined URL. */
-    private fun fileUrl(name: String): String =
+    /**
+     * Backups always live in this fixed sub-collection under the configured root,
+     * so the user only supplies a server root (e.g. `https://dav.jianguoyun.com/dav/`)
+     * and never has to decide where the file goes.
+     *
+     * Kept ASCII on purpose: a Chinese name would have to be percent-encoded in
+     * every request, and some WebDAV servers compare the raw path.
+     */
+    private fun dirUrl(): String = prefs.url.trimEnd('/') + "/" + DIR + "/"
+
+    /** `<root>/xhs/<name>` — the one place backups are written and read. */
+    private fun fileUrl(name: String): String = dirUrl() + name.trimStart('/')
+
+    /** Where the file lived before the fixed directory existed, for old backups. */
+    private fun legacyFileUrl(name: String): String =
         prefs.url.trimEnd('/') + "/" + name.trimStart('/')
 
     private fun authed(builder: Request.Builder): Request.Builder =
@@ -58,15 +71,29 @@ class WebDavClient(
         }
     }
 
-    /** Download raw bytes. */
+    /**
+     * Download raw bytes from the fixed backup directory.
+     *
+     * Falls back to the pre-existing flat location when nothing is found there, so
+     * a backup uploaded by an earlier version is still recoverable.
+     */
     suspend fun downloadBytes(name: String): Result<ByteArray> = withContext(Dispatchers.IO) {
         runCatching {
-            val req = authed(Request.Builder().url(fileUrl(name)).get()).build()
-            client.newCall(req).execute().use { resp ->
-                if (resp.code == 404) throw IOException("云端还没有备份文件")
-                if (!resp.isSuccessful) throw IOException("下载失败 HTTP ${resp.code} ${resp.message}")
-                resp.body?.bytes() ?: throw IOException("云端返回了空内容")
-            }
+            val fromDir = fetchBytes(fileUrl(name))
+            if (fromDir != null) return@runCatching fromDir
+            val legacy = fetchBytes(legacyFileUrl(name))
+                ?: throw IOException("云端还没有备份文件（已查找 $DIR/ 与根目录）")
+            legacy
+        }
+    }
+
+    /** null when the server answers 404; throws on any other failure. */
+    private fun fetchBytes(url: String): ByteArray? {
+        val req = authed(Request.Builder().url(url).get()).build()
+        client.newCall(req).execute().use { resp ->
+            if (resp.code == 404) return null
+            if (!resp.isSuccessful) throw IOException("下载失败 HTTP ${resp.code} ${resp.message}")
+            return resp.body?.bytes() ?: throw IOException("云端返回了空内容")
         }
     }
 
@@ -108,7 +135,7 @@ class WebDavClient(
     suspend fun ensureDir(): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             val req = authed(
-                Request.Builder().url(prefs.url.trimEnd('/') + "/").method("MKCOL", null)
+                Request.Builder().url(dirUrl()).method("MKCOL", null)
             ).build()
             client.newCall(req).execute().use { resp ->
                 when {
@@ -128,6 +155,9 @@ class WebDavClient(
     companion object {
         /** Backup file name on the drive. */
         const val FILE_NAME = "xhs-thirdparty-backup.json.gz"
+
+        /** Fixed sub-collection under the configured root; see [dirUrl]. */
+        const val DIR = "xhs"
 
         fun config(context: Context): WebDavConfig {
             val p = context.getSharedPreferences("webdav", Context.MODE_PRIVATE)
