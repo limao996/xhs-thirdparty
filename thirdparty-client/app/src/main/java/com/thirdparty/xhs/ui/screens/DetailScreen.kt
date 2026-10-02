@@ -101,6 +101,9 @@ fun DetailScreen(
 ) {
     val state by viewModel.ui.collectAsStateWithLifecycle()
     var fullscreen by rememberSaveable { mutableStateOf(false) }
+    // Hoisted here (not in DetailContent) so the app bar can open the image
+    // viewer for image posts — see the 全屏 action below.
+    var openImage by rememberSaveable { mutableStateOf<Int?>(null) }
     val context = LocalContext.current
     val view = LocalView.current
 
@@ -147,7 +150,20 @@ fun DetailScreen(
                                 else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        IconButton(onClick = { fullscreen = true }) {
+                        // The 全屏 action means different things per media type.
+                        //
+                        // It used to be unconditional and only ever set the VIDEO
+                        // fullscreen flag, so on an image post it did nothing at all
+                        // (the fullscreen branch also requires isVideo). It now opens
+                        // the image viewer there instead.
+                        //
+                        // For video notes this is byte-for-byte the old behaviour:
+                        // `isVideo` is itself `item.isVideo && mediaUrl.isNotEmpty()`.
+                        val videoNote = state.item?.isVideo == true &&
+                            !state.item?.mediaUrl.isNullOrEmpty()
+                        IconButton(onClick = {
+                            if (videoNote) fullscreen = true else openImage = 0
+                        }) {
                             Icon(Icons.Filled.Fullscreen, "全屏")
                         }
                     }
@@ -232,7 +248,7 @@ fun DetailScreen(
                         )
                     }
                 } else {
-                    DetailContent(state, viewModel, onOpenAuthor, pad, isVideo, onEnterFullscreen = { fullscreen = true }, sharedPlayer = sharedPlayer, videoAspect = videoAspect, onAspect = { videoAspect = it })
+                    DetailContent(state, viewModel, onOpenAuthor, pad, isVideo, onEnterFullscreen = { fullscreen = true }, openImage = openImage, onOpenImage = { openImage = it }, sharedPlayer = sharedPlayer, videoAspect = videoAspect, onAspect = { videoAspect = it })
                 }
             }
         }
@@ -247,6 +263,13 @@ private fun DetailContent(
     onOpenAuthor: (Int) -> Unit,
     pad: androidx.compose.foundation.layout.PaddingValues,
     isVideo: Boolean,
+    /**
+     * Index of the image open in the full-screen viewer, hoisted to DetailScreen:
+     * the app bar's 全屏 button drives it for image notes (which have no video to
+     * go full screen), and the app bar lives outside this composable.
+     */
+    openImage: Int?,
+    onOpenImage: (Int?) -> Unit,
     onEnterFullscreen: () -> Unit = {},
     sharedPlayer: androidx.media3.exoplayer.ExoPlayer? = null,
     videoAspect: Float = 9f / 16f,
@@ -258,8 +281,6 @@ private fun DetailContent(
     var openReplies by remember(item.noteId) {
         mutableStateOf<com.thirdparty.xhs.data.CommentItem?>(null)
     }
-    // index of the image opened in the full-screen viewer (null = closed)
-    var openImage by remember(item.noteId) { mutableStateOf<Int?>(null) }
     // Single scrolling column: media on top, then all the content BELOW it.
     // (Previously media and text were siblings in a Box, so the text drew
     //  on top of the video — that was the broken layout.)
@@ -307,7 +328,7 @@ private fun DetailContent(
             val images = item.images.ifEmpty {
                 listOf(item.cover).filter { it.isNotEmpty() }.map { NoteImage(it) }
             }
-            ImageGallery(images = images, onOpen = { openImage = it })
+            ImageGallery(images = images, onOpen = { onOpenImage(it) })
         }
 
         Column(Modifier.padding(horizontal = Spacing.l, vertical = Spacing.m)) {
@@ -424,7 +445,7 @@ private fun DetailContent(
             },
             initialPage = page,
             modifier = Modifier.padding(pad),
-            onDismiss = { openImage = null }
+            onDismiss = { onOpenImage(null) }
         )
     }
 
