@@ -42,8 +42,22 @@ class CredentialStore(context: Context) {
 
     /** Switch to a specific identity. */
     fun setDevice(identity: String) {
-        prefs.edit().putString(KEY_DEVICE, identity).apply()
+        // a cached VIP window belongs to the account it was read from
+        prefs.edit().putString(KEY_DEVICE, identity).putLong(KEY_VIP_END, 0L).apply()
     }
+
+    /**
+     * The current account's VIP end, as last seen from the server (epoch seconds,
+     * 0 = unknown).
+     *
+     * Cached so the automatic-switch poll can decide from local data: a VIP window
+     * does not move on its own, so re-asking the server every few seconds is pure
+     * waste. The value is only ever written when the server actually reports a
+     * profile, and cleared whenever the identity changes.
+     */
+    var vipEnd: Long
+        get() = prefs.getLong(KEY_VIP_END, 0L)
+        set(v) = prefs.edit().putLong(KEY_VIP_END, v).apply()
 
     /**
      * When on, the app switches to a fresh account (which starts a new VIP window)
@@ -107,6 +121,7 @@ class CredentialStore(context: Context) {
         private const val KEY_DEVICE = "device_identity"
         private const val KEY_HISTORY = "account_history"
         private const val KEY_AUTO_VIP = "auto_switch_on_vip_expiry"
+        private const val KEY_VIP_END = "current_vip_end"
     }
 }
 

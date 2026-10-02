@@ -313,6 +313,12 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
      */
     suspend fun switchToVipAccount(): Boolean = withContext(Dispatchers.IO) {
         if (!api.autoSwitchOnVipExpiry) return@withContext false
+        val nowS0 = System.currentTimeMillis() / 1000
+        // Decide from the CACHED window first. A VIP end does not move on its own,
+        // so the 5s poll must not spend a request every time — it only needs the
+        // server when the local value says the window has lapsed (or is unknown).
+        val cached = api.cachedVipEnd
+        if (cached > 0L && cached - nowS0 > VIP_MIN_REMAINING_S) return@withContext false
         val current = myProfile() ?: return@withContext false
         // "有效期不足" covers both an already-expired window and one about to
         // lapse: switching exactly at expiry would drop the user mid-action, so a
@@ -356,6 +362,8 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
         val res = api.call("v2/mine/user-info", emptyMap())
         if (res.optInt("result") != 1) null
         else UserProfile.from(res.optJSONObject("data") ?: return@withContext null)
+            // keep the local VIP cache warm so the auto-switch poll can decide offline
+            ?.also { api.cachedVipEnd = it.vipEnd }
     }
 
     /** Discover category list (v2/home/discover-category). */

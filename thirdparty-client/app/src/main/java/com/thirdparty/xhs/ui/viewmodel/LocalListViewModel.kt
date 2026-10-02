@@ -46,7 +46,20 @@ class LocalListViewModel(
                 Mode.SAVED -> repo.savedList()
                 Mode.HISTORY -> repo.history()
             }
-            _ui.value = LocalListUiState(all = items, visibleCount = LocalListUiState.PAGE_SIZE, loading = false)
+            // Update the DATA only — never shrink how much is visible.
+            //
+            // This used to assign a whole new state, resetting visibleCount to
+            // PAGE_SIZE. Combined with LocalListScreen's LaunchedEffect(mode)
+            // re-running on every re-entry, coming back from a note collapsed the
+            // list from however far the user had scrolled back down to 20 items,
+            // which invalidated the grid's saved scroll position.
+            _ui.update { prev ->
+                prev.copy(
+                    all = items,
+                    visibleCount = maxOf(prev.visibleCount, LocalListUiState.PAGE_SIZE),
+                    loading = false
+                )
+            }
         }
     }
 
