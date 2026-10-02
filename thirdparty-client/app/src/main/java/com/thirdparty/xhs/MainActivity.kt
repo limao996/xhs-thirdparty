@@ -113,9 +113,12 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
      * everywhere else — which is exactly the "only in full screen" requirement.
      */
     override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent?): Boolean {
+            // Volume-DOWN goes FORWARD, volume-up goes back: "down" reads as
+            // advancing through the gallery, the same way scrolling a feed does.
+            // (This was the other way round and felt backwards in use.)
         val step = when (keyCode) {
-            android.view.KeyEvent.KEYCODE_VOLUME_UP -> 1
-            android.view.KeyEvent.KEYCODE_VOLUME_DOWN -> -1
+            android.view.KeyEvent.KEYCODE_VOLUME_UP -> -1
+            android.view.KeyEvent.KEYCODE_VOLUME_DOWN -> 1
             else -> 0
         }
         if (step != 0 && com.thirdparty.xhs.ui.components.ImageViewerKeys.handle(step)) {

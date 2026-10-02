@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Background for the adaptive launcher icon.
+
+  Deep violet, matching the legacy PNG icons exactly (see tools/gen_icon.py). It is
+  a gradient rather than a flat colour so adaptive and legacy icons look identical.
+  An earlier, much darker plum read as plain black at 48px — the size the icon is
+  actually seen at — so it is deliberately lighter and more saturated here.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="270"
+        android:startColor="#4E3E6E"
+        android:endColor="#2C2248"
+        android:type="linear" />
+</shape>

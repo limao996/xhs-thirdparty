@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Adaptive icon: solid amber ground + the 小黄书 mark as a transparent PNG.
-     The PNG foreground carries the text only; the launcher supplies the mask, so
-     the glyph must stay inside the central safe zone (see tools/gen_icon.py). -->
+<!--
+  Adaptive icon: deep-plum gradient ground + the golden open book as a transparent
+  PNG foreground. The launcher supplies the mask, so the mark must stay inside the
+  central safe zone (see tools/gen_icon.py).
+-->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@color/icon_bg" />
+    <background android:drawable="@drawable/ic_launcher_bg" />
     <foreground android:drawable="@mipmap/ic_launcher_fg" />
 </adaptive-icon>

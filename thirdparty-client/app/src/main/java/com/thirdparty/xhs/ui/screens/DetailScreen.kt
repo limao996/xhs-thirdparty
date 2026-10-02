@@ -108,8 +108,16 @@ fun DetailScreen(
     val view = LocalView.current
 
     // In fullscreen the app bar is hidden, so the system back gesture must leave
-    // fullscreen first instead of popping the whole detail screen.
-    androidx.activity.compose.BackHandler(enabled = fullscreen) { fullscreen = false }
+    // fullscreen first instead of popping the whole detail screen — and while the
+    // image viewer is up, back closes the viewer rather than just the chrome.
+    androidx.activity.compose.BackHandler(enabled = fullscreen || openImage != null) {
+        if (openImage != null) {
+            openImage = null
+            fullscreen = false
+        } else {
+            fullscreen = false
+        }
+    }
     // 真全屏：隐藏状态/导航栏（不强制方向，横竖都行）
     val window = (LocalContext.current as? android.app.Activity)?.window
     DisposableEffect(fullscreen, window) {
@@ -162,9 +170,17 @@ fun DetailScreen(
                         val videoNote = state.item?.isVideo == true &&
                             !state.item?.mediaUrl.isNullOrEmpty()
                         IconButton(onClick = {
-                            if (videoNote) fullscreen = true else openImage = 0
+                            // `fullscreen` hides the app bar and the system bars; the
+                            // image branch used to set only `openImage`, so the viewer
+                            // came up with 内容详情 still sitting above it — not
+                            // fullscreen at all.
+                            fullscreen = true
+                            if (!videoNote) openImage = 0
                         }) {
-                            Icon(Icons.Filled.Fullscreen, "全屏")
+                            Icon(
+                                if (fullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
+                                "全屏"
+                            )
                         }
                     }
                 )
@@ -260,7 +276,12 @@ fun DetailScreen(
                         )
                     }
                 } else {
-                    DetailContent(state, viewModel, onOpenAuthor, pad, isVideo, onEnterFullscreen = { fullscreen = true }, openImage = openImage, onOpenImage = { openImage = it }, sharedPlayer = sharedPlayer, videoAspect = videoAspect, onAspect = { videoAspect = it })
+                    DetailContent(state, viewModel, onOpenAuthor, pad, isVideo, onEnterFullscreen = { fullscreen = true }, openImage = openImage, onOpenImage = { page ->
+                        openImage = page
+                        // closing the viewer must also restore the app bar and the
+                        // system bars, otherwise the detail screen stays chromeless
+                        if (page == null) fullscreen = false
+                    }, sharedPlayer = sharedPlayer, videoAspect = videoAspect, onAspect = { videoAspect = it })
                 }
             }
         }
