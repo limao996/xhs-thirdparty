@@ -423,6 +423,7 @@ private fun DetailContent(
                 listOf(item.cover).filter { it.isNotEmpty() }.map { com.thirdparty.xhs.data.NoteImage(it) }
             },
             initialPage = page,
+            modifier = Modifier.padding(pad),
             onDismiss = { openImage = null }
         )
     }
