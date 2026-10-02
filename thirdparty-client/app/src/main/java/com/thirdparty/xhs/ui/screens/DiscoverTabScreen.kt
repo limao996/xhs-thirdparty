@@ -130,15 +130,21 @@ fun DiscoverTabScreen(
         // the FAB flush against the floating NavigationBar
         val clear = bottomNavClearance()
 
-        // refresh FAB — lifted above the floating bottom navigation bar
-        FloatingActionButton(
-            onClick = { scope.launch { viewModel.refresh() } },
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            modifier = Modifier.align(Alignment.BottomEnd)
-                .padding(end = Spacing.l, bottom = clear)
-        ) {
-            Icon(Icons.Filled.Refresh, contentDescription = "刷新")
+        // Refresh FAB — lifted above the floating bottom navigation bar.
+        //
+        // Hidden on 关注: that tab lists the authors followed on THIS device, so
+        // there is nothing remote to refresh — the button only re-fetched the
+        // feed behind a list that never changes.
+        if (tab != DiscoverTab.FOLLOW_LOCAL) {
+            FloatingActionButton(
+                onClick = { scope.launch { viewModel.refresh() } },
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.align(Alignment.BottomEnd)
+                    .padding(end = Spacing.l, bottom = clear)
+            ) {
+                Icon(Icons.Filled.Refresh, contentDescription = "刷新")
+            }
         }
     }
 }
@@ -149,6 +155,7 @@ private fun FeedTab(
     viewModel: DiscoverViewModel,
     onOpenDetail: (Long) -> Unit
 ) {
+    val clear = com.thirdparty.xhs.ui.theme.bottomNavClearance()
     Column(Modifier.fillMaxSize()) {
         // category chips (horizontal)
         LazyRow(
@@ -201,7 +208,7 @@ private fun FeedTab(
             items = state.feed.items,
             onOpenDetail = onOpenDetail,
             contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                start = Spacing.s, end = Spacing.s, top = Spacing.xs, bottom = BottomNavClearance
+                start = Spacing.s, end = Spacing.s, top = Spacing.xs, bottom = clear
             ),
             hasMore = state.feed.hasMore,
             loadingMore = state.feed.loadingMore,
@@ -221,6 +228,7 @@ private fun FanGroupTab(
     onOpenAuthor: (Int) -> Unit,
     onOpenDetail: (Long) -> Unit
 ) {
+    val clear = com.thirdparty.xhs.ui.theme.bottomNavClearance()
     if (loading && recommended.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         return
@@ -252,7 +260,7 @@ private fun FanGroupTab(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = BottomNavClearance)
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = clear)
     ) {
         items(recommended, key = { it.userId }) { a ->
             Column(Modifier.fillMaxWidth().padding(vertical = Spacing.s)) {
@@ -379,6 +387,7 @@ private fun FollowedMineTab(
     followed: List<com.thirdparty.xhs.data.FollowedEntity>,
     onOpenAuthor: (Int) -> Unit
 ) {
+    val clear = com.thirdparty.xhs.ui.theme.bottomNavClearance()
     if (followed.isEmpty()) {
         EmptyState(
             title = "还没有关注任何作者",
@@ -391,7 +400,7 @@ private fun FollowedMineTab(
     LazyColumn(
         Modifier.fillMaxSize(),
         // clear the floating bottom navigation bar
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = BottomNavClearance)
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = clear)
     ) {
         items(followed, key = { it.userId }) { f ->
             Surface(onClick = { onOpenAuthor(f.userId) }, modifier = Modifier.fillMaxWidth()) {

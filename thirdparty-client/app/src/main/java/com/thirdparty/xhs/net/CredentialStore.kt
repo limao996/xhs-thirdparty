@@ -72,7 +72,9 @@ class CredentialStore(context: Context) {
      * as soon as the current account's VIP runs out.
      */
     var autoSwitchOnVipExpiry: Boolean
-        get() = prefs.getBoolean(KEY_AUTO_VIP, false)
+        // ON by default: the account is anonymous and disposable, so silently
+        // moving to one that still has VIP beats hitting a paywall mid-browse.
+        get() = prefs.getBoolean(KEY_AUTO_VIP, true)
         set(v) = prefs.edit().putBoolean(KEY_AUTO_VIP, v).apply()
 
     /** Switch to a brand-new random identity and return it. */

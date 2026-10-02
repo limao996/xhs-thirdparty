@@ -54,7 +54,7 @@ import com.thirdparty.xhs.ui.theme.ThemeMode
 import com.thirdparty.xhs.ui.components.XhsAvatar
 import com.thirdparty.xhs.ui.viewmodel.ProfileViewModel
 import androidx.compose.material.icons.filled.Search
-import com.thirdparty.xhs.ui.theme.BottomNavClearance
+import com.thirdparty.xhs.ui.theme.bottomNavClearance
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material3.Switch
 import androidx.compose.ui.draw.clip
@@ -115,7 +115,7 @@ fun ProfileScreen(
     Column(
         Modifier.fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(bottom = BottomNavClearance)
+            .padding(bottom = bottomNavClearance())
     ) {
         // account header
         Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
