@@ -36,6 +36,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.thirdparty.xhs.ui.theme.Spacing
 import com.thirdparty.xhs.ui.theme.ThemeMode
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 
 /**
  * 设置.
@@ -60,6 +62,13 @@ fun SettingsScreen(
     onOpenBackup: () -> Unit
 ) {
     var pickTheme by remember { mutableStateOf(false) }
+    // The lock / limit / auto-switch values come from SharedPreferences, which is
+    // NOT observable. Reading App.repo.* directly meant no recomposition after a
+    // change: the switch stayed visually put and the next tap computed
+    // !staleValue again, so it could never be toggled off. Mirror them locally.
+    var bioOn by remember { mutableStateOf(biometricLock) }
+    var autoOn by remember { mutableStateOf(autoVip) }
+    var limit by remember { mutableStateOf(historyLimit) }
     var pickLimit by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -85,12 +94,13 @@ fun SettingsScreen(
                 modifier = Modifier.clickable { pickTheme = true }
             )
 
+            Spacer(Modifier.height(Spacing.s))
             HorizontalDivider()
             Text(
                 "安全",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = Spacing.l, top = Spacing.m, bottom = Spacing.xs)
+                modifier = Modifier.padding(start = Spacing.l, top = Spacing.m, bottom = Spacing.s)
             )
 
             ListItem(
@@ -104,29 +114,33 @@ fun SettingsScreen(
                 leadingContent = { Icon(Icons.Filled.Lock, null, tint = MaterialTheme.colorScheme.primary) },
                 trailingContent = {
                     Switch(
-                        checked = biometricLock,
+                        checked = bioOn,
                         enabled = biometricAvailable,
-                        onCheckedChange = { onSetBiometricLock(it) }
+                        onCheckedChange = { bioOn = it; onSetBiometricLock(it) }
                     )
                 },
                 colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
                 modifier = Modifier.clickable {
                     // never let the toggle be flipped on where it cannot be honoured
-                    if (biometricAvailable) onSetBiometricLock(!biometricLock)
+                    if (biometricAvailable) {
+                        bioOn = !bioOn
+                        onSetBiometricLock(bioOn)
+                    }
                 }
             )
 
+            Spacer(Modifier.height(Spacing.s))
             HorizontalDivider()
             Text(
                 "内容",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = Spacing.l, top = Spacing.m, bottom = Spacing.xs)
+                modifier = Modifier.padding(start = Spacing.l, top = Spacing.m, bottom = Spacing.s)
             )
 
             ListItem(
                 headlineContent = { Text("最近浏览上限") },
-                supportingContent = { Text("当前保留 $historyLimit 条，超出后自动清理最旧的") },
+                supportingContent = { Text("当前保留 $limit 条，超出后自动清理最旧的") },
                 leadingContent = { Icon(Icons.Filled.History, null, tint = MaterialTheme.colorScheme.primary) },
                 colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
                 modifier = Modifier.clickable { pickLimit = true }
@@ -137,18 +151,22 @@ fun SettingsScreen(
                 supportingContent = { Text("当前账号 VIP 到期时自动切换到有 VIP 的账号") },
                 leadingContent = { Icon(Icons.Filled.Autorenew, null, tint = MaterialTheme.colorScheme.primary) },
                 trailingContent = {
-                    Switch(checked = autoVip, onCheckedChange = { onSetAutoVip(it) })
+                    Switch(checked = autoOn, onCheckedChange = { autoOn = it; onSetAutoVip(it) })
                 },
                 colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-                modifier = Modifier.clickable { onSetAutoVip(!autoVip) }
+                modifier = Modifier.clickable {
+                    autoOn = !autoOn
+                    onSetAutoVip(autoOn)
+                }
             )
 
+            Spacer(Modifier.height(Spacing.s))
             HorizontalDivider()
             Text(
                 "数据",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = Spacing.l, top = Spacing.m, bottom = Spacing.xs)
+                modifier = Modifier.padding(start = Spacing.l, top = Spacing.m, bottom = Spacing.s)
             )
 
             ListItem(
@@ -197,15 +215,17 @@ fun SettingsScreen(
                 Column {
                     listOf(500, 1000, 2000, 5000, 10000).forEach { n ->
                         ListItem(
-                            headlineContent = { Text("$n 条" + if (n == historyLimit) "（当前）" else "") },
+                            headlineContent = { Text("$n 条" + if (n == limit) "（当前）" else "") },
                             leadingContent = {
-                                RadioButton(selected = n == historyLimit, onClick = {
+                                RadioButton(selected = n == limit, onClick = {
+                                    limit = n
                                     onSetHistoryLimit(n)
                                     pickLimit = false
                                 })
                             },
                             colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
                             modifier = Modifier.clickable {
+                                limit = n
                                 onSetHistoryLimit(n)
                                 pickLimit = false
                             }

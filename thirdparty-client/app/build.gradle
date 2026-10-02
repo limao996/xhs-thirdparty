@@ -100,6 +100,11 @@ dependencies {
     implementation 'androidx.activity:activity-compose:1.8.2'
     // fingerprint / face unlock for the app lock (works back to API 23)
     implementation 'androidx.biometric:biometric:1.1.0'
+    // biometric 1.1.0 pulls in fragment 1.2.5, whose FragmentActivity rejects the
+    // request codes Compose's ActivityResultRegistry generates (they exceed 16
+    // bits), so every registerForActivityResult launcher died with
+    // 'Can only use lower 16 bits for requestCode'.
+    implementation 'androidx.fragment:fragment-ktx:1.6.2'
 
     // ---- networking / crypto / json ----
     // org.json (bundled in the framework) is what every model already parses
