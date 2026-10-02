@@ -29,6 +29,9 @@ import com.thirdparty.xhs.data.NoteItem
 import com.thirdparty.xhs.ui.theme.Spacing
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 /**
  * Shared masonry/waterfall grid used by 发现 / 收藏 / 最近浏览 / 搜索结果 / 作者主页.
@@ -70,8 +73,18 @@ fun XhsWaterfallGrid(
     // guarantees the grid can never crash regardless.
     val safeItems = remember(items) { items.distinctBy { it.noteId } }
 
-    // back to the top whenever the caller signals a refresh
+    // Back to the top when the caller signals a refresh — but ONLY on an actual
+    // change of [resetKey].
+    //
+    // A LaunchedEffect also re-runs every time the composable RE-ENTERS the
+    // composition (returning from a detail page, switching tabs, …), so an
+    // ungarded `scrollToItem(0)` here threw away the restored scroll offset and
+    // dumped the user back at the top of the list after every trip — exactly the
+    // "I have to find that post again" complaint. The first run after entering is
+    // therefore skipped; the grid keeps whatever position it restored.
+    var resetKeySeen by remember { mutableStateOf(false) }
     LaunchedEffect(resetKey) {
+        if (!resetKeySeen) { resetKeySeen = true; return@LaunchedEffect }
         if (safeItems.isNotEmpty()) gridState.scrollToItem(0)
     }
 

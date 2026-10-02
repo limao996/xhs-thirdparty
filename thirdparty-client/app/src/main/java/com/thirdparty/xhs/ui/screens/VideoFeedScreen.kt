@@ -91,11 +91,21 @@ fun VideoFeedScreen(
     LaunchedEffect(Unit) {
         if (state.items.isEmpty() && !state.firstLoading) viewModel.loadMore()
     }
-    // refresh when the 推荐 tab is re-tapped
+    // refresh when the 推荐 tab is re-tapped.
+    //
+    // Guarded on a CHANGE of refreshTick, not on `refreshTick > 0`: a
+    // LaunchedEffect also re-runs whenever the composable re-enters the
+    // composition, so after the user had refreshed once (`refreshTick == 1`)
+    // every return from the detail page would reload the feed and jump back to
+    // the first video — losing their place mid-session.
+    var refreshTickSeen by remember { mutableStateOf(-1) }
     LaunchedEffect(refreshTick) {
-        if (refreshTick > 0) {
-            // refreshing must also return the viewer to the first video,
-            // otherwise they stay parked on the old position
+        if (refreshTickSeen == refreshTick) return@LaunchedEffect
+        val isFirst = refreshTickSeen == -1
+        refreshTickSeen = refreshTick
+        if (!isFirst) {
+            // an actual refresh returns the viewer to the first video, otherwise
+            // they stay parked on the old position
             pagerState.scrollToPage(0)
             viewModel.refresh()
         }

@@ -113,6 +113,14 @@ fun HomeScreen(
             // content — instant tab switch (no transition).
             // AnimatedContent cross-faded the outgoing and incoming tabs, which
             // rendered both pages at once and showed an intermediate frame.
+            // Tabs are a plain `when`, and leaving a branch DISCARDS its
+            // rememberSaveable state — only navigation destinations get a
+            // SaveableStateProvider. Without this holder, switching 推荐 → 发现 →
+            // 推荐 rebuilt the feed pager from scratch and threw the viewer back
+            // to the first video (and likewise for every other tab's scroll
+            // position). Keying the holder by tab keeps each tab's state alive.
+            val tabStateHolder = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
+            tabStateHolder.SaveableStateProvider(tab.name) {
             when (tab) {
                 HomeTab.FEED -> VideoFeedScreen(
                     onOpenDetail = onOpenDetail,
@@ -157,6 +165,7 @@ fun HomeScreen(
                         )
                     }
                 }
+            }
             }
 
             // immersive translucent header overlay
