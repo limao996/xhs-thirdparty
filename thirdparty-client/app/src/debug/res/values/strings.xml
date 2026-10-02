@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug-only overrides.
+
+  The launcher label is suffixed so a debug install is never mistaken for the
+  release one — they sit side by side on the same device (different package
+  names), and two identical "小黄书" icons are indistinguishable on the home
+  screen.
+
+  This file only exists in the debug variant; the release build keeps the plain
+  name from src/main.
+-->
+<resources>
+    <string name="app_name">小黄书.debug</string>
+</resources>
