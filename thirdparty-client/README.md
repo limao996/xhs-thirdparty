@@ -1558,3 +1558,23 @@ M3 Expressive 的主题入口在 material3 **稳定版里是 internal**，只有
 - AGP 9 自带 Kotlin，再应用 `kotlin.android` 会报 "Cannot add extension with name 'kotlin'"
 - AGP 9 拒绝插件触碰 `kotlin.sourceSets` —— **它的报错信息直接给了
   `android.disallowKotlinSourceSets=false`**。认真读报错里的 Solution 段省了很多时间。
+
+### 第 88 轮 · Gradle wrapper 改回可移植 URL
+上一轮为了绕过发行包下载超时，我把 `distributionUrl` 指向了本机文件
+（`file:///D:/Scoop/cache/...`）—— **换台机器就构建不了**，这对一个 git 交付物是硬伤。
+现改回标准 `https://services.gradle.org/distributions/gradle-9.8.0-bin.zip`，
+并把 `networkTimeout` 提到 120s、`retries` 提到 3 次。
+
+另外修掉一个自己写出来的坑：用 `-replace 'distributionUrl=.*'` 时，
+它**同时匹配到了 `validateDistributionUrl=` 那一行**（子串包含），
+把两行一起改坏了，导致 wrapper 反复下载。改成写入完整文件。
+
+本机构建则直接调用已解压的 Gradle 二进制（13s，对比 wrapper 的 119s）：
+```
+~/.gradle/wrapper/dists/gradle-9.8.0-bin/<hash>/gradle-9.8.0/bin/gradle.bat
+```
+
+### 教训：正则替换时要盯住"子串包含"
+`distributionUrl=.*` 会命中 `validateDistributionUrl=...` 里的 `distributionUrl=`。
+这类**键名互为子串**的配置（`x=` 和 `prefixX=`）在大批量改写时特别容易误伤，
+应该用 `(?m)^distributionUrl=.*$` 这样锚定的模式，或者干脆整文件重写。
