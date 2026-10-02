@@ -5,6 +5,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.asPaddingValues
@@ -51,12 +52,29 @@ object Spacing {
     val xxl: Dp = 32.dp
 }
 
-/** Corner radii bound to Material3 shape tokens (avoids ad-hoc RoundedCornerShape). */
+/**
+ * Corner radii read straight from the active Material 3 shape scale.
+ *
+ * These used to be a second, hand-written copy of the scale, and the two had
+ * already drifted (`large` was 16dp here and 20dp in [XhsShapes]). MD3 has one
+ * shape scale; binding to it means a call site cannot silently disagree with the
+ * theme, and retheming stays a one-line change.
+ */
 object Corners {
-    val extraSmall: RoundedCornerShape = RoundedCornerShape(4.dp)
-    val small: RoundedCornerShape = RoundedCornerShape(8.dp)
-    val medium: RoundedCornerShape = RoundedCornerShape(12.dp)
-    val large: RoundedCornerShape = RoundedCornerShape(16.dp)
+    val extraSmall: Shape
+        @Composable @ReadOnlyComposable get() = MaterialTheme.shapes.extraSmall
+
+    val small: Shape
+        @Composable @ReadOnlyComposable get() = MaterialTheme.shapes.small
+
+    val medium: Shape
+        @Composable @ReadOnlyComposable get() = MaterialTheme.shapes.medium
+
+    val large: Shape
+        @Composable @ReadOnlyComposable get() = MaterialTheme.shapes.large
+
+    val extraLarge: Shape
+        @Composable @ReadOnlyComposable get() = MaterialTheme.shapes.extraLarge
 }
 
 /** Standard avatar sizes on the 4dp grid. */

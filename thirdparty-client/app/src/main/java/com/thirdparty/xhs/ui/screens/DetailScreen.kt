@@ -361,7 +361,15 @@ private fun DetailContent(
             val images = item.images.ifEmpty {
                 listOf(item.cover).filter { it.isNotEmpty() }.map { NoteImage(it) }
             }
-            ImageGallery(images = images, onOpen = { onOpenImage(it) })
+            // Same half-screen cap the windowed video player uses. Without it a
+            // tall portrait gallery filled most of the screen and pushed the
+            // title / author / actions off the first screen.
+            val galleryConfig = androidx.compose.ui.platform.LocalConfiguration.current
+            ImageGallery(
+                images = images,
+                maxHeight = (galleryConfig.screenHeightDp * 0.5f).dp,
+                onOpen = { onOpenImage(it) }
+            )
         }
 
         Column(Modifier.padding(horizontal = Spacing.l, vertical = Spacing.m)) {
@@ -383,7 +391,7 @@ private fun DetailContent(
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(Spacing.s))
             HorizontalDivider()
 
             state.author?.let { author ->
@@ -411,7 +419,7 @@ private fun DetailContent(
                     Surface(onClick = { viewModel.toggleFollow() }, shape = XhsShapes.small,
                         color = if (state.followed) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.primary) {
                         Text(if (state.followed) "已关注" else "+ 关注",
-                            Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            Modifier.padding(horizontal = Spacing.m, vertical = Spacing.xs),
                             style = MaterialTheme.typography.labelMedium,
                             color = if (state.followed) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onPrimary)
                     }
@@ -428,7 +436,7 @@ private fun DetailContent(
 
             val topic = item.detailTopic()
             if (topic.isNotBlank()) {
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(Spacing.s))
                 Surface(shape = Corners.small, color = MaterialTheme.colorScheme.secondaryContainer) {
                     Text("#$topic", Modifier.padding(horizontal = Spacing.m, vertical = Spacing.xs),
                         style = MaterialTheme.typography.labelMedium,
@@ -436,7 +444,7 @@ private fun DetailContent(
                 }
             }
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(Spacing.l))
             Text("评论 ${item.commentCount}", style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(4.dp))
             if (state.commentsLoading && state.comments.isEmpty()) {
@@ -461,7 +469,7 @@ private fun DetailContent(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         if (state.commentsLoading) {
-                            CircularProgressIndicator(Modifier.size(18.dp))
+                            CircularProgressIndicator(Modifier.size(16.dp))
                             Spacer(Modifier.width(Spacing.s))
                         }
                         Text("查看更多评论")
@@ -507,7 +515,7 @@ private fun CommentRow(c: CommentItem, onOpenReplies: (CommentItem) -> Unit) {
                 Text(timeStr(c.createdAt), style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (c.likeCount > 0) {
-                    Spacer(Modifier.width(10.dp))
+                    Spacer(Modifier.width(Spacing.s))
                     Text("♥${c.likeCount}", style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }

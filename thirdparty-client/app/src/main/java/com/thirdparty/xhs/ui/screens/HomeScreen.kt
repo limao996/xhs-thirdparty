@@ -267,7 +267,7 @@ private fun HomeHeader(guest: String, rotating: Boolean, onOpenSearch: () -> Uni
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text("小黄书", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(Spacing.s))
         Text(guest, style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
             modifier = Modifier.weight(1f))

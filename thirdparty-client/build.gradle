@@ -1,8 +1,9 @@
 // Top-level build file
 buildscript {
     ext {
-        agp_version = '8.1.4'
-        kotlin_version = '1.9.22'
+        agp_version = '9.4.1'
+        kotlin_version = '2.1.21'
+        ksp_version = '2.1.21-2.0.2'
     }
     repositories {
         google()
@@ -11,6 +12,12 @@ buildscript {
     dependencies {
         classpath "com.android.tools.build:gradle:$agp_version"
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+        // Kotlin 2.x: the Compose compiler is a Kotlin plugin now, not an AGP
+        // option. Same version as the Kotlin plugin, by construction.
+        classpath "org.jetbrains.kotlin:compose-compiler-gradle-plugin:$kotlin_version"
+        // Room's annotation processor: kapt is deprecated under Kotlin 2.x and
+        // fails outright here, so the processor runs through KSP instead.
+        classpath "com.google.devtools.ksp:symbol-processing-gradle-plugin:$ksp_version"
     }
 }
 

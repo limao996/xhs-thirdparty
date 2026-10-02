@@ -52,6 +52,7 @@ import kotlinx.coroutines.launch
 import com.thirdparty.xhs.ui.screens.SettingsScreen
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
+import androidx.compose.material.icons.filled.Close
 
 /**
  * A Scaffold wrapper hosting the local (Room) list for a given mode.
@@ -70,27 +71,51 @@ private fun LocalListNav(title: String, mode: LocalListViewModel.Mode, onBack: (
         }
     )
     val state by viewModel.ui.collectAsStateWithLifecycle()
+
+    // Selection lives here, not inside LocalListScreen, so this Scaffold can swap
+    // its TopAppBar for a contextual bar. Put in the screen it left two stacked
+    // bars: the page title above and the selection row below it.
+    var selected by remember { mutableStateOf(emptySet<Long>()) }
+    val selecting = selected.isNotEmpty()
+
     var confirmClear by remember { mutableStateOf(false) }
+    var confirmRemove by remember { mutableStateOf(false) }
+    var confirmExit by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(title) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
-                },
-                actions = {
-                    if (state.all.isNotEmpty()) {
-                        IconButton(onClick = { confirmClear = true }) {
-                            Icon(Icons.Filled.DeleteOutline, contentDescription = "清空")
+            if (selecting) {
+                SelectionTopBar(
+                    count = selected.size,
+                    onSelectAll = { selected = state.all.map { it.noteId }.toSet() },
+                    onExit = { confirmExit = true },
+                    onDelete = { confirmRemove = true }
+                )
+            } else {
+                TopAppBar(
+                    title = { Text(title) },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
+                    },
+                    actions = {
+                        if (state.all.isNotEmpty()) {
+                            IconButton(onClick = { confirmClear = true }) {
+                                Icon(Icons.Filled.DeleteOutline, contentDescription = "清空")
+                            }
                         }
                     }
-                }
-            )
+                )
+            }
         }
     ) { pad ->
         Box(Modifier.padding(pad)) {
-            LocalListScreen(mode = mode, onOpenDetail = onOpenDetail, viewModel = viewModel)
+            LocalListScreen(
+                mode = mode,
+                onOpenDetail = onOpenDetail,
+                viewModel = viewModel,
+                selected = selected,
+                onSelectionChange = { selected = it }
+            )
         }
     }
 
@@ -110,6 +135,73 @@ private fun LocalListNav(title: String, mode: LocalListViewModel.Mode, onBack: (
             }
         )
     }
+
+    // Un-favouriting is destructive and has no undo, so it asks first.
+    if (confirmRemove) {
+        AlertDialog(
+            onDismissRequest = { confirmRemove = false },
+            title = { Text("取消收藏？") },
+            text = { Text("将从收藏中移除已选的 ${selected.size} 项，此操作不可撤销。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.removeSaved(selected)
+                    selected = emptySet()
+                    confirmRemove = false
+                }) { Text("取消收藏") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmRemove = false }) { Text("再想想") }
+            }
+        )
+    }
+
+    // Leaving selection restores the normal title bar, so a mis-tap on the X
+    // silently throws away everything that was ticked. Confirm while anything is
+    // selected.
+    if (confirmExit) {
+        AlertDialog(
+            onDismissRequest = { confirmExit = false },
+            title = { Text("退出多选？") },
+            text = { Text("已选的 ${selected.size} 项会被取消勾选。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    selected = emptySet()
+                    confirmExit = false
+                }) { Text("退出") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmExit = false }) { Text("继续多选") }
+            }
+        )
+    }
+}
+
+/**
+ * Contextual action bar shown in place of the page title while items are ticked
+ * (Material 3 "contextual app bar" pattern).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SelectionTopBar(
+    count: Int,
+    onSelectAll: () -> Unit,
+    onExit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    TopAppBar(
+        title = { Text("已选 $count 项") },
+        navigationIcon = {
+            IconButton(onClick = onExit) {
+                Icon(Icons.Filled.Close, contentDescription = "退出多选")
+            }
+        },
+        actions = {
+            TextButton(onClick = onSelectAll) { Text("全选") }
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Filled.DeleteOutline, contentDescription = "取消收藏")
+            }
+        }
+    )
 }
 
 /** Top-level Navigation Compose graph with polished enter/exit transitions. */

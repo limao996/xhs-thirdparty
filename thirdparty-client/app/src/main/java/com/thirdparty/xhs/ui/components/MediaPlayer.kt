@@ -370,7 +370,7 @@ private fun AutoHideController(
             // comfortably tappable (40dp buttons, 28dp slider).
             val dense = !fullscreen
             val btnSize = if (dense) 40.dp else 48.dp
-            val iconSize = if (dense) 21.dp else 24.dp
+            val iconSize = if (dense) 20.dp else 24.dp
             Column(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                     .background(Scrim.strong).padding(vertical = if (dense) 1.dp else Spacing.xs)

@@ -199,7 +199,7 @@ fun WaterfallCard(
                         contentDescription = "已选择",
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.align(Alignment.TopStart)
-                            .padding(Spacing.xs).size(26.dp)
+                            .padding(Spacing.xs).size(24.dp)
                     )
                 }
                 FeeBadge(item, compact = true, modifier = Modifier.align(Alignment.TopEnd).padding(Spacing.xs))

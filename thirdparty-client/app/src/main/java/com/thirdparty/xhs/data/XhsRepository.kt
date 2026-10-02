@@ -315,12 +315,26 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
      */
     suspend fun switchToVipAccount(): Boolean = withContext(Dispatchers.IO) {
         if (!api.autoSwitchOnVipExpiry) return@withContext false
+
+        // No network -> there is nothing to decide and nothing to switch to.
+        // Attempting anyway just burns a request that fails slowly on a weak
+        // link and can flip the account mid-request on a flaky one.
+        if (!hasNetwork()) return@withContext false
+
         val nowS0 = System.currentTimeMillis() / 1000
         // Decide from the CACHED window first. A VIP end does not move on its own,
-        // so the 5s poll must not spend a request every time — it only needs the
+        // so the poll must not spend a request every time — it only needs the
         // server when the local value says the window has lapsed (or is unknown).
         val cached = api.cachedVipEnd
         if (cached > 0L && cached - nowS0 > VIP_MIN_REMAINING_S) return@withContext false
+
+        // Escalating cooldown. It used to create up to VIP_SWITCH_ATTEMPTS brand
+        // new identities per check; on a weak link or when the backend stops
+        // handing out VIP that produced a pile of junk accounts, and the ones
+        // created in between were never recorded in 历史账号 — which is exactly
+        // what "创建多个账号 / 历史账号没更新" looked like.
+        if (nowS0 < nextSwitchAllowedAtS) return@withContext false
+
         val current = myProfile() ?: return@withContext false
         // "有效期不足" covers both an already-expired window and one about to
         // lapse: switching exactly at expiry would drop the user mid-action, so a
@@ -328,26 +342,77 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
         val nowS = System.currentTimeMillis() / 1000
         val stillEnough = current.isVip &&
             (current.vipEnd <= 0L || (current.vipEnd - nowS) > VIP_MIN_REMAINING_S)
-        if (stillEnough) return@withContext false
-        repeat(VIP_SWITCH_ATTEMPTS) {
-            val id = api.freshRandomMac()
-            if (api.loginAsDevice(id).optInt("result") == 1) {
-                val next = myProfile()
-                if (next?.isVip == true) {
-                    runCatching { rememberCurrentAccount() }
-                    return@withContext true
-                }
-            }
+        if (stillEnough) {
+            switchFailStreak = 0
+            return@withContext false
         }
+
+        // Exactly ONE new identity per attempt. Registering an identity makes it
+        // the account in use, so trying several in a row leaves the user on the
+        // last one and orphans the rest.
+        nextSwitchAllowedAtS = nowS
+        val id = api.freshRandomMac()
+        val loggedIn = api.loginAsDevice(id).optInt("result") == 1
+        if (!loggedIn) {
+            backoffSwitch(nowS)
+            return@withContext false
+        }
+        // Record it immediately: the identity in use has already changed, so the
+        // history must reflect that before the next poll comes round.
+        runCatching { rememberCurrentAccount() }
+        val next = myProfile()
+        if (next?.isVip == true) {
+            switchFailStreak = 0
+            nextSwitchAllowedAtS = 0L
+            return@withContext true
+        }
+        // Switched to a fresh account that still has no VIP: keep it (it is real
+        // and usable) but wait longer before spending another identity.
+        backoffSwitch(nowS)
         false
     }
 
+    /** Grow the wait after each unsuccessful switch, capped, so a dead backend
+     *  cannot be farmed for accounts by the 30s poll. */
+    private fun backoffSwitch(nowS: Long) {
+        switchFailStreak = (switchFailStreak + 1).coerceAtMost(8)
+        val wait = (VIP_SWITCH_BACKOFF_BASE_S shl (switchFailStreak - 1))
+            .coerceAtMost(VIP_SWITCH_BACKOFF_MAX_S)
+        nextSwitchAllowedAtS = nowS + wait
+    }
+
+    /**
+     * True when a validated internet connection is available.
+     *
+     * `VALIDATED` matters: on a captive-portal / half-connected Wi-Fi the network
+     * exists but every request hangs, which is the weak-network case the VIP poll
+     * has to sit out rather than retry against.
+     */
+    fun hasNetwork(): Boolean = runCatching {
+        val cm = appContext.getSystemService(android.content.Context.CONNECTIVITY_SERVICE)
+            as? android.net.ConnectivityManager ?: return true
+        val net = cm.activeNetwork ?: return false
+        val caps = cm.getNetworkCapabilities(net) ?: return false
+        caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    }.getOrDefault(true)
+
     private companion object {
-        /** how many fresh accounts to try before giving up on finding VIP */
-        const val VIP_SWITCH_ATTEMPTS = 5
         /** a window with less than this much left counts as "insufficient" */
         const val VIP_MIN_REMAINING_S = 60L
+        /**
+         * Cooldown before the next automatic switch may spend another identity.
+         * Doubles per consecutive failure (60s, 2m, 4m ... ) up to [VIP_SWITCH_BACKOFF_MAX_S].
+         */
+        const val VIP_SWITCH_BACKOFF_BASE_S = 60L
+        const val VIP_SWITCH_BACKOFF_MAX_S = 30L * 60L
     }
+
+    /** consecutive unsuccessful automatic switches, drives the cooldown */
+    private var switchFailStreak = 0
+
+    /** epoch seconds before which no automatic switch may run */
+    private var nextSwitchAllowedAtS = 0L
 
     /** Drop anything beyond the configured 最近浏览 limit, right away. */
     suspend fun trimHistory() = withContext(Dispatchers.IO) { historyDao.trim(api.historyLimit) }

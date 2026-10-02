@@ -41,7 +41,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -131,7 +130,6 @@ fun ProfileScreen(
                         Text(
                             state.profile?.userName ?: if (state.error) "账号信息加载失败" else "游客",
                             style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.SemiBold
                         )
                         Spacer(Modifier.height(Spacing.xs))
                         Text(
@@ -161,7 +159,7 @@ fun ProfileScreen(
                         else MaterialTheme.colorScheme.onSurfaceVariant
                     ) {
                         Text(
-                            if (vip) "会员 VIP" else "普通用户",
+                            if (vip) "VIP用户" else "普通用户",
                             Modifier.padding(horizontal = Spacing.m, vertical = Spacing.xs),
                             style = MaterialTheme.typography.labelMedium
                         )
@@ -324,7 +322,6 @@ private fun ProfileStat(
         Text(
             value.toString(),
             style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
             // a tappable count is tinted so the affordance is visible
             color = if (enabled) MaterialTheme.colorScheme.primary
             else MaterialTheme.colorScheme.onSurface

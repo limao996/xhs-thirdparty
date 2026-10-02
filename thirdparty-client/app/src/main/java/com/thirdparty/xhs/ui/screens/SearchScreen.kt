@@ -123,7 +123,7 @@ fun SearchScreen(
                 // wrap layout (not horizontal scroll)
                 FlowRow(
                     maxItemsInEachRow = Int.MAX_VALUE,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.s),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
                 ) {

@@ -14,6 +14,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.MaterialExpressiveTheme
+import androidx.compose.material3.MotionScheme
+import androidx.compose.material3.ShapeDefaults
 
 /** Theme preference: follow system / light / dark. */
 enum class ThemeMode(val key: String) {
@@ -71,6 +75,20 @@ private val DarkColors = darkColorScheme(
     outline = Color(0xFF9D8C90)
 )
 
+/**
+ * App theme, built on **M3 Expressive**.
+ *
+ * [MaterialExpressiveTheme] is the expressive entry point (Material 3, 2025):
+ * compared with [MaterialTheme] it supplies the expressive shape scale and, via
+ * [MotionScheme.expressive], the springy motion specs that every Material
+ * component then animates with — the motion half is what actually makes an
+ * "Expressive" UI feel different, and it cannot be opted into per-component.
+ *
+ * Everything else (colour roles, type scale) stays as before; the app's own
+ * composables read `MaterialTheme.*`, so they inherit the expressive behaviour
+ * without a call-site change.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun XhsTheme(
     mode: ThemeMode = ThemeMode.SYSTEM,
@@ -86,8 +104,9 @@ fun XhsTheme(
         dark -> DarkColors
         else -> LightColors
     }
-    MaterialTheme(
+    MaterialExpressiveTheme(
         colorScheme = colorScheme,
+        motionScheme = MotionScheme.expressive(),
         typography = XhsTypography,
         shapes = XhsShapes,
         content = content
@@ -113,8 +132,19 @@ fun ThemeMode.isDark(systemDark: Boolean): Boolean = when (this) {
     ThemeMode.DARK -> true
 }
 
+/**
+ * Material 3 shape scale, at the official defaults.
+ *
+ * `large` used to be 20dp and `extraLarge` was left unset; MD3 specifies
+ * 4 / 8 / 12 / 16 / 28. Deviating from the scale is exactly what makes an app
+ * look "almost Material" — and it meant two different shapes both claimed to be
+ * "large" (see [Corners], which now reads this scheme instead of a hand-written
+ * copy of it).
+ */
 val XhsShapes = Shapes(
-    small = RoundedCornerShape(8.dp),
-    medium = RoundedCornerShape(12.dp),
-    large = RoundedCornerShape(20.dp)
+    extraSmall = ShapeDefaults.ExtraSmall,
+    small = ShapeDefaults.Small,
+    medium = ShapeDefaults.Medium,
+    large = ShapeDefaults.Large,
+    extraLarge = ShapeDefaults.ExtraLarge
 )

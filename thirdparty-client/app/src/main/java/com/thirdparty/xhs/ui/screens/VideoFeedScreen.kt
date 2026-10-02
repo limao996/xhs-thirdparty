@@ -136,7 +136,7 @@ fun VideoFeedScreen(
         state = pagerState,
         modifier = Modifier.fillMaxSize().background(Color.Black),
         // keep the immediate neighbours composed so their players can pre-buffer
-        beyondBoundsPageCount = 1
+        beyondViewportPageCount = 1
     ) { index ->
         val item = state.items[index]
         val isCurrent = pagerState.currentPage == index
