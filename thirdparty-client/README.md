@@ -1481,3 +1481,18 @@ uiautomator dump        2036~3500 ms <-- 贵 60 倍
 
 **首要原则：优化之前先测量。** 我前两轮一直在"感觉慢"里加 sleep 和重试，
 而真正贵的那一步恰恰是我为了保险而加进去的。
+
+### 第 84 轮 · VIP 到期自动切换默认开启
+`autoSwitchOnVipExpiry` 默认值 false -> true（仅影响新装/未设置过的用户，
+已显式关掉的不受影响）。
+
+### 教训：断言写错会浪费一整轮
+我用 `text="VIP 到期自动切换".*?checked="(true|false)"` 读开关状态，
+结果匹配到的是 **TextView 自己的 checked 属性**（恒为 false），
+于是把"已生效"误报成"没生效"。差点又去改一遍已经正确的代码。
+Compose 的开关在 dump 里不是 `android.widget.Switch`，而是
+`checkable="true"` 的节点，要和标题行按 y 坐标对应。
+正确读法已写进 `tools/verify.ps1` 的 `SwitchStates`。
+
+**验证代码本身也会说谎**：断言失败时，先确认断言读的是不是它以为的那个东西，
+再怀疑被测代码。
