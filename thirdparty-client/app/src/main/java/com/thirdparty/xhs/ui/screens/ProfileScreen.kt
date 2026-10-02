@@ -62,6 +62,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.foundation.background
 
 /**
  * 我的：账号信息（用户名/ID/VIP）+ 收藏 / 最近浏览 / 我关注的作者 / 切换游客 / 外观主题。
@@ -115,6 +116,7 @@ fun ProfileScreen(
     // top of this area; without it 外观主题 could never be brought into view.
     Column(
         Modifier.fillMaxSize()
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
             .verticalScroll(rememberScrollState())
             .padding(bottom = bottomNavClearance())
     ) {
@@ -187,14 +189,14 @@ fun ProfileScreen(
                 }
             }
         }
-        HorizontalDivider()
+        Spacer(Modifier.height(Spacing.m))
         SectionLabel("我的内容")
 
         ProfileEntry(Icons.Filled.Favorite, "我的收藏", "${state.savedCount} 条", onOpenSaved)
         ProfileEntry(Icons.Filled.History, "最近浏览", "${state.historyCount} 条", onOpenHistory)
         ProfileEntry(Icons.Filled.Group, "我关注的作者", "${state.followedCount} 位", onOpenFollowed)
 
-        HorizontalDivider()
+        Spacer(Modifier.height(Spacing.m))
         SectionLabel("账号")
         if (onRotateGuest != null) {
             // confirm first: switching creates a brand-new account; the previous
@@ -217,7 +219,7 @@ fun ProfileScreen(
                     }
                 )
             }
-            HorizontalDivider()
+            Spacer(Modifier.height(Spacing.m))
             ListItem(
                 headlineContent = { Text("切换游客账号") },
                 supportingContent = { Text(if (rotating) "正在创建新的随机账号…" else "生成一个全新的随机游客账号（每次不同）") },
@@ -225,11 +227,13 @@ fun ProfileScreen(
                     if (rotating) LoadingIndicator(Modifier.size(24.dp))
                     else Icon(Icons.Filled.SwitchAccount, null, tint = MaterialTheme.colorScheme.primary)
                 },
-                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
+                colors = ListItemDefaults.colors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
+            ),
                     // confirm first: switching creates a brand-new account and the
                     // previous one is only reachable through 历史账号, so an
                     // accidental tap is not trivially undone.
-                    modifier = Modifier.clickable { confirmRotate = true }
+                    modifier = Modifier.cardRow { confirmRotate = true }
             )
             if (onOpenAccountHistory != null) {
                 ListItem(
@@ -250,14 +254,16 @@ fun ProfileScreen(
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     },
-                    colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-                    modifier = Modifier.clickable { onOpenAccountHistory() }
+                    colors = ListItemDefaults.colors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
+            ),
+                    modifier = Modifier.cardRow { onOpenAccountHistory() }
                 )
             }
 
         }
 
-        HorizontalDivider()
+        Spacer(Modifier.height(Spacing.m))
         SectionLabel("其他")
         if (onOpenSettings != null) {
             ProfileEntry(
@@ -278,8 +284,10 @@ fun ProfileScreen(
                     tint = MaterialTheme.colorScheme.primary
                 )
             },
-            colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-            modifier = Modifier.clickable { confirmClear = true }
+            colors = ListItemDefaults.colors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
+            ),
+            modifier = Modifier.cardRow { confirmClear = true }
         )
         if (confirmClear) {
             AlertDialog(
@@ -354,11 +362,32 @@ private fun ProfileEntry(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         },
-        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-        modifier = Modifier.clickable { onClick() }
+        // Each row is its own rounded container over the contrasting page surface
+        // (M3 late-2025 list redesign). Rows used to be full-width slabs on the
+        // page colour, which read as one undifferentiated list.
+        colors = ListItemDefaults.colors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
+        ),
+        modifier = Modifier
+            .padding(horizontal = Spacing.m, vertical = 2.dp)
+            .clip(Corners.large)
+            .clickable { onClick() }
     )
 }
 
+
+/**
+ * Makes a full-width list row read as its own rounded card, matching [ProfileEntry].
+ *
+ * The page sits on `surfaceContainerLow` and every row floats on it as a
+ * `surfaceContainerLowest` card with a small gap — the M3 late-2025 "contained
+ * list" look. Applied via a modifier so the rows that are plain [ListItem]s
+ * (账号 / 其他 sections) cannot drift away from the ones built by [ProfileEntry].
+ */
+@Composable private fun Modifier.cardRow(onClick: () -> Unit): Modifier = this
+    .padding(horizontal = Spacing.m, vertical = 2.dp)
+    .clip(Corners.large)
+    .clickable { onClick() }
 
 /** Section header, matching the one used on the 设置 page. */
 @Composable

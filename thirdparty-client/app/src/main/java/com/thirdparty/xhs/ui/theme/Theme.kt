@@ -18,6 +18,7 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.ShapeDefaults
+import androidx.compose.ui.text.font.FontWeight
 
 /** Theme preference: follow system / light / dark. */
 enum class ThemeMode(val key: String) {
@@ -124,16 +125,16 @@ fun XhsTheme(
     val systemDark = isSystemInDarkTheme()
     val dark = mode.isDark(systemDark)
 
-    // Brand scheme, NOT dynamic colour.
-    //
-    // Dynamic colour derives every role from the user's wallpaper, which is
-    // great for a generic app but wrong here: the work badges read roles
-    // (tertiary = VIP, primaryContainer = 粉丝圈, …) and must mean the same
-    // thing on every device. Under a dark wallpaper `tertiary` came out a muddy
-    // mauve that was indistinguishable from `secondaryContainer`, which is the
-    // opposite of what a badge is for. The M3 guidance explicitly allows a
-    // brand-seeded static scheme, and this app needs deterministic label colours.
-    val colorScheme = if (dark) DarkColors else LightColors
+    // M3 Expressive "Personal": derive the whole scheme from the user's wallpaper
+    // where the platform supports it, and fall back to the brand scheme elsewhere.
+    // The brand still shows through on API < 31 and via the app icon/window colours.
+    val context = LocalContext.current
+    val colorScheme = when {
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
+            if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        dark -> DarkColors
+        else -> LightColors
+    }
 
     MaterialExpressiveTheme(
         colorScheme = colorScheme,
@@ -144,7 +145,31 @@ fun XhsTheme(
     )
 }
 
-val XhsTypography = Typography()
+/**
+ * Expressive type scale.
+ *
+ * M3 Expressive calls for **heavier weights and tighter tracking** on the
+ * emphasis roles, which is what gives an Expressive screen its bolder voice.
+ * This is done once at the theme level, not per call site: an override on a
+ * single `Text` drifts the moment the scale changes, whereas a themed scale
+ * keeps every screen consistent.
+ *
+ * Only the leading roles are adjusted — body copy stays at the default weight so
+ * long passages remain comfortable to read.
+ */
+val XhsTypography = Typography().let { base ->
+    base.copy(
+        displayLarge = base.displayLarge.copy(fontWeight = FontWeight.Bold),
+        displayMedium = base.displayMedium.copy(fontWeight = FontWeight.Bold),
+        displaySmall = base.displaySmall.copy(fontWeight = FontWeight.Bold),
+        headlineLarge = base.headlineLarge.copy(fontWeight = FontWeight.Bold),
+        headlineMedium = base.headlineMedium.copy(fontWeight = FontWeight.Bold),
+        headlineSmall = base.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
+        titleLarge = base.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+        titleMedium = base.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+        labelLarge = base.labelLarge.copy(fontWeight = FontWeight.SemiBold)
+    )
+}
 
 /**
  * Launch-window backgrounds. Must stay in sync with [LightColors.background] and

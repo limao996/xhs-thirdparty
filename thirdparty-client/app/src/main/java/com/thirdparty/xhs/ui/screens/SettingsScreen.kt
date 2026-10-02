@@ -38,6 +38,11 @@ import com.thirdparty.xhs.ui.theme.Spacing
 import com.thirdparty.xhs.ui.theme.ThemeMode
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.background
+import androidx.compose.material3.Surface
+import com.thirdparty.xhs.ui.theme.Corners
+import androidx.compose.foundation.layout.fillMaxWidth
 
 /**
  * 设置.
@@ -83,85 +88,85 @@ fun SettingsScreen(
             )
         }
     ) { pad ->
-        Column(Modifier.fillMaxSize().padding(pad).verticalScroll(rememberScrollState())) {
+        Column(
+            Modifier.fillMaxSize().padding(pad).verticalScroll(rememberScrollState())
+                .background(MaterialTheme.colorScheme.surfaceContainerLow)
+        ) {
 
-            // ---- 外观 ----
-            SectionLabel("外观")
-            ListItem(
-                headlineContent = { Text("外观主题") },
-                supportingContent = { Text(themeMode.label()) },
-                leadingContent = { Icon(Icons.Filled.Palette, null, tint = MaterialTheme.colorScheme.primary) },
-                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-                modifier = Modifier.clickable { pickTheme = true }
-            )
+            // M3 (late 2025) list redesign: **contained groups separated by gaps**,
+            // rather than full-width rows divided by hairlines. The group sits on a
+            // contrasting container colour and each section reads as one object.
+            SettingsGroup("外观") {
+                ListItem(
+                    headlineContent = { Text("外观主题") },
+                    supportingContent = { Text(themeMode.label()) },
+                    leadingContent = { Icon(Icons.Filled.Palette, null, tint = MaterialTheme.colorScheme.primary) },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    modifier = Modifier.clickable { pickTheme = true }
+                )
+            }
 
-            Spacer(Modifier.height(Spacing.s))
-            HorizontalDivider()
-            SectionLabel("安全")
-
-            ListItem(
-                headlineContent = { Text("指纹解锁") },
-                supportingContent = {
-                    Text(
-                        if (biometricAvailable) "打开或切回本应用需要验证指纹或设备密码"
-                        else "此设备未录入指纹或锁屏密码，无法启用"
-                    )
-                },
-                leadingContent = { Icon(Icons.Filled.Lock, null, tint = MaterialTheme.colorScheme.primary) },
-                trailingContent = {
-                    Switch(
-                        checked = bioOn,
-                        enabled = biometricAvailable,
-                        onCheckedChange = { bioOn = it; onSetBiometricLock(it) }
-                    )
-                },
-                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-                modifier = Modifier.clickable {
-                    // never let the toggle be flipped on where it cannot be honoured
-                    if (biometricAvailable) {
-                        bioOn = !bioOn
-                        onSetBiometricLock(bioOn)
+            SettingsGroup("安全") {
+                ListItem(
+                    headlineContent = { Text("指纹解锁") },
+                    supportingContent = {
+                        Text(
+                            if (biometricAvailable) "打开或切回本应用需要验证指纹或设备密码"
+                            else "此设备未录入指纹或锁屏密码，无法启用"
+                        )
+                    },
+                    leadingContent = { Icon(Icons.Filled.Lock, null, tint = MaterialTheme.colorScheme.primary) },
+                    trailingContent = {
+                        Switch(
+                            checked = bioOn,
+                            enabled = biometricAvailable,
+                            onCheckedChange = { bioOn = it; onSetBiometricLock(it) }
+                        )
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    modifier = Modifier.clickable {
+                        // never let the toggle be flipped on where it cannot be honoured
+                        if (biometricAvailable) {
+                            bioOn = !bioOn
+                            onSetBiometricLock(bioOn)
+                        }
                     }
-                }
-            )
+                )
+            }
 
-            Spacer(Modifier.height(Spacing.s))
-            HorizontalDivider()
-            SectionLabel("内容")
+            SettingsGroup("内容") {
+                ListItem(
+                    headlineContent = { Text("最近浏览上限") },
+                    supportingContent = { Text("当前保留 $limit 条，超出后自动清理最旧的") },
+                    leadingContent = { Icon(Icons.Filled.History, null, tint = MaterialTheme.colorScheme.primary) },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    modifier = Modifier.clickable { pickLimit = true }
+                )
 
-            ListItem(
-                headlineContent = { Text("最近浏览上限") },
-                supportingContent = { Text("当前保留 $limit 条，超出后自动清理最旧的") },
-                leadingContent = { Icon(Icons.Filled.History, null, tint = MaterialTheme.colorScheme.primary) },
-                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-                modifier = Modifier.clickable { pickLimit = true }
-            )
+                ListItem(
+                    headlineContent = { Text("VIP 到期自动切换") },
+                    supportingContent = { Text("当前账号 VIP 到期时自动切换到有 VIP 的账号") },
+                    leadingContent = { Icon(Icons.Filled.Autorenew, null, tint = MaterialTheme.colorScheme.primary) },
+                    trailingContent = {
+                        Switch(checked = autoOn, onCheckedChange = { autoOn = it; onSetAutoVip(it) })
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    modifier = Modifier.clickable {
+                        autoOn = !autoOn
+                        onSetAutoVip(autoOn)
+                    }
+                )
+            }
 
-            ListItem(
-                headlineContent = { Text("VIP 到期自动切换") },
-                supportingContent = { Text("当前账号 VIP 到期时自动切换到有 VIP 的账号") },
-                leadingContent = { Icon(Icons.Filled.Autorenew, null, tint = MaterialTheme.colorScheme.primary) },
-                trailingContent = {
-                    Switch(checked = autoOn, onCheckedChange = { autoOn = it; onSetAutoVip(it) })
-                },
-                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-                modifier = Modifier.clickable {
-                    autoOn = !autoOn
-                    onSetAutoVip(autoOn)
-                }
-            )
-
-            Spacer(Modifier.height(Spacing.s))
-            HorizontalDivider()
-            SectionLabel("数据")
-
-            ListItem(
-                headlineContent = { Text("备份与恢复") },
-                supportingContent = { Text("本地文件或 WebDAV，含账号 / 收藏 / 浏览 / 关注") },
-                leadingContent = { Icon(Icons.Filled.CloudUpload, null, tint = MaterialTheme.colorScheme.primary) },
-                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-                modifier = Modifier.clickable { onOpenBackup() }
-            )
+            SettingsGroup("数据") {
+                ListItem(
+                    headlineContent = { Text("备份与恢复") },
+                    supportingContent = { Text("本地文件或 WebDAV，含账号 / 收藏 / 浏览 / 关注") },
+                    leadingContent = { Icon(Icons.Filled.CloudUpload, null, tint = MaterialTheme.colorScheme.primary) },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    modifier = Modifier.clickable { onOpenBackup() }
+                )
+            }
         }
     }
 
@@ -232,6 +237,30 @@ private fun ThemeMode.label(): String = when (this) {
 }
 
 /** Section header, shared with the 我的 page for a consistent rhythm. */
+/**
+ * A contained list group (M3 late-2025 list redesign).
+ *
+ * Sections used to be full-width rows divided by hairlines, which reads as one
+ * continuous list. Grouping each section onto its own rounded container over a
+ * contrasting page surface — with a gap between groups — makes the sections
+ * legible as separate objects without needing dividers at all.
+ */
+@Composable
+private fun androidx.compose.foundation.layout.ColumnScope.SettingsGroup(
+    label: String,
+    content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit
+) {
+    SectionLabel(label)
+    Surface(
+        shape = Corners.large,
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.m)
+    ) {
+        androidx.compose.foundation.layout.Column(content = content)
+    }
+    Spacer(Modifier.height(Spacing.l))
+}
+
 @Composable
 private fun SectionLabel(text: String) {
     Text(
