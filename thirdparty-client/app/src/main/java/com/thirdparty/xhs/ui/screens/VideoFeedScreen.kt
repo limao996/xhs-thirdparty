@@ -269,7 +269,20 @@ private fun VideoPage(
                     // whenever the finger landed on the lower part of the video.
                     .pointerInput(item.noteId) {
                         detectTapGestures(
-                            onTap = { onClickDetail() },
+                            onTap = {
+                        // Hand the position over and stop this player: the detail
+                        // page builds its own ExoPlayer, and leaving this one
+                        // running would play two audio streams at once.
+                        player?.let {
+                            runCatching {
+                                com.thirdparty.xhs.ui.components.PlaybackHandoff.stash(
+                                    item.noteId, it.currentPosition, it.isPlaying
+                                )
+                            }
+                            runCatching { it.pause() }
+                        }
+                        onClickDetail()
+                    },
                             onDoubleTap = { togglePlayback(player) }
                         )
                     }

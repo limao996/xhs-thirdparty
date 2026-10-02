@@ -32,6 +32,12 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.background
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
 
 /**
  * Shared masonry/waterfall grid used by 发现 / 收藏 / 最近浏览 / 搜索结果 / 作者主页.
@@ -59,6 +65,12 @@ fun XhsWaterfallGrid(
     hasMore: Boolean = false,
     loadingMore: Boolean = false,
     onLoadMore: (() -> Unit)? = null,
+    /** ids currently ticked in multi-select mode */
+    selectedIds: Set<Long> = emptySet(),
+    /** when true a tap toggles selection instead of opening the note */
+    selectionMode: Boolean = false,
+    /** long-press handler; enabling it turns on multi-select (null = disabled) */
+    onLongPress: ((NoteItem) -> Unit)? = null,
     /**
      * Changing this value scrolls the grid back to the top. Callers pass a
      * counter that increments on refresh — reloading data alone leaves the
@@ -120,7 +132,17 @@ fun XhsWaterfallGrid(
             count = safeItems.size,
             key = { i -> safeItems[i].noteId }
         ) { index ->
-            WaterfallCard(safeItems[index], onClick = { onOpenDetail(safeItems[index].noteId) })
+            val note = safeItems[index]
+            WaterfallCard(
+                item = note,
+                selected = selectionMode && note.noteId in selectedIds,
+                // In selection mode a plain tap toggles instead of opening, which is
+                // what every gallery-style multi-select does.
+                onClick = {
+                    if (selectionMode) onLongPress?.invoke(note) else onOpenDetail(note.noteId)
+                },
+                onLongClick = onLongPress?.let { cb -> { cb(note) } }
+            )
         }
         if (hasMore && safeItems.isNotEmpty()) {
             item(key = "__loading__") {
@@ -142,14 +164,22 @@ fun XhsWaterfallGrid(
  * the columns stagger authentically and images are not oddly cropped. The ratio
  * is clamped because a few covers are extreme (e.g. "375*210").
  */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun WaterfallCard(item: NoteItem, onClick: () -> Unit) {
+fun WaterfallCard(
+    item: NoteItem,
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
+    selected: Boolean = false
+) {
     val ratio = item.coverRatio.coerceIn(0.55f, 1.6f)
     Surface(
-        onClick = onClick,
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth().combinedClickable(
+            onClick = onClick,
+            onLongClick = onLongClick
+        )
     ) {
         Column {
             Box {
@@ -158,6 +188,20 @@ fun WaterfallCard(item: NoteItem, onClick: () -> Unit) {
                     contentDescription = item.title,
                     modifier = Modifier.fillMaxWidth().aspectRatio(ratio)
                 )
+                if (selected) {
+                    // Dim + tick, the conventional multi-select affordance.
+                    Box(
+                        Modifier.matchParentSize()
+                            .background(Color.Black.copy(alpha = 0.38f))
+                    )
+                    Icon(
+                        Icons.Filled.CheckCircle,
+                        contentDescription = "已选择",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.align(Alignment.TopStart)
+                            .padding(Spacing.xs).size(26.dp)
+                    )
+                }
                 FeeBadge(item, compact = true, modifier = Modifier.align(Alignment.TopEnd).padding(Spacing.xs))
             }
             Text(

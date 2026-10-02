@@ -61,6 +61,8 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 
 /**
  * Detail page player: media3 surface + custom controller.
@@ -359,9 +361,19 @@ private fun AutoHideController(
             }
 
             // ── 底栏: 进度条 + 播放控制 ─────────────────────────────────
+            //
+            // Density depends on the container. Fullscreen has room to spare, but an
+            // inline player does not: default 48dp buttons stacked under a
+            // full-height slider made this bar ~110dp tall, which ate a large slice
+            // of a landscape video and put a large dead zone right where the user
+            // taps to reveal the controls. Inline size is reduced here; targets stay
+            // comfortably tappable (40dp buttons, 28dp slider).
+            val dense = !fullscreen
+            val btnSize = if (dense) 40.dp else 48.dp
+            val iconSize = if (dense) 21.dp else 24.dp
             Column(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                    .background(Scrim.strong).padding(vertical = Spacing.xs)
+                    .background(Scrim.strong).padding(vertical = if (dense) 1.dp else Spacing.xs)
             ) {
                 val fraction = if (duration > 0f) (position / duration).coerceIn(0f, 1f) else 0f
                 Slider(
@@ -377,23 +389,31 @@ private fun AutoHideController(
                         dragging = false
                         interaction++
                     },
+                    modifier = Modifier.height(if (dense) 28.dp else 44.dp),
                     colors = SliderDefaults.colors(
                         thumbColor = Scrim.onMedia,
                         activeTrackColor = MaterialTheme.colorScheme.primary,
                         inactiveTrackColor = Scrim.onMediaVariant
                     )
                 )
-                Row(Modifier.fillMaxWidth().padding(horizontal = Spacing.xs), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = if (dense) 2.dp else Spacing.xs),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     val step = if (fineStep) 1000L else 5000L
-                    IconButton(onClick = { seekBy(-step) }) {
-                        Icon(Icons.Filled.Replay5, "后退${step / 1000}秒", tint = Scrim.onMedia)
+                    IconButton(onClick = { seekBy(-step) }, modifier = Modifier.size(btnSize)) {
+                        Icon(Icons.Filled.Replay5, "后退${step / 1000}秒", tint = Scrim.onMedia,
+                            modifier = Modifier.size(iconSize))
                     }
-                    IconButton(onClick = { if (playing) player.pause() else player.play() }) {
+                    IconButton(onClick = { if (playing) player.pause() else player.play() },
+                        modifier = Modifier.size(btnSize)) {
                         Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                            if (playing) "暂停" else "播放", tint = Scrim.onMedia)
+                            if (playing) "暂停" else "播放", tint = Scrim.onMedia,
+                            modifier = Modifier.size(iconSize))
                     }
-                    IconButton(onClick = { seekBy(step) }) {
-                        Icon(Icons.Filled.Forward5, "前进${step / 1000}秒", tint = Scrim.onMedia)
+                    IconButton(onClick = { seekBy(step) }, modifier = Modifier.size(btnSize)) {
+                        Icon(Icons.Filled.Forward5, "前进${step / 1000}秒", tint = Scrim.onMedia,
+                            modifier = Modifier.size(iconSize))
                     }
                     Text("${fmt(position.toLong())} / ${fmt(duration.toLong())}",
                         color = Scrim.onMedia, style = MaterialTheme.typography.labelSmall,
@@ -406,9 +426,9 @@ private fun AutoHideController(
                             style = MaterialTheme.typography.labelSmall,
                             modifier = Modifier.padding(end = Spacing.xs))
                     }
-                    IconButton(onClick = onToggleFullscreen) {
+                    IconButton(onClick = onToggleFullscreen, modifier = Modifier.size(btnSize)) {
                         Icon(if (fullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
-                            "全屏", tint = Scrim.onMedia)
+                            "全屏", tint = Scrim.onMedia, modifier = Modifier.size(iconSize))
                     }
                 }
             }

@@ -63,6 +63,18 @@ class LocalListViewModel(
         }
     }
 
+    /**
+     * Drop the given favourites. Used by the multi-select action in 我的收藏 —
+     * one by one, because the DAO exposes a single-id delete and the batch is a
+     * handful of tap-selected items at most.
+     */
+    fun removeSaved(ids: Set<Long>) {
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            ids.forEach { runCatching { repo.unsave(it) } }
+            reload()
+        }
+    }
     /** Client-side pagination for the local list. */
     fun loadMore() {
         _ui.update {

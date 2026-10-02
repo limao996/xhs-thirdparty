@@ -218,7 +218,19 @@ fun DetailScreen(
                     androidx.compose.runtime.mutableLongStateOf(0L)
                 }
                 LaunchedEffect(sharedPlayer) {
-                    if (sharedPlayer != null && resumeMs > 0L) sharedPlayer.seekTo(resumeMs)
+                    if (sharedPlayer == null) return@LaunchedEffect
+                    // Continue from where 推荐 left off when the detail was opened
+                    // by tapping that same video there. Consumed once — a later open
+                    // of this note (deep link, saved list) must start at the start.
+                    val handoff = com.thirdparty.xhs.ui.components.PlaybackHandoff.take(item.noteId)
+                    if (handoff != null) {
+                        if (handoff.positionMs > 0L) sharedPlayer.seekTo(handoff.positionMs)
+                        // only resume if it was actually playing; a paused feed must
+                        // not start talking on its own
+                        if (handoff.playing) sharedPlayer.play()
+                    } else if (resumeMs > 0L) {
+                        sharedPlayer.seekTo(resumeMs)
+                    }
                 }
                 LaunchedEffect(sharedPlayer) {
                     if (sharedPlayer == null) return@LaunchedEffect

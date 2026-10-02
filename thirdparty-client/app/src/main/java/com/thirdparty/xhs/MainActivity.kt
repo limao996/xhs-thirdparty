@@ -82,8 +82,31 @@ class MainActivity : ComponentActivity() {
         if (hasFocus) checkClipboardForShareLink()
     }
 
+    /**
+     * Open a note from a share link that arrived as an Intent.
+     *
+     * The share action copies an `xhstp://note/<id>` token, and the manifest also
+     * declares that scheme, so tapping a link in a browser (or any other app) lands
+     * here instead of on a dead end. `launchMode` is standard, so a cold start goes
+     * through onCreate and an already-running app through onNewIntent — both paths
+     * funnel into [pendingNote], which the nav host consumes once.
+     */
+    private fun consumeDeepLink(intent: android.content.Intent?) {
+        val data = intent?.data ?: return
+        if (data.scheme == DeepLink.SCHEME && data.host == DeepLink.HOST) {
+            data.lastPathSegment?.toLongOrNull()?.let { pendingNote.value = it }
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        consumeDeepLink(intent)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        consumeDeepLink(intent)
         enableEdgeToEdge()
         // Paint the launch window with the colour the user will actually land on,
         // so an in-app 深色/浅色 override does not flash the system default.

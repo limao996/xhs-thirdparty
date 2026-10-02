@@ -32,6 +32,17 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- Share links: the 分享 action copies an `xhstp://note/<id>` token, and
+                 opening such a link (browser, chat, anywhere) must come back here.
+                 Separate filter from MAIN/LAUNCHER so the app keeps a single
+                 launcher entry. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="xhstp" android:host="note" />
+            </intent-filter>
         </activity>
     </application>
 
