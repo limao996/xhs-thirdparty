@@ -59,6 +59,7 @@ import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material3.Switch
 import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Lock
 
 /**
  * 我的：账号信息（用户名/ID/VIP）+ 收藏 / 最近浏览 / 我关注的作者 / 切换游客 / 外观主题。
@@ -81,6 +82,10 @@ fun ProfileScreen(
     /** VIP-expiry auto switch */
     autoVip: Boolean = false,
     onSetAutoVip: ((Boolean) -> Unit)? = null,
+    /** app lock: require the device fingerprint/password on open */
+    biometricLock: Boolean = false,
+    biometricAvailable: Boolean = false,
+    onSetBiometricLock: ((Boolean) -> Unit)? = null,
     rotating: Boolean = false,
     /** changes whenever the guest account changes, forcing a profile reload */
     reloadKey: Any? = Unit,
@@ -240,9 +245,33 @@ fun ProfileScreen(
                     modifier = Modifier.clickable { onSetAutoVip(!autoVip) }
                 )
             }
+            if (onSetBiometricLock != null) {
+                ListItem(
+                    headlineContent = { Text("指纹解锁") },
+                    supportingContent = {
+                        Text(
+                            if (biometricAvailable) "开启后，打开或切回本应用需要验证指纹或设备密码"
+                            else "此设备未录入指纹或锁屏密码，无法启用"
+                        )
+                    },
+                    leadingContent = {
+                        Icon(Icons.Filled.Lock, null, tint = MaterialTheme.colorScheme.primary)
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = biometricLock,
+                            enabled = biometricAvailable,
+                            onCheckedChange = { onSetBiometricLock(it) }
+                        )
+                    },
+                    colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
+                    modifier = Modifier.clickable {
+                        // never let the toggle be flipped on where it cannot be honoured
+                        if (biometricAvailable) onSetBiometricLock(!biometricLock)
+                    }
+                )
+            }
         }
-
-        HorizontalDivider()
 
         // image cache management (the disk cache can hold up to 64MB)
         var confirmClear by remember { mutableStateOf(false) }

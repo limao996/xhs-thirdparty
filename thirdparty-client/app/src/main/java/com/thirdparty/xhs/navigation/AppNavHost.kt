@@ -149,7 +149,11 @@ fun AppNavHost(
                 onOpenFans = { nav.navigate(Routes.FANS) },
                 // 作品 on the account card opens that account's own author page
                 onOpenMyNotes = { uid -> nav.navigate(Routes.author(uid)) },
-                onOpenBackup = { nav.navigate(Routes.BACKUP) }
+                onOpenBackup = { nav.navigate(Routes.BACKUP) },
+                onSetBiometricLock = { on ->
+                    App.repo.biometricLock = on
+                    App.INSTANCE.notifyLockChanged()
+                }
             )
         }
 

@@ -251,6 +251,10 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
         get() = credentialStore.autoSwitchOnVipExpiry
         set(v) { credentialStore.autoSwitchOnVipExpiry = v }
 
+    /** Whether opening the app requires the device's biometric lock. */
+    var biometricLock: Boolean
+        get() = credentialStore.biometricLock
+        set(v) { credentialStore.biometricLock = v }
     /** Cached VIP end of the current account (epoch seconds, 0 = unknown). */
     var cachedVipEnd: Long
         get() = credentialStore.vipEnd

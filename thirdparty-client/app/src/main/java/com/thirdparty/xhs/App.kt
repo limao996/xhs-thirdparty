@@ -32,6 +32,15 @@ class App : Application() {
 
     fun notifyDataRestored() { dataEpoch.value = dataEpoch.value + 1 }
 
+    /**
+     * Bumped when the app-lock toggle changes, so the lock state can take effect
+     * immediately: turning it ON locks right away (the user sees it work), OFF
+     * unlocks.
+     */
+    val lockEpoch = MutableStateFlow(0)
+
+    fun notifyLockChanged() { lockEpoch.value = lockEpoch.value + 1 }
+
     override fun onCreate() {
         super.onCreate()
         INSTANCE = this

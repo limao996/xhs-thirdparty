@@ -3,12 +3,18 @@ package com.thirdparty.xhs
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.rememberNavController
 import com.thirdparty.xhs.navigation.AppNavHost
@@ -22,7 +28,7 @@ import com.thirdparty.xhs.ui.theme.isDark
  * Also the entry point for shared notes: the share sheet emits a
  * [DeepLink.SCHEME] link, and opening it lands here (see [shareNote]).
  */
-class MainActivity : ComponentActivity() {
+class MainActivity : androidx.fragment.app.FragmentActivity() {
 
     /**
      * Note id from an incoming share link, consumed once by the nav host.
@@ -104,6 +110,27 @@ class MainActivity : ComponentActivity() {
         consumeDeepLink(intent)
     }
 
+    /** Whether the user turned on the app lock. */
+    private fun biometricLockEnabled(): Boolean = App.INSTANCE.repository.biometricLock
+
+    /**
+     * Ask for the device credential and report success.
+     *
+     * Falls through to success when the device cannot authenticate at all: a user
+     * who enabled the lock on a device that later lost its enrolled fingerprint
+     * must not be permanently locked out of their own app.
+     */
+    private fun requestUnlock(onUnlocked: () -> Unit) {
+        if (!com.thirdparty.xhs.ui.components.biometricAvailable(this)) {
+            onUnlocked()
+            return
+        }
+        com.thirdparty.xhs.ui.components.promptBiometric(
+            activity = this,
+            onSuccess = { onUnlocked() },
+            onFail = { /* stays locked; the cover offers a retry */ }
+        )
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         consumeDeepLink(intent)
@@ -133,8 +160,44 @@ class MainActivity : ComponentActivity() {
             XhsTheme(mode = themeMode) {
                 Surface(Modifier.fillMaxSize()) {
                     val navController = rememberNavController()
+                    // App lock. The normal content stays composed underneath so nav
+                    // position and every screen's state survive an unlock; only the
+                    // cover is swapped out. Replacing the content would bounce the
+                    // user back to 推荐 every time the app was reopened.
+                    var locked by androidx.compose.runtime.remember {
+                        androidx.compose.runtime.mutableStateOf(biometricLockEnabled())
+                    }
+                    // re-lock whenever the app goes to the background, so coming back
+                    // always asks again — that is the whole point of the lock
+                    val owner = LocalLifecycleOwner.current
+                    androidx.compose.runtime.DisposableEffect(owner) {
+                        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                            if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP &&
+                                biometricLockEnabled()
+                            ) {
+                                locked = true
+                            }
+                        }
+                        owner.lifecycle.addObserver(observer)
+                        onDispose { owner.lifecycle.removeObserver(observer) }
+                    }
+                    androidx.compose.runtime.LaunchedEffect(locked) {
+                        if (locked) requestUnlock { locked = false }
+                    }
+                    // the toggle takes effect at once: ON locks now, OFF unlocks
+                    val lockEpoch by App.INSTANCE.lockEpoch.collectAsStateWithLifecycle()
+                    androidx.compose.runtime.LaunchedEffect(lockEpoch) {
+                        if (lockEpoch > 0) locked = biometricLockEnabled()
+                    }
                     AppNavHost(navController, deepLinkNoteId = pendingNote.value) {
                         pendingNote.value = null
+                    }
+                    if (locked) {
+                        // swallow the back gesture: the cover must not be dismissible
+                        androidx.activity.compose.BackHandler { }
+                        com.thirdparty.xhs.ui.components.BiometricLockCover(
+                            onUnlock = { requestUnlock { locked = false } }
+                        )
                     }
                     // 复制口令回流：回到应用时发现剪贴板里有分享链接就询问是否跳转
                     clipboardNote.value?.let { noteId ->

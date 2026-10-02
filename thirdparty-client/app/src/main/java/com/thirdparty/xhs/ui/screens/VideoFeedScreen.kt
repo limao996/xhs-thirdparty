@@ -3,7 +3,7 @@ package com.thirdparty.xhs.ui.screens
 import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -37,7 +37,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
@@ -163,6 +162,7 @@ fun VideoFeedScreen(
 }
 
 @Composable
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 private fun VideoPage(
     item: NoteItem,
     active: Boolean,
@@ -197,14 +197,40 @@ private fun VideoPage(
     // recording the view is a separate effect so a player rebuild does not
     // re-stamp viewedAt and reshuffle 最近浏览
     LaunchedEffect(active) { if (active) onWatched() }
+    // Gesture modifiers are REMEMBERED, not rebuilt per composition.
+    //
+    // `Modifier.pointerInput(key) { ... }` compares the block by identity, and the
+    // block object is new on every recomposition — so any state change restarts
+    // the tap detector, and a tap landing during that restart is swallowed. That is
+    // exactly what broke double-tap pause: the first single tap flips infoVisible
+    // -> recomposition -> detector restart -> the second tap of the double-tap was
+    // dropped, so onDoubleTap never fired. (Verified with logs: after one single
+    // tap, a double tap produced only a single onTap, and "detector STARTED"
+    // appeared precisely on the info-bar toggle.)
+    //
+    // Remembering the modifier keeps one instance across recompositions. The values
+    // it needs come from stable state objects — `infoVisible` is a MutableState
+    // captured by reference, and `player` is wrapped in rememberUpdatedState — so
+    // neither the detector nor the data goes stale.
+    val currentPlayer = androidx.compose.runtime.rememberUpdatedState(player)
+    val noRipple = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     Box(
         Modifier.fillMaxSize().background(Color.Black)
-            .pointerInput(item.noteId) {
-                detectTapGestures(
-                    onTap = { infoVisible = !infoVisible },
-                    onDoubleTap = { togglePlayback(player) }
-                )
-            }
+            // combinedClickable, NOT pointerInput { detectTapGestures }.
+            //
+            // pointerInput compares its block by identity and rebuilds it on every
+            // recomposition, which cancels the in-flight gesture. The first single
+            // tap flips infoVisible -> recomposition -> the second tap of a
+            // double-tap was swallowed, so onDoubleTap never fired (verified with
+            // logs: after one single tap, a double tap produced only a single
+            // onTap). clickable's node instead UPDATES its callbacks in place, so
+            // recomposition never interrupts a gesture in progress.
+            .combinedClickable(
+                interactionSource = noRipple,
+                indication = null,
+                onClick = { infoVisible = !infoVisible },
+                onDoubleClick = { togglePlayback(currentPlayer.value) }
+            )
     ) {
         // poster cover behind the player so the page is never a black void.
         // ContentScale.Fit keeps the poster undistorted as well.
@@ -267,25 +293,26 @@ private fun VideoPage(
                     // swallowed the gesture and a double-tap here opened the detail
                     // instead of pausing — which is why double-tap appeared broken
                     // whenever the finger landed on the lower part of the video.
-                    .pointerInput(item.noteId) {
-                        detectTapGestures(
-                            onTap = {
-                        // Hand the position over and stop this player: the detail
-                        // page builds its own ExoPlayer, and leaving this one
-                        // running would play two audio streams at once.
-                        player?.let {
-                            runCatching {
-                                com.thirdparty.xhs.ui.components.PlaybackHandoff.stash(
-                                    item.noteId, it.currentPosition, it.isPlaying
-                                )
+                    // same reasoning as the video surface above
+                    .combinedClickable(
+                        interactionSource = noRipple,
+                        indication = null,
+                        onClick = {
+                            // Hand the position over and stop this player: the detail
+                            // page builds its own ExoPlayer, and leaving this one
+                            // running would play two audio streams at once.
+                            currentPlayer.value?.let {
+                                runCatching {
+                                    com.thirdparty.xhs.ui.components.PlaybackHandoff.stash(
+                                        item.noteId, it.currentPosition, it.isPlaying
+                                    )
+                                }
+                                runCatching { it.pause() }
                             }
-                            runCatching { it.pause() }
-                        }
-                        onClickDetail()
-                    },
-                            onDoubleTap = { togglePlayback(player) }
-                        )
-                    }
+                            onClickDetail()
+                        },
+                        onDoubleClick = { togglePlayback(currentPlayer.value) }
+                    )
                     .padding(Spacing.l)
             ) {
                 Text(

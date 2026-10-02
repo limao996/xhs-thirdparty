@@ -60,6 +60,14 @@ class CredentialStore(context: Context) {
         set(v) = prefs.edit().putLong(KEY_VIP_END, v).apply()
 
     /**
+     * Require the device's biometric lock when the app is opened. Off by default —
+     * turning it on is an explicit choice made in 我的.
+     */
+    var biometricLock: Boolean
+        get() = prefs.getBoolean(KEY_BIOMETRIC, false)
+        set(v) = prefs.edit().putBoolean(KEY_BIOMETRIC, v).apply()
+
+    /**
      * When on, the app switches to a fresh account (which starts a new VIP window)
      * as soon as the current account's VIP runs out.
      */
@@ -126,6 +134,7 @@ class CredentialStore(context: Context) {
         private const val KEY_HISTORY = "account_history"
         private const val KEY_AUTO_VIP = "auto_switch_on_vip_expiry"
         private const val KEY_VIP_END = "current_vip_end"
+        private const val KEY_BIOMETRIC = "biometric_lock"
     }
 }
 

@@ -70,6 +70,7 @@ fun HomeScreen(
     onOpenFans: () -> Unit,
     onOpenMyNotes: (Int) -> Unit,
     onOpenBackup: () -> Unit,
+    onSetBiometricLock: ((Boolean) -> Unit)? = null,
     guestViewModel: GuestViewModel = viewModel(factory = RepoViewModelFactory())
 ) {
     val context = LocalContext.current
@@ -163,6 +164,9 @@ fun HomeScreen(
                             onOpenFans = onOpenFans,
                             onOpenMyNotes = { uid -> onOpenMyNotes(uid) },
                             onOpenBackup = onOpenBackup,
+                            biometricLock = App.INSTANCE.repository.biometricLock,
+                            biometricAvailable = androidx.biometric.BiometricManager.from(context).canAuthenticate(androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK or androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL) == androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS,
+                            onSetBiometricLock = onSetBiometricLock,
                             historyCount = history.size,
                             autoVip = autoVip,
                             onSetAutoVip = { on ->

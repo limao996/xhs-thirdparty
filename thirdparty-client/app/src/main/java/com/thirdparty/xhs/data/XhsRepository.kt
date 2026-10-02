@@ -347,6 +347,10 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
         const val VIP_MIN_REMAINING_S = 60L
     }
 
+    /** Whether opening the app requires the device's biometric lock. */
+    var biometricLock: Boolean
+        get() = api.biometricLock
+        set(v) { api.biometricLock = v }
     /** The identity currently in use. */
     fun currentDeviceMac(): String = api.currentDeviceMac()
 
