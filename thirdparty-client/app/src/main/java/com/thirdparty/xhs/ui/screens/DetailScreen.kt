@@ -258,6 +258,8 @@ private fun DetailContent(
     var openReplies by remember(item.noteId) {
         mutableStateOf<com.thirdparty.xhs.data.CommentItem?>(null)
     }
+    // index of the image opened in the full-screen viewer (null = closed)
+    var openImage by remember(item.noteId) { mutableStateOf<Int?>(null) }
     // Single scrolling column: media on top, then all the content BELOW it.
     // (Previously media and text were siblings in a Box, so the text drew
     //  on top of the video — that was the broken layout.)
@@ -305,7 +307,7 @@ private fun DetailContent(
             val images = item.images.ifEmpty {
                 listOf(item.cover).filter { it.isNotEmpty() }.map { NoteImage(it) }
             }
-            ImageGallery(images = images)
+            ImageGallery(images = images, onOpen = { openImage = it })
         }
 
         Column(Modifier.padding(horizontal = Spacing.l, vertical = Spacing.m)) {
@@ -408,6 +410,16 @@ private fun DetailContent(
         }
 
     }
+    openImage?.let { page ->
+        com.thirdparty.xhs.ui.components.FullscreenImageViewer(
+            images = item.images.ifEmpty {
+                listOf(item.cover).filter { it.isNotEmpty() }.map { com.thirdparty.xhs.data.NoteImage(it) }
+            },
+            initialPage = page,
+            onDismiss = { openImage = null }
+        )
+    }
+
     openReplies?.let { oc ->
         CommentRepliesDialog(
             noteId = item.noteId,

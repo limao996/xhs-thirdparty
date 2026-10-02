@@ -18,6 +18,8 @@ import com.thirdparty.xhs.data.NoteImage
 import com.thirdparty.xhs.ui.theme.Corners
 import com.thirdparty.xhs.ui.theme.Scrim
 import com.thirdparty.xhs.ui.theme.Spacing
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 
 /**
  * Swipeable multi-image viewer for photo posts.
@@ -31,7 +33,9 @@ import com.thirdparty.xhs.ui.theme.Spacing
 @Composable
 fun ImageGallery(
     images: List<NoteImage>,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** tapping an image opens the full-screen viewer at that page */
+    onOpen: ((Int) -> Unit)? = null
 ) {
     // rememberPagerState must be called unconditionally: hoisting it above the
     // size checks keeps the slot count stable when the image list is swapped.
@@ -46,7 +50,12 @@ fun ImageGallery(
             url = images[0].url,
             contentDescription = null,
             contentScale = ContentScale.Fit,
+            // tapping opens the full-screen viewer; without it the image stays at
+            // this reduced size with no way to see the detail
             modifier = modifier.fillMaxWidth().aspectRatio(containerRatio)
+                .pointerInput(images[0].url) {
+                    detectTapGestures(onTap = { onOpen?.invoke(0) })
+                }
         )
         return
     }
@@ -58,6 +67,9 @@ fun ImageGallery(
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxWidth().aspectRatio(containerRatio)
+                    .pointerInput(images[page].url) {
+                        detectTapGestures(onTap = { onOpen?.invoke(page) })
+                    }
             )
         }
         // n/N indicator
