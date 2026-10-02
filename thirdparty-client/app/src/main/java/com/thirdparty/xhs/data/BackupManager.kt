@@ -65,7 +65,7 @@ object BackupManager {
         })
 
         root.put("history", JSONArray().apply {
-            db.historyDao().recent().forEach { e ->
+            db.historyDao().recent(store.historyLimit).forEach { e ->
                 put(JSONObject().apply {
                     put("noteId", e.noteId); put("title", e.title)
                     put("userName", e.userName); put("cover", e.cover)
@@ -189,7 +189,7 @@ object BackupManager {
                 hist++
             }
         }
-        db.historyDao().trim()
+        db.historyDao().trim(store.historyLimit)
 
         var follows = 0
         root.optJSONArray("followed")?.let { arr ->

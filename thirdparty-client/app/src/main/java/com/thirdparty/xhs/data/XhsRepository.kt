@@ -117,7 +117,7 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
                 viewedAt = System.currentTimeMillis()
             )
         )
-        historyDao.trim()
+        historyDao.trim(api.historyLimit)
     }
 
     // ---- on-disk HTTP cache (covers / avatars, up to 64MB) ------------------
@@ -155,7 +155,7 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
                 viewedAt = System.currentTimeMillis()
             )
         )
-        historyDao.trim()
+        historyDao.trim(api.historyLimit)
         item
     }
 
@@ -221,7 +221,7 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
 
     // ---- browsing history, purely local ------------------------------------
     suspend fun history(): List<NoteItem> =
-        withContext(Dispatchers.IO) { historyDao.recent().map { NoteItem(JSONObject(it.rawJson)) } }
+        withContext(Dispatchers.IO) { historyDao.recent(api.historyLimit).map { NoteItem(JSONObject(it.rawJson)) } }
 
     /** Wipe all local browsing history. */
     suspend fun clearHistory() = withContext(Dispatchers.IO) { historyDao.clearAll() }
@@ -347,6 +347,12 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
         const val VIP_MIN_REMAINING_S = 60L
     }
 
+    /** Drop anything beyond the configured 最近浏览 limit, right away. */
+    suspend fun trimHistory() = withContext(Dispatchers.IO) { historyDao.trim(api.historyLimit) }
+    /** How many 最近浏览 entries to keep. */
+    var historyLimit: Int
+        get() = api.historyLimit
+        set(v) { api.historyLimit = v }
     /** Whether opening the app requires the device's biometric lock. */
     var biometricLock: Boolean
         get() = api.biometricLock

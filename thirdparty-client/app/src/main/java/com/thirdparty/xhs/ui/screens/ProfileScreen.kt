@@ -86,6 +86,9 @@ fun ProfileScreen(
     biometricLock: Boolean = false,
     biometricAvailable: Boolean = false,
     onSetBiometricLock: ((Boolean) -> Unit)? = null,
+    /** 最近浏览 keep limit */
+    historyLimit: Int = 2000,
+    onSetHistoryLimit: ((Int) -> Unit)? = null,
     rotating: Boolean = false,
     /** changes whenever the guest account changes, forcing a profile reload */
     reloadKey: Any? = Unit,
@@ -270,6 +273,37 @@ fun ProfileScreen(
                         if (biometricAvailable) onSetBiometricLock(!biometricLock)
                     }
                 )
+            }
+            if (onSetHistoryLimit != null) {
+                var pickLimit by remember { mutableStateOf(false) }
+                ListItem(
+                    headlineContent = { Text("最近浏览上限") },
+                    supportingContent = { Text("当前保留 $historyLimit 条，超出后自动清理最旧的") },
+                    leadingContent = {
+                        Icon(Icons.Filled.History, null, tint = MaterialTheme.colorScheme.primary)
+                    },
+                    colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
+                    modifier = Modifier.clickable { pickLimit = true }
+                )
+                if (pickLimit) {
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { pickLimit = false },
+                        title = { Text("最近浏览上限") },
+                        text = {
+                            Column {
+                                listOf(500, 1000, 2000, 5000, 10000).forEach { n ->
+                                    TextButton(onClick = {
+                                        onSetHistoryLimit(n)
+                                        pickLimit = false
+                                    }) { Text("$n 条" + if (n == historyLimit) "（当前）" else "") }
+                                }
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = { pickLimit = false }) { Text("取消") }
+                        }
+                    )
+                }
             }
         }
 

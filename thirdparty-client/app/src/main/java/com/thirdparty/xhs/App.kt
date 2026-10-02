@@ -41,6 +41,15 @@ class App : Application() {
 
     fun notifyLockChanged() { lockEpoch.value = lockEpoch.value + 1 }
 
+    /**
+     * True while the 推荐 tab is the visible content. It is full-bleed, so the
+     * system bars need white icons there; every other destination has an opaque
+     * themed surface and needs icons that follow the theme. Set by HomeScreen and
+     * consumed by AppNavHost, which owns the actual bar configuration — keeping it
+     * in one place is what stops a screen from being left with the feed's bars.
+     */
+    val feedImmersive = MutableStateFlow(false)
+
     override fun onCreate() {
         super.onCreate()
         INSTANCE = this

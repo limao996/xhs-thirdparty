@@ -12,6 +12,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.composable
 import com.thirdparty.xhs.ui.screens.AuthorScreen
 import com.thirdparty.xhs.ui.screens.DetailScreen
@@ -45,6 +46,9 @@ import com.thirdparty.xhs.App
 import com.thirdparty.xhs.ui.screens.UserListScreen
 import com.thirdparty.xhs.ui.viewmodel.UserListMode
 import com.thirdparty.xhs.ui.screens.BackupScreen
+import com.thirdparty.xhs.ui.theme.isDark
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 
 /**
  * A Scaffold wrapper hosting the local (Room) list for a given mode.
@@ -113,6 +117,31 @@ fun AppNavHost(
     deepLinkNoteId: Long? = null,
     onDeepLinkConsumed: () -> Unit = {}
 ) {
+    // Single owner of the system-bar appearance.
+    //
+    // Keyed on the destination so it is re-applied on every navigation. Screens
+    // used to fight over this: the feed set white icons for its full-bleed video
+    // and nothing restored them on the way out, so 搜索/详情 came up with white
+    // icons over a light surface.
+    val entry by nav.currentBackStackEntryAsState()
+    val route = entry?.destination?.route
+    val feedImmersive by App.INSTANCE.feedImmersive.collectAsStateWithLifecycle()
+    val barView = androidx.compose.ui.platform.LocalView.current
+    val barActivity = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity
+    val barDark = App.INSTANCE.themeState.collectAsStateWithLifecycle().value
+        .isDark(androidx.compose.foundation.isSystemInDarkTheme())
+    androidx.compose.runtime.DisposableEffect(route, feedImmersive, barDark, barActivity) {
+        barActivity?.window?.let { w ->
+            val c = androidx.core.view.WindowCompat.getInsetsController(w, barView)
+            c.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            // White icons only over the feed's full-bleed video; everywhere else
+            // the surface is opaque and themed.
+            val overMedia = route == com.thirdparty.xhs.navigation.Routes.HOME && feedImmersive
+            c.isAppearanceLightStatusBars = !overMedia && !barDark
+            c.isAppearanceLightNavigationBars = !overMedia && !barDark
+        }
+        onDispose { }
+    }
     // opening a shared link should land ON that note, not just on the app
     androidx.compose.runtime.LaunchedEffect(deepLinkNoteId) {
         deepLinkNoteId?.let {
@@ -153,6 +182,14 @@ fun AppNavHost(
                 onSetBiometricLock = { on ->
                     App.repo.biometricLock = on
                     App.INSTANCE.notifyLockChanged()
+                },
+                onSetHistoryLimit = { n ->
+                    App.repo.historyLimit = n
+                    // trim straight away so a lower limit takes effect now rather
+                    // than only after the next viewed note
+                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                        App.INSTANCE.repository.trimHistory()
+                    }
                 }
             )
         }

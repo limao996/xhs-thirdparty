@@ -39,11 +39,13 @@ interface HistoryDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entity: HistoryEntity)
 
-    @Query("SELECT * FROM history ORDER BY viewedAt DESC LIMIT 100")
-    suspend fun recent(): List<HistoryEntity>
+        // The cap is a parameter, not a literal: 最近浏览 keeps far more than the
+    // original 100 (default 2000, user-configurable).
+    @Query("SELECT * FROM history ORDER BY viewedAt DESC LIMIT :limit")
+    suspend fun recent(limit: Int): List<HistoryEntity>
 
-    @Query("DELETE FROM history WHERE noteId != 0 AND noteId NOT IN (SELECT noteId FROM history ORDER BY viewedAt DESC LIMIT 100)")
-    suspend fun trim()
+        @Query("DELETE FROM history WHERE noteId != 0 AND noteId NOT IN (SELECT noteId FROM history ORDER BY viewedAt DESC LIMIT :limit)")
+    suspend fun trim(limit: Int)
 
     @Query("DELETE FROM history")
     suspend fun clearAll()

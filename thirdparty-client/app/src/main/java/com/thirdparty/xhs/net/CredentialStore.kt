@@ -125,8 +125,17 @@ class CredentialStore(context: Context) {
             .apply()
     }
 
+    /**
+     * How many 最近浏览 entries to keep. The DAO used to hard-code 100; the
+     * default is now 2000 and the user can change it in 我的.
+     */
+    var historyLimit: Int
+        get() = prefs.getInt(KEY_HISTORY_LIMIT, DEFAULT_HISTORY_LIMIT)
+        set(v) = prefs.edit().putInt(KEY_HISTORY_LIMIT, v.coerceIn(100, 20000)).apply()
+
     companion object {
         const val DEFAULT_HOST = "app.xiaohuangbook.net"
+        const val DEFAULT_HISTORY_LIMIT = 2000
         private const val HISTORY_MAX = 50
         private const val KEY_TOKEN = "user_token"
         private const val KEY_HASH = "user_hash"
@@ -135,6 +144,7 @@ class CredentialStore(context: Context) {
         private const val KEY_AUTO_VIP = "auto_switch_on_vip_expiry"
         private const val KEY_VIP_END = "current_vip_end"
         private const val KEY_BIOMETRIC = "biometric_lock"
+        private const val KEY_HISTORY_LIMIT = "history_limit"
     }
 }
 

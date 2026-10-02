@@ -71,6 +71,7 @@ fun HomeScreen(
     onOpenMyNotes: (Int) -> Unit,
     onOpenBackup: () -> Unit,
     onSetBiometricLock: ((Boolean) -> Unit)? = null,
+    onSetHistoryLimit: ((Int) -> Unit)? = null,
     guestViewModel: GuestViewModel = viewModel(factory = RepoViewModelFactory())
 ) {
     val context = LocalContext.current
@@ -104,16 +105,14 @@ fun HomeScreen(
     val darkNow = currentThemeMode().isDark(androidx.compose.foundation.isSystemInDarkTheme())
     val view = androidx.compose.ui.platform.LocalView.current
     val activity = LocalContext.current as? android.app.Activity
-    DisposableEffect(immersive, darkNow, activity) {
-        val w = activity?.window
-        if (w != null) {
-            val controller = androidx.core.view.WindowCompat.getInsetsController(w, view)
-            controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-            //白图标：推荐页强制深色主题，所以两栏图标都用浅色
-            controller.isAppearanceLightStatusBars = !immersive && !darkNow
-            controller.isAppearanceLightNavigationBars = !immersive && !darkNow
-        }
-        onDispose { }
+    // Report the tab state; AppNavHost owns the actual system-bar configuration.
+    //
+    // Configuring the bars here as well meant that navigating away to 搜索 or 详情
+    // left the feed's white-on-light bars in place: this effect is keyed on
+    // `immersive`, which does not change on the way out, and its onDispose did
+    // nothing. One owner, keyed on the current destination, cannot drift.
+    androidx.compose.runtime.LaunchedEffect(immersive) {
+        App.INSTANCE.feedImmersive.value = immersive
     }
 
     // Force dark theme while the immersive 推荐 tab is shown.
@@ -167,6 +166,8 @@ fun HomeScreen(
                             biometricLock = App.INSTANCE.repository.biometricLock,
                             biometricAvailable = androidx.biometric.BiometricManager.from(context).canAuthenticate(androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK or androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL) == androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS,
                             onSetBiometricLock = onSetBiometricLock,
+                            historyLimit = App.INSTANCE.repository.historyLimit,
+                            onSetHistoryLimit = onSetHistoryLimit,
                             historyCount = history.size,
                             autoVip = autoVip,
                             onSetAutoVip = { on ->

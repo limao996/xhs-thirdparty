@@ -191,6 +191,10 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
             val ok = runCatching { repo.rotateGuest() }.getOrNull()?.optInt("result") == 1
             refreshLabel()
             refreshVip()
+            // Record the account now in use. Every other switch path did this; this
+            // one did not, so a manually switched-to account never entered 历史账号
+            // and could not be switched back to.
+            remember()
             _rotating.value = false
             onToast(if (ok) "已切换游客账号" else "切换失败，沿用当前账号")
         }

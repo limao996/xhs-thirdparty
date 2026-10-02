@@ -251,6 +251,10 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
         get() = credentialStore.autoSwitchOnVipExpiry
         set(v) { credentialStore.autoSwitchOnVipExpiry = v }
 
+    /** How many 最近浏览 entries to keep (default 2000). */
+    var historyLimit: Int
+        get() = credentialStore.historyLimit
+        set(v) { credentialStore.historyLimit = v }
     /** Whether opening the app requires the device's biometric lock. */
     var biometricLock: Boolean
         get() = credentialStore.biometricLock

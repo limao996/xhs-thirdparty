@@ -197,23 +197,26 @@ fun BackupScreen(onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(Modifier.height(Spacing.s))
-            OutlinedButton(onClick = {
-                WebDavClient.save(context, WebDavClient.WebDavConfig(url, user, pass))
-                status = "配置已保存"
-            }) { Text("保存配置") }
-            Spacer(Modifier.size(Spacing.s))
-            OutlinedButton(onClick = {
-                WebDavClient.save(context, WebDavClient.WebDavConfig(url, user, pass))
-                run("正在测试连接") {
-                    val cfg = WebDavClient.WebDavConfig(url, user, pass)
-                    if (cfg.url.isBlank()) throw java.io.IOException("请先填写服务器地址")
-                    WebDavClient(App.INSTANCE.httpClient, cfg).testConnection().getOrThrow()
-                    "连接正常"
-                }
-            }) { Text("测试连接") }
-            Spacer(Modifier.size(Spacing.s))
-            OutlinedButton(onClick = {
-            }) { Text("保存配置") }
+            // 保存 and 测试 sit side by side. Previously an empty duplicate
+            // "保存配置" button (a leftover from adding 测试连接) was left in the
+            // column, so the label appeared twice and the three buttons stacked
+            // one per line.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(onClick = {
+                    WebDavClient.save(context, WebDavClient.WebDavConfig(url, user, pass))
+                    status = "配置已保存"
+                }) { Text("保存配置") }
+                Spacer(Modifier.size(Spacing.s))
+                OutlinedButton(onClick = {
+                    WebDavClient.save(context, WebDavClient.WebDavConfig(url, user, pass))
+                    run("正在测试连接") {
+                        val cfg = WebDavClient.WebDavConfig(url, user, pass)
+                        if (cfg.url.isBlank()) throw java.io.IOException("请先填写服务器地址")
+                        WebDavClient(App.INSTANCE.httpClient, cfg).testConnection().getOrThrow()
+                        "连接正常"
+                    }
+                }) { Text("测试连接") }
+            }
 
             Spacer(Modifier.height(Spacing.s))
             Row {
