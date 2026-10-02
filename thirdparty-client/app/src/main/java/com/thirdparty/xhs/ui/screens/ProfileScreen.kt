@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package com.thirdparty.xhs.ui.screens
 
 import androidx.compose.foundation.clickable
@@ -22,7 +24,7 @@ import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.SwitchAccount
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -102,7 +104,7 @@ fun ProfileScreen(
     LaunchedEffect(reloadKey) { viewModel.load() }
 
     if (state.loading && state.profile == null) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingIndicator() }
         return
     }
 
@@ -220,7 +222,7 @@ fun ProfileScreen(
                 headlineContent = { Text("切换游客账号") },
                 supportingContent = { Text(if (rotating) "正在创建新的随机账号…" else "生成一个全新的随机游客账号（每次不同）") },
                 leadingContent = {
-                    if (rotating) CircularProgressIndicator(Modifier.size(24.dp))
+                    if (rotating) LoadingIndicator(Modifier.size(24.dp))
                     else Icon(Icons.Filled.SwitchAccount, null, tint = MaterialTheme.colorScheme.primary)
                 },
                 colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),

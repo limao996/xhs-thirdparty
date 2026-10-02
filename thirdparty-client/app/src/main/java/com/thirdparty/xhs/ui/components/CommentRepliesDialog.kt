@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package com.thirdparty.xhs.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
@@ -13,7 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -89,7 +91,7 @@ fun CommentRepliesDialog(
         text = {
             if (loading && replies.isEmpty()) {
                 Box(Modifier.fillMaxWidth().padding(Spacing.l), Alignment.Center) {
-                    CircularProgressIndicator(Modifier.size(24.dp))
+                    LoadingIndicator(Modifier.size(24.dp))
                 }
             } else if (replies.isEmpty()) {
                 Text(

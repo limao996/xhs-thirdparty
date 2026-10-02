@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package com.thirdparty.xhs.ui.screens
 
 import androidx.compose.foundation.background
@@ -16,7 +18,7 @@ import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -272,7 +274,7 @@ private fun HomeHeader(guest: String, rotating: Boolean, onOpenSearch: () -> Uni
             color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
             modifier = Modifier.weight(1f))
         if (rotating) {
-            CircularProgressIndicator(Modifier.width(20.dp).height(20.dp))
+            LoadingIndicator(Modifier.width(20.dp).height(20.dp))
             Spacer(Modifier.width(8.dp))
         }
         IconButton(onClick = onOpenSearch) {

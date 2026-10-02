@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package com.thirdparty.xhs.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
@@ -13,7 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -150,7 +152,7 @@ fun XhsWaterfallGrid(
                     Modifier.fillMaxWidth().padding(Spacing.m),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (loadingMore) CircularProgressIndicator(Modifier.size(24.dp))
+                    if (loadingMore) LoadingIndicator(Modifier.size(24.dp))
                 }
             }
         }

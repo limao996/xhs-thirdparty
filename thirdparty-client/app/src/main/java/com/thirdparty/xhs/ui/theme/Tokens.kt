@@ -75,6 +75,16 @@ object Corners {
 
     val extraLarge: Shape
         @Composable @ReadOnlyComposable get() = MaterialTheme.shapes.extraLarge
+
+    /**
+     * MD3 `full` — a pill / circle.
+     *
+     * Not part of [MaterialTheme.shapes] (the scheme only carries the five corner
+     * steps), so it lives here as a token instead of being written ad hoc at each
+     * call site. Expressive uses it for buttons by default, which is why
+     * 关注 / 已关注 are pills rather than the rounded rectangles they used to be.
+     */
+    val full: Shape get() = RoundedCornerShape(percent = 50)
 }
 
 /** Standard avatar sizes on the 4dp grid. */

@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package com.thirdparty.xhs.ui.screens
 
 import android.content.Context
@@ -20,7 +22,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -113,7 +115,7 @@ fun VideoFeedScreen(
     if (state.items.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             when {
-                state.firstLoading -> CircularProgressIndicator()
+                state.firstLoading -> LoadingIndicator()
                 state.error -> EmptyState(
                     title = "推荐加载失败",
                     modifier = Modifier.fillMaxSize(),

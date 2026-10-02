@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package com.thirdparty.xhs.ui.screens
 
 import androidx.compose.foundation.background
@@ -25,7 +27,7 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -189,7 +191,7 @@ fun DetailScreen(
     ) { pad ->
         when {
             state.loading -> Box(Modifier.fillMaxSize().padding(pad), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+                LoadingIndicator()
             }
             state.missing || state.item == null -> Box(Modifier.fillMaxSize().padding(pad), contentAlignment = Alignment.Center) {
                 Text("内容加载失败（可能已下线或需付费）")
@@ -416,7 +418,7 @@ private fun DetailContent(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Spacer(Modifier.width(Spacing.s))
-                    Surface(onClick = { viewModel.toggleFollow() }, shape = XhsShapes.small,
+                    Surface(onClick = { viewModel.toggleFollow() }, shape = Corners.full,
                         color = if (state.followed) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.primary) {
                         Text(if (state.followed) "已关注" else "+ 关注",
                             Modifier.padding(horizontal = Spacing.m, vertical = Spacing.xs),
@@ -448,7 +450,7 @@ private fun DetailContent(
             Text("评论 ${item.commentCount}", style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(4.dp))
             if (state.commentsLoading && state.comments.isEmpty()) {
-                CircularProgressIndicator(Modifier.size(28.dp))
+                LoadingIndicator(Modifier.size(28.dp))
             } else if (state.comments.isEmpty() && state.commentsError) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -469,7 +471,7 @@ private fun DetailContent(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         if (state.commentsLoading) {
-                            CircularProgressIndicator(Modifier.size(16.dp))
+                            LoadingIndicator(Modifier.size(16.dp))
                             Spacer(Modifier.width(Spacing.s))
                         }
                         Text("查看更多评论")
@@ -528,7 +530,7 @@ private fun CommentRow(c: CommentItem, onOpenReplies: (CommentItem) -> Unit) {
             if (c.replies.isNotEmpty()) {
                 Spacer(Modifier.height(Spacing.xs))
                 Surface(
-                    shape = Corners.small,
+                    shape = Corners.medium,
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     modifier = Modifier.fillMaxWidth().clickable { onOpenReplies(c) }
                 ) {

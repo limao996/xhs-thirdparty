@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package com.thirdparty.xhs.ui.screens
 
 import androidx.compose.foundation.clickable
@@ -20,7 +22,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -45,6 +47,7 @@ import com.thirdparty.xhs.ui.components.EmptyState
 import com.thirdparty.xhs.ui.components.XhsWaterfallGrid
 import com.thirdparty.xhs.ui.components.XhsAvatar
 import com.thirdparty.xhs.ui.theme.AvatarSize
+import com.thirdparty.xhs.ui.theme.Corners
 import com.thirdparty.xhs.ui.theme.Spacing
 import com.thirdparty.xhs.ui.viewmodel.AuthorViewModel
 
@@ -102,7 +105,7 @@ fun AuthorScreen(
                     Spacer(Modifier.width(Spacing.s))
                     Surface(
                         onClick = { viewModel.toggleFollow() },
-                        shape = MaterialTheme.shapes.small,
+                        shape = Corners.full,
                         color = if (state.followed) MaterialTheme.colorScheme.secondaryContainer
                         else MaterialTheme.colorScheme.primary,
                         contentColor = if (state.followed) MaterialTheme.colorScheme.onSecondaryContainer
@@ -122,7 +125,7 @@ fun AuthorScreen(
             // and push centred states off-screen)
             Box(Modifier.fillMaxWidth().weight(1f)) {
             if (state.notesLoading && state.notes.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingIndicator() }
             } else if (!viewModel.validUserId) {
                 // the caller had no usable author id — a network retry cannot help
                 EmptyState(

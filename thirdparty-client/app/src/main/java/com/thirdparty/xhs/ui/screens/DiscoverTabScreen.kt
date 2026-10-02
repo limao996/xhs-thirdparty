@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package com.thirdparty.xhs.ui.screens
 
 import androidx.compose.foundation.clickable
@@ -28,7 +30,7 @@ import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
@@ -174,7 +176,7 @@ private fun FeedTab(
         }
 
         if (state.feed.items.isEmpty() && state.feed.firstLoading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingIndicator() }
             return
         }
 
@@ -230,7 +232,7 @@ private fun FanGroupTab(
 ) {
     val clear = com.thirdparty.xhs.ui.theme.bottomNavClearance()
     if (loading && recommended.isEmpty()) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingIndicator() }
         return
     }
     if (recommended.isEmpty()) {
@@ -330,7 +332,7 @@ private fun FanGroupTab(
                     Modifier.fillMaxWidth().padding(Spacing.l),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (loadingMore) CircularProgressIndicator(Modifier.size(24.dp))
+                    if (loadingMore) LoadingIndicator(Modifier.size(24.dp))
                 }
             }
         } else {

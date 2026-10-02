@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package com.thirdparty.xhs.ui.components
 
 import android.content.Context
@@ -165,10 +167,9 @@ fun BufferingIndicator(
             modifier,
             contentAlignment = androidx.compose.ui.Alignment.Center
         ) {
-            androidx.compose.material3.CircularProgressIndicator(
+            androidx.compose.material3.LoadingIndicator(
                 modifier = Modifier.size(40.dp),
                 color = tint,
-                strokeWidth = 3.dp
             )
         }
     }

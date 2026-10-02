@@ -55,29 +55,39 @@ private fun NoteItem.feeForVideo(): FeeKind = when {
 }
 
 /**
- * MD3-toned badge. Colors come from the active ColorScheme so both light and dark
- * themes stay legible:
- *  - 图文    -> surfaceContainerHighest / onSurfaceVariant
- *  - VIP     -> tertiaryContainer / onTertiaryContainer
- *  - 粉丝圈  -> secondaryContainer / onSecondaryContainer
- *  - 免费    -> surfaceVariant / onSurfaceVariant
+ * MD3-toned badge.
+ *
+ * Four states have to be tellable apart at a glance on top of a photo, so the
+ * roles are chosen for maximum separation rather than for a tidy gradient — and
+ * M3 Expressive names the accent role (`tertiary`) as the one for badges:
+ *
+ *  - VIP      -> **solid tertiary** (gold). The paid tier is the one that changes
+ *               what the user can do, so it gets full-strength colour, not a tint.
+ *  - 粉丝圈    -> primaryContainer (brand rose tint) — the brand's own family.
+ *  - 免费     -> secondaryContainer (desaturated mauve) — present but recessive.
+ *  - 图文     -> surfaceContainerHighest (neutral). It describes the media type,
+ *               not the price, so it must not compete with the fee labels.
+ *
+ * Each pair comes from the same tone family, so `on*` stays legible in light and
+ * dark. (The old scheme had primaryContainer == secondaryContainer, which is why
+ * these were previously indistinguishable.)
  */
 @Composable
 fun FeeBadge(item: NoteItem, compact: Boolean = false, modifier: Modifier = Modifier) {
     val kind = item.feeKind
     val container = when (kind) {
+        FeeKind.PAID -> MaterialTheme.colorScheme.tertiary
+        FeeKind.FAN_GROUP -> MaterialTheme.colorScheme.primaryContainer
+        FeeKind.FREE -> MaterialTheme.colorScheme.secondaryContainer
         FeeKind.IMAGE -> MaterialTheme.colorScheme.surfaceContainerHighest
-        FeeKind.PAID -> MaterialTheme.colorScheme.tertiaryContainer
-        FeeKind.FAN_GROUP -> MaterialTheme.colorScheme.secondaryContainer
-        FeeKind.FREE -> MaterialTheme.colorScheme.surfaceVariant
     }
     val content = when (kind) {
+        FeeKind.PAID -> MaterialTheme.colorScheme.onTertiary
+        FeeKind.FAN_GROUP -> MaterialTheme.colorScheme.onPrimaryContainer
+        FeeKind.FREE -> MaterialTheme.colorScheme.onSecondaryContainer
         FeeKind.IMAGE -> MaterialTheme.colorScheme.onSurfaceVariant
-        FeeKind.PAID -> MaterialTheme.colorScheme.onTertiaryContainer
-        FeeKind.FAN_GROUP -> MaterialTheme.colorScheme.onSecondaryContainer
-        FeeKind.FREE -> MaterialTheme.colorScheme.onSurfaceVariant
     }
-    Surface(shape = Corners.extraSmall, color = container, contentColor = content, modifier = modifier) {
+    Surface(shape = Corners.small, color = container, contentColor = content, modifier = modifier) {
         Text(
             when (kind) {
                 FeeKind.IMAGE -> "图文"
@@ -86,7 +96,7 @@ fun FeeBadge(item: NoteItem, compact: Boolean = false, modifier: Modifier = Modi
                 FeeKind.FREE -> "免费"
             },
             Modifier.padding(
-                horizontal = if (compact) Spacing.xs else Spacing.s,
+                horizontal = if (compact) Spacing.s else Spacing.m,
                 vertical = 2.dp
             ),
             style = if (compact) MaterialTheme.typography.labelSmall

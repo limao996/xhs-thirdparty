@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package com.thirdparty.xhs.ui.screens
 
 import androidx.compose.foundation.layout.Box
@@ -16,7 +18,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Group
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -80,7 +82,7 @@ fun UserListScreen(
     ) { pad ->
         when {
             state.loading -> Box(Modifier.fillMaxSize().padding(pad), Alignment.Center) {
-                CircularProgressIndicator()
+                LoadingIndicator()
             }
             state.users.isEmpty() -> Box(Modifier.fillMaxSize().padding(pad)) {
                 EmptyState(
@@ -155,7 +157,7 @@ fun UserListScreen(
                                 Modifier.fillMaxWidth().padding(Spacing.l),
                                 contentAlignment = Alignment.Center
                             ) {
-                                if (state.loadingMore) CircularProgressIndicator(Modifier.size(24.dp))
+                                if (state.loadingMore) LoadingIndicator(Modifier.size(24.dp))
                             }
                         }
                     } else {
