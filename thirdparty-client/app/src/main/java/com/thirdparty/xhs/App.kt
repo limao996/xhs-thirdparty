@@ -58,6 +58,15 @@ class App : Application() {
      */
     var autoVipSetter: ((Boolean) -> Unit)? = null
 
+    /**
+     * True while one of our own system pickers (the file/folder chooser) is in
+     * front. That chooser pauses this activity, and the app lock must not fire for
+     * it — otherwise picking a backup file would demand an unlock on every attempt.
+     * Only set around launches this app starts.
+     */
+    @Volatile
+    var systemPickerActive: Boolean = false
+
     override fun onCreate() {
         super.onCreate()
         INSTANCE = this

@@ -186,12 +186,11 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
                     var locked by androidx.compose.runtime.remember {
                         androidx.compose.runtime.mutableStateOf(biometricLockEnabled())
                     }
-                    // re-lock whenever the app goes to the background, so coming back
-                    // always asks again — that is the whole point of the lock
                     val owner = LocalLifecycleOwner.current
                     androidx.compose.runtime.DisposableEffect(owner) {
                         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-                            if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP &&
+                            if (event == androidx.lifecycle.Lifecycle.Event.ON_PAUSE &&
+                                !App.INSTANCE.systemPickerActive &&
                                 biometricLockEnabled()
                             ) {
                                 locked = true
@@ -203,25 +202,8 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
                     androidx.compose.runtime.LaunchedEffect(locked) {
                         if (locked) requestUnlock { locked = false }
                     }
-                    // FLAG_SECURE whenever the lock is ENABLED — not merely while
-                    // `locked` is true.
-                    //
-                    // Timing is the whole point: the system snapshots the app as it
-                    // goes to the background, and that snapshot comes from the last
-                    // frame the user was looking at, i.e. BEFORE ON_STOP flips
-                    // `locked`. Keying off `locked` therefore still left the content
-                    // visible in 后台管理. Keying off "is the lock on" blanks the
-                    // window the entire time it is enabled.
+                    // the toggle takes effect at once: ON locks now, OFF unlocks
                     val lockEpoch by App.INSTANCE.lockEpoch.collectAsStateWithLifecycle()
-                    androidx.compose.runtime.DisposableEffect(lockEpoch) {
-                        val w = window
-                        if (biometricLockEnabled()) {
-                            w.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
-                        } else {
-                            w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
-                        }
-                        onDispose { }
-                    }
                     androidx.compose.runtime.LaunchedEffect(lockEpoch) {
                         if (lockEpoch > 0) locked = biometricLockEnabled()
                     }

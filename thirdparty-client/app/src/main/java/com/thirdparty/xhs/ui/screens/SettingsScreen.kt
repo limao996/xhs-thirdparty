@@ -86,6 +86,7 @@ fun SettingsScreen(
         Column(Modifier.fillMaxSize().padding(pad).verticalScroll(rememberScrollState())) {
 
             // ---- 外观 ----
+            SectionLabel("外观")
             ListItem(
                 headlineContent = { Text("外观主题") },
                 supportingContent = { Text(themeMode.label()) },
@@ -96,12 +97,7 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(Spacing.s))
             HorizontalDivider()
-            Text(
-                "安全",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = Spacing.l, top = Spacing.m, bottom = Spacing.s)
-            )
+            SectionLabel("安全")
 
             ListItem(
                 headlineContent = { Text("指纹解锁") },
@@ -131,12 +127,7 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(Spacing.s))
             HorizontalDivider()
-            Text(
-                "内容",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = Spacing.l, top = Spacing.m, bottom = Spacing.s)
-            )
+            SectionLabel("内容")
 
             ListItem(
                 headlineContent = { Text("最近浏览上限") },
@@ -162,12 +153,7 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(Spacing.s))
             HorizontalDivider()
-            Text(
-                "数据",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = Spacing.l, top = Spacing.m, bottom = Spacing.s)
-            )
+            SectionLabel("数据")
 
             ListItem(
                 headlineContent = { Text("备份与恢复") },
@@ -243,4 +229,15 @@ private fun ThemeMode.label(): String = when (this) {
     ThemeMode.SYSTEM -> "跟随系统"
     ThemeMode.LIGHT -> "浅色"
     ThemeMode.DARK -> "深色"
+}
+
+/** Section header, shared with the 我的 page for a consistent rhythm. */
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = Spacing.l, top = Spacing.m, bottom = Spacing.s)
+    )
 }

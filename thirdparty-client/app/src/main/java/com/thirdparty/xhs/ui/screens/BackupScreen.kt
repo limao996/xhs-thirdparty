@@ -69,6 +69,8 @@ fun BackupScreen(onBack: () -> Unit) {
     var merge by remember { mutableStateOf(true) }
     // restore replaces local favourites/history/follows, so it asks before acting
     var confirmRestore by remember { mutableStateOf<(() -> Unit)?>(null) }
+    // 上传会覆盖云端已有的备份，同样先问一次
+    var confirmUpload by remember { mutableStateOf(false) }
 
     var url by remember { mutableStateOf(WebDavClient.config(context).url) }
     var user by remember { mutableStateOf(WebDavClient.config(context).user) }
@@ -91,6 +93,7 @@ fun BackupScreen(onBack: () -> Unit) {
         ActivityResultContracts.CreateDocument("application/gzip")
     ) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
+        App.INSTANCE.systemPickerActive = false
         run("正在写入本地文件") {
             val bytes = BackupManager.exportCompressed(context)
             withContext(Dispatchers.IO) {
@@ -105,6 +108,7 @@ fun BackupScreen(onBack: () -> Unit) {
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
+        App.INSTANCE.systemPickerActive = false
         run("正在读取本地文件") {
             // read as bytes and let BackupManager detect gzip, so backups written
             // by an older uncompressed build still restore
@@ -134,6 +138,32 @@ fun BackupScreen(onBack: () -> Unit) {
     ) { pad ->
         // Restore replaces local favourites / history / follows, so it always asks
         // first — the merge-vs-replace choice alone is easy to miss.
+        // 上传会覆盖云端已有的备份；先问一次
+        if (confirmUpload) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { confirmUpload = false },
+                title = { Text("上传备份到云端？") },
+                text = { Text("云端已有的备份会被覆盖，本机上已有的备份不受影响。") },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = {
+                        confirmUpload = false
+                        WebDavClient.save(context, WebDavClient.WebDavConfig(url, user, pass))
+                        run("正在上传到云端") {
+                            val cfg = WebDavClient.WebDavConfig(url, user, pass)
+                            if (cfg.url.isBlank()) throw java.io.IOException("请先填写服务器地址")
+                            val dav = WebDavClient(App.INSTANCE.httpClient, cfg)
+                            dav.ensureDir().getOrThrow()
+                            dav.upload(WebDavClient.FILE_NAME, BackupManager.exportCompressed(context))
+                                .getOrThrow()
+                            "已上传到 WebDAV"
+                        }
+                    }) { Text("上传") }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(onClick = { confirmUpload = false }) { Text("取消") }
+                }
+            )
+        }
         confirmRestore?.let { action ->
             androidx.compose.material3.AlertDialog(
                 onDismissRequest = { confirmRestore = null },
@@ -183,10 +213,15 @@ fun BackupScreen(onBack: () -> Unit) {
             )
             Spacer(Modifier.height(Spacing.s))
             Row {
-                Button(onClick = { saveLauncher.launch("xhs-thirdparty-backup.json.gz") }) { Text("备份到文件") }
+                Button(onClick = {
+                    // the chooser pauses this activity; tell the app lock not to fire
+                    App.INSTANCE.systemPickerActive = true
+                    saveLauncher.launch("xhs-thirdparty-backup.json.gz")
+                }) { Text("备份到文件") }
                 Spacer(Modifier.size(Spacing.s))
                 OutlinedButton(onClick = {
                     confirmRestore = {
+                        App.INSTANCE.systemPickerActive = true
                         openLauncher.launch(arrayOf("application/gzip", "application/json", "*/*"))
                     }
                 }) {
@@ -250,18 +285,7 @@ fun BackupScreen(onBack: () -> Unit) {
 
             Spacer(Modifier.height(Spacing.s))
             Row {
-                Button(onClick = {
-                    WebDavClient.save(context, WebDavClient.WebDavConfig(url, user, pass))
-                    run("正在上传到云端") {
-                        val cfg = WebDavClient.WebDavConfig(url, user, pass)
-                        if (cfg.url.isBlank()) throw java.io.IOException("请先填写服务器地址")
-                        val dav = WebDavClient(App.INSTANCE.httpClient, cfg)
-                        dav.ensureDir().getOrThrow()
-                        dav.upload(WebDavClient.FILE_NAME, BackupManager.exportCompressed(context))
-                            .getOrThrow()
-                        "已上传到 WebDAV"
-                    }
-                }) { Text("上传备份") }
+                Button(onClick = { confirmUpload = true }) { Text("上传备份") }
                 Spacer(Modifier.size(Spacing.s))
                 OutlinedButton(onClick = {
                     WebDavClient.save(context, WebDavClient.WebDavConfig(url, user, pass))
