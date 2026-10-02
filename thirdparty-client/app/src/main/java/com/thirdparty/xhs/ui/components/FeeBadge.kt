@@ -12,28 +12,47 @@ import com.thirdparty.xhs.ui.theme.Corners
 import com.thirdparty.xhs.ui.theme.Spacing
 
 /**
- * Badge shown on a work's thumbnail: 图文 / VIP / 粉丝圈 / 免费.
+ * Badge shown on a work's thumbnail: 图文 / 粉丝圈 / VIP / 免费.
  *
- * 图文 is decided by the MEDIA TYPE, not by the fee — an image post is labelled
- * 图文 rather than priced, because for a gallery the fee state is not the useful
- * thing to show on a cover (the detail page states it). Video posts keep the fee
- * label.
+ * ## Which fields can be trusted WHERE
  *
- * Fee state (verified against the live backend, cross-checked against the
- * original app's own labels on the same author page, 4/4 correct):
- *  - `group_id > 0`            -> 粉丝圈   (published inside the author's fan group)
- *  - `group_id == 0, cin > 0`  -> VIP      (was labelled 付费)
- *  - `group_id == 0, cin == 0` -> 免费
+ * The feeds and the local lists do NOT receive the same payload, and getting this
+ * wrong labelled every feed item 图文. Measured against the live backend
+ * (tools/probe_label_fields.py):
+ *
+ * | field            | list (`v2/home/discover-note`) | detail (`v2/note/view`) |
+ * |------------------|-------------------------------|-------------------------|
+ * | `note_type`      | present, 1=图文 2=视频         | present                 |
+ * | `note_cin`       | present (0/2/3/4/8/10/12/18/28/38) | present            |
+ * | `note_media_url` | **absent**                     | present                 |
+ * | `group_id`       | **absent**                     | present                 |
+ *
+ * 收藏 / 最近浏览 store the full detail JSON, which is exactly why they looked
+ * right while the feeds did not.
+ *
+ * So the rule keys off `note_type` — the one media-type signal a list carries —
+ * and only reports 粉丝圈 where `group_id` is actually available. In a feed a
+ * fan-group post therefore falls back to VIP/免费 rather than claiming a group it
+ * cannot see; the detail page states it exactly. `note_cin` is a coin price, so
+ * >0 is the paid signal.
  */
 enum class FeeKind { IMAGE, FREE, PAID, FAN_GROUP }
 
 val NoteItem.feeKind: FeeKind
-    get() = when {
-        !isVideo -> FeeKind.IMAGE
-        groupId > 0 -> FeeKind.FAN_GROUP
-        noteCin > 0 -> FeeKind.PAID
-        else -> FeeKind.FREE
+    get() = when (noteType) {
+        // 1 = gallery / 图文. Authoritative, and present in list payloads too.
+        1 -> FeeKind.IMAGE
+        // 2 = video. 粉丝圈 needs group_id, which only the detail carries.
+        2 -> feeForVideo()
+        // note_type absent: fall back to whatever else the payload can tell us.
+        else -> if (!isVideo) FeeKind.IMAGE else feeForVideo()
     }
+
+private fun NoteItem.feeForVideo(): FeeKind = when {
+    groupId > 0 -> FeeKind.FAN_GROUP
+    noteCin > 0 -> FeeKind.PAID
+    else -> FeeKind.FREE
+}
 
 /**
  * MD3-toned badge. Colors come from the active ColorScheme so both light and dark
