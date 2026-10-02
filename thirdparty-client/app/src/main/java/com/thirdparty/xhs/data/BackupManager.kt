@@ -2,6 +2,7 @@ package com.thirdparty.xhs.data
 
 import android.content.Context
 import com.thirdparty.xhs.App
+import com.thirdparty.xhs.net.WebDavClient
 import com.thirdparty.xhs.net.CredentialStore
 import com.thirdparty.xhs.ui.theme.ThemeMode
 import kotlinx.coroutines.Dispatchers
@@ -13,19 +14,24 @@ import org.json.JSONObject
  * Export / import of everything the user would miss after a reinstall.
  *
  * Covers the guest account (identity + session + switch history), favourites,
- * recently-viewed and followed authors, plus the two settings that are not
- * derivable. Notes are stored as their **raw JSON**, which is exactly what the
- * detail page needs to re-open them offline, so a restore is lossless without
+ * recently-viewed, followed authors, search history, and every setting that is
+ * not derivable (主题 / VIP 自动切换 / 最近浏览上限 / 指纹解锁), plus the WebDAV
+ * transport config. Notes are stored as their **raw JSON**, which is exactly what
+ * the detail page needs to re-open them offline, so a restore is lossless without
  * needing a per-field serializer that would drift as NoteItem grows.
  *
- * The WebDAV credentials are deliberately NOT part of the payload: they are
- * transport config, and shipping them inside the file that gets uploaded is a
- * needless way to leak the password.
+ * Sensitive by construction: it carries the account token and the WebDAV password,
+ * so the file itself is the secret. The WebDAV credentials ARE included because
+ * leaving them out added no real protection (the token is in there anyway) while
+ * forcing everyone to re-type an 应用密码 after every restore.
+ *
+ * Restoring is tolerant of older payloads: every field is optional and a missing
+ * key leaves the current value alone, so a v1 backup never zeroes a setting.
  */
 object BackupManager {
 
     /** Bumped whenever the payload shape changes; see [restore]. */
-    const val VERSION = 2
+    const val VERSION = 3
     private const val MARKER = "xhs-thirdparty-backup"
 
     data class Result(val ok: Boolean, val detail: String)
@@ -79,6 +85,24 @@ object BackupManager {
         root.put("settings", JSONObject().apply {
             put("theme", themeKey(context))
             put("autoVip", store.autoSwitchOnVipExpiry)
+            // These were missing: a restore used to silently drop them, so the
+            // user's 最近浏览上限 / 指纹解锁 silently reverted to defaults.
+            put("historyLimit", store.historyLimit)
+            put("biometricLock", store.biometricLock)
+            // account state — restoring it avoids an unnecessary VIP switch right
+            // after a restore (the app would otherwise think the account expired)
+            put("vipEnd", store.vipEnd)
+        })
+
+        // Search history lived in its own prefs file and was never exported.
+        root.put("searchHistory", JSONArray(repoSearchHistory(context)))
+
+        // WebDAV config. The password IS included: the backup already carries the
+        // account token, so leaving it out added no security while forcing everyone
+        // to re-type their 应用密码 after a restore. The file is the user's own.
+        root.put("webdav", JSONObject().apply {
+            val cfg = WebDavClient.config(context)
+            put("url", cfg.url); put("user", cfg.user); put("password", cfg.password)
         })
 
         root.put("saved", JSONArray().apply {
@@ -171,7 +195,38 @@ object BackupManager {
                 )
             }
             store.autoSwitchOnVipExpiry = s.optBoolean("autoVip")
+            // only trust these when the key is actually present, so restoring an
+            // older backup (which lacked them) does not zero the user's settings
+            if (s.has("historyLimit")) store.historyLimit = s.optInt("historyLimit")
+            if (s.has("vipEnd")) store.vipEnd = s.optLong("vipEnd")
+            if (s.has("biometricLock")) {
+                // Enabling the app lock on a device where no biometric/lock screen
+                // is enrolled would lock the user out of their own app, so the
+                // preference is restored only where it can actually be honoured.
+                store.biometricLock = s.optBoolean("biometricLock") &&
+                    BiometricLockAvailable(context)
+            }
             counts.append("设置 ")
+        }
+
+        root.optJSONArray("searchHistory")?.let { arr ->
+            restoreSearchHistory(context, arr)
+            counts.append("搜索记录 ")
+        }
+
+        root.optJSONObject("webdav")?.let { w ->
+            val url = w.optString("url")
+            if (url.isNotBlank()) {
+                WebDavClient.save(
+                    context,
+                    WebDavClient.WebDavConfig(
+                        url = url,
+                        user = w.optString("user"),
+                        password = w.optString("password")
+                    )
+                )
+                counts.append("WebDAV ")
+            }
         }
 
         if (!merge) {
@@ -244,3 +299,36 @@ object BackupManager {
 private fun themeKey(context: Context): String =
     context.getSharedPreferences("settings", Context.MODE_PRIVATE)
         .getString("theme_mode", ThemeMode.SYSTEM.key) ?: ThemeMode.SYSTEM.key
+
+/**
+ * Search history lives in its own prefs file (`search_history`) as one
+ * newline-joined string — mirroring XhsRepository's format so both agree.
+ */
+private fun repoSearchHistory(context: Context): List<String> =
+    context.getSharedPreferences("search_history", Context.MODE_PRIVATE)
+        .getString("history", "")
+        ?.split("\n")?.filter { it.isNotBlank() } ?: emptyList()
+
+private fun restoreSearchHistory(context: Context, arr: JSONArray) {
+    val list = (0 until arr.length())
+        .mapNotNull { arr.optString(it).takeIf { s -> s.isNotBlank() } }
+        .distinct()
+        .take(10)   // same cap the app applies when saving
+    context.getSharedPreferences("search_history", Context.MODE_PRIVATE)
+        .edit().putString("history", list.joinToString("\n")).apply()
+}
+
+/**
+ * True when this device can actually present a biometric/passcode prompt.
+ *
+ * Restoring 指纹解锁 onto a device without one would lock the user out of the
+ * app entirely, which is strictly worse than not restoring the setting.
+ */
+private fun BiometricLockAvailable(context: Context): Boolean =
+    runCatching {
+        androidx.biometric.BiometricManager.from(context)
+            .canAuthenticate(
+                androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK or
+                    androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
+            ) == androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS
+    }.getOrDefault(false)
