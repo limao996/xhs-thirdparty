@@ -66,6 +66,7 @@ import com.thirdparty.xhs.ui.components.XhsAvatar
 import com.thirdparty.xhs.ui.components.XhsWaterfallGrid
 import com.thirdparty.xhs.ui.theme.AvatarSize
 import com.thirdparty.xhs.ui.theme.BottomNavClearance
+import com.thirdparty.xhs.ui.theme.bottomNavClearance
 import com.thirdparty.xhs.ui.theme.Spacing
 import com.thirdparty.xhs.ui.viewmodel.DiscoverTab
 import com.thirdparty.xhs.ui.viewmodel.DiscoverViewModel
@@ -125,13 +126,17 @@ fun DiscoverTabScreen(
                 }
             }
         }
+        // includes the live system navigation-bar inset; the fixed token alone left
+        // the FAB flush against the floating NavigationBar
+        val clear = bottomNavClearance()
+
         // refresh FAB — lifted above the floating bottom navigation bar
         FloatingActionButton(
             onClick = { scope.launch { viewModel.refresh() } },
             containerColor = MaterialTheme.colorScheme.primaryContainer,
             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
             modifier = Modifier.align(Alignment.BottomEnd)
-                .padding(end = Spacing.l, bottom = BottomNavClearance)
+                .padding(end = Spacing.l, bottom = clear)
         ) {
             Icon(Icons.Filled.Refresh, contentDescription = "刷新")
         }

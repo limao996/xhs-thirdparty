@@ -188,18 +188,14 @@ fun ProfileScreen(
             }
         }
         HorizontalDivider()
+        SectionLabel("我的内容")
 
         ProfileEntry(Icons.Filled.Favorite, "我的收藏", "${state.savedCount} 条", onOpenSaved)
         ProfileEntry(Icons.Filled.History, "最近浏览", "${state.historyCount} 条", onOpenHistory)
         ProfileEntry(Icons.Filled.Group, "我关注的作者", "${state.followedCount} 位", onOpenFollowed)
-        if (onOpenSettings != null) {
-            ProfileEntry(
-                Icons.Filled.Settings, "设置",
-                "外观 / 指纹解锁 / 软件伪装 / 最近浏览 / 备份",
-                onOpenSettings
-            )
-        }
 
+        HorizontalDivider()
+        SectionLabel("账号")
         if (onRotateGuest != null) {
             // confirm first: switching creates a brand-new account; the previous
             // one is only reachable through 历史账号, so a stray tap is not
@@ -261,6 +257,15 @@ fun ProfileScreen(
 
         }
 
+        HorizontalDivider()
+        SectionLabel("其他")
+        if (onOpenSettings != null) {
+            ProfileEntry(
+                Icons.Filled.Settings, "设置",
+                "外观 / 指纹解锁 / 最近浏览上限 / 备份",
+                onOpenSettings
+            )
+        }
         // image cache management (the disk cache can hold up to 64MB)
         var confirmClear by remember { mutableStateOf(false) }
         ListItem(
@@ -293,8 +298,6 @@ fun ProfileScreen(
             )
         }
 
-        HorizontalDivider()
-        ThemeSwitcher()
     }
 }
 
@@ -357,28 +360,14 @@ private fun ProfileEntry(
     )
 }
 
+
+/** Section header, matching the one used on the 设置 page. */
 @Composable
-private fun ThemeSwitcher() {
-    val currentMode by App.INSTANCE.themeState.collectAsState()
-    Column(Modifier.fillMaxWidth().padding(horizontal = Spacing.l, vertical = Spacing.m)) {
-        Text(
-            "外观主题",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(Modifier.height(Spacing.s))
-        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
-            listOf(
-                ThemeMode.SYSTEM to "跟随系统",
-                ThemeMode.LIGHT to "浅色",
-                ThemeMode.DARK to "深色"
-            ).forEach { (mode, label) ->
-                FilterChip(
-                    selected = currentMode == mode,
-                    onClick = { App.INSTANCE.setThemeMode(mode) },
-                    label = { Text(label) }
-                )
-            }
-        }
-    }
+private fun SectionLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = Spacing.l, top = Spacing.m, bottom = Spacing.xs)
+    )
 }

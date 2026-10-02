@@ -7,6 +7,8 @@ import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
 
 /**
  * MD3-aligned design tokens.
@@ -24,6 +26,20 @@ import androidx.compose.ui.unit.dp
  * final rows can never be brought into view — which reads as "it won't scroll".
  */
 val BottomNavClearance: Dp = 96.dp
+
+/**
+ * [BottomNavClearance] plus the real system navigation-bar inset.
+ *
+ * The token alone is a fixed height, but MD3's NavigationBar adds the system
+ * gesture-bar inset on top of its own height. Anything anchored with only the
+ * token therefore ends up flush against the bar — which is what made the 发现
+ * refresh FAB look glued to it. Read the live inset instead of guessing.
+ */
+@Composable
+fun bottomNavClearance(): Dp =
+    BottomNavClearance +
+        androidx.compose.foundation.layout.WindowInsets.navigationBars
+            .asPaddingValues().calculateBottomPadding()
 
 object Spacing {
     val none: Dp = 0.dp
