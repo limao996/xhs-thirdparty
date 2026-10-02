@@ -1530,3 +1530,31 @@ Compose 的开关在 dump 里不是 `android.widget.Switch`，而是
 另：本轮把"先枚举全部状态，再逐项比对"当成固定套路 ——
 比起凭印象想"还差什么"，列表对比能直接暴露缺口（4 处里有 2 处在独立 prefs 文件里，
 光看主 prefs 是发现不了的）。
+
+### 第 87 轮 · M3 Expressive + 全量依赖升到最新；7 项需求
+7 项需求全部落地（VIP 弱网/30s 轮询、图文高度限制、切换不再造多个账号、
+收藏多选上下文栏+确认框、图文标签、付费→VIP/VIP用户）。
+
+随后按要求改用 **M3 Expressive** 并升级全部依赖 —— 这是一次整条工具链的迁移：
+Gradle 8.10→9.8、AGP 8.1.4→9.4.1、Kotlin 1.9.22→2.1.21、kapt→KSP、
+compileSdk 34→37、material3 1.2→1.5.0-alpha29。原因见下方教训。
+
+### 教训一：一个"简单的 UI 要求"背后可能是整条工具链
+M3 Expressive 的主题入口在 material3 **稳定版里是 internal**，只有 alpha 才公开；
+而 alpha 又要求更新的 compose、更新的 compileSdk、更新的 AGP……
+**升一个包，牵出的是整条依赖链。** 我一开始按"改主题名"估的工作量，
+实际做的是 Gradle+AGP+Kotlin+SDK+kapt→KSP 的联合迁移。
+教训：遇到"用 X 新特性"这类要求，**先确认 X 在哪个版本才真正公开可用**，
+再倒推需要动多少东西，而不是直接开改。
+
+### 教训二：改 sourceSets 布局后必须 clean
+迁移完成后增量构建的 APK 启动即崩 `NoClassDefFoundError: ThemeMode` ——
+类明明在 dex 里。清掉 build 目录后完全正常。
+**构建系统的增量状态在"布局级"改动后会不一致**，这类改动后第一次必须 clean，
+否则会花时间在运行时排查一个其实是构建产物的问题。
+
+### 工具链上踩到的三个硬约束（均已按官方方式解决）
+- android-37 不在默认 SDK 源，需 `--channel=3` canary 渠道
+- AGP 9 自带 Kotlin，再应用 `kotlin.android` 会报 "Cannot add extension with name 'kotlin'"
+- AGP 9 拒绝插件触碰 `kotlin.sourceSets` —— **它的报错信息直接给了
+  `android.disallowKotlinSourceSets=false`**。认真读报错里的 Solution 段省了很多时间。
