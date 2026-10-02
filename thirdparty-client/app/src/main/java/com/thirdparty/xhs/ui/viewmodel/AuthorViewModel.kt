@@ -45,7 +45,16 @@ class AuthorViewModel(
      *  whose payload lacked `user_id`); there is nothing to fetch. */
     val validUserId: Boolean get() = userId > 0
 
-    init { if (validUserId) load() }
+    init {
+        if (validUserId) load()
+        // re-read when the follow state changes anywhere; see XhsRepository.followVersion
+        viewModelScope.launch {
+            if (!validUserId) return@launch
+            repo.followVersion.collect {
+                _ui.update { it.copy(followed = repo.isFollowed(userId)) }
+            }
+        }
+    }
 
     fun load() {
         if (!validUserId) {

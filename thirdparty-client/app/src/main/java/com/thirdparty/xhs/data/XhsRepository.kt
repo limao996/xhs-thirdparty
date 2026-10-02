@@ -10,6 +10,8 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import org.json.JSONObject
 import com.thirdparty.xhs.net.CredentialStore
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Coordinates network fetches with the purely local favorite/history storage.
@@ -527,17 +529,32 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
     }
 
     // ---- local follow (关注 · 本地) --------------------------------------
+
+    private val _followVersion = MutableStateFlow(0)
+
+    /**
+     * Bumped on every follow / unfollow.
+     *
+     * Screens already on the back stack keep their ViewModel alive, so anything
+     * that read [isFollowed] once in `init` stayed stale: follow an author on a
+     * deeper page, press back, and the previous page still showed 「+ 关注」.
+     * Those places observe this counter and re-read.
+     */
+    val followVersion: StateFlow<Int> = _followVersion
+
     suspend fun isFollowed(uid: Int): Boolean =
         withContext(Dispatchers.IO) { followDao.exists(uid) > 0 }
 
     suspend fun toggleFollowLocal(uid: Int, name: String, head: String, signature: String): Boolean =
         withContext(Dispatchers.IO) {
-            if (followDao.exists(uid) == 0) {
+            val now = if (followDao.exists(uid) == 0) {
                 followDao.upsert(FollowedEntity(uid, name, head, signature))
                 true
             } else {
                 followDao.remove(uid); false
             }
+            _followVersion.value++
+            now
         }
 
     suspend fun followedAuthors(): List<FollowedEntity> =

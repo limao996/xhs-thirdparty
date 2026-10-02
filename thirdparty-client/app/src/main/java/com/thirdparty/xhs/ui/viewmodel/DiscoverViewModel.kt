@@ -66,6 +66,8 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
     private var myId = 0
 
     init {
+        // 关注 tab 的列表要跟着其它页面的关注操作走
+        viewModelScope.launch { repo.followVersion.collect { refreshFollowed() } }
         viewModelScope.launch {
             val cats = runCatching { repo.categories() }.getOrDefault(emptyList())
             _ui.update { it.copy(categories = cats) }

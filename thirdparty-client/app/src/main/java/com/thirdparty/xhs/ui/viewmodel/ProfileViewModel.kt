@@ -27,7 +27,16 @@ class ProfileViewModel(private val repo: XhsRepository) : ViewModel() {
     private val _ui = MutableStateFlow(ProfileUiState(guestHash = repo.currentGuestHash()))
     val ui: StateFlow<ProfileUiState> = _ui.asStateFlow()
 
-    init { load() }
+    init {
+        load()
+        // the 关注 count must follow follows made on other screens
+        viewModelScope.launch {
+            repo.followVersion.collect {
+                val n = repo.followedAuthors().size
+                _ui.value = _ui.value.copy(followedCount = n)
+            }
+        }
+    }
 
     /** Re-readable counts; called when the profile screen is shown. */
     fun load() {

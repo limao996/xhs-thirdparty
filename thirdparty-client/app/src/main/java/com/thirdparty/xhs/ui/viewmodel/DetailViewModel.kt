@@ -36,7 +36,18 @@ class DetailViewModel(
     private var commentPage = 0
     private var commentsInFlight = false
 
-    init { load() }
+    init {
+        load()
+        // Follow state lives in the local DB, and a deeper page (the author page)
+        // can change it while this screen sits on the back stack. Without re-reading,
+        // coming back still showed 「+ 关注」 for someone already followed.
+        viewModelScope.launch {
+            repo.followVersion.collect {
+                val uid = _ui.value.author?.userId ?: _ui.value.item?.userId ?: return@collect
+                if (uid > 0) _ui.value = _ui.value.copy(followed = repo.isFollowed(uid))
+            }
+        }
+    }
 
     fun load() {
         viewModelScope.launch {
