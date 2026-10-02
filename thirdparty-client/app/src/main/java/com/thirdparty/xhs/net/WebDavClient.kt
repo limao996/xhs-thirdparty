@@ -70,17 +70,32 @@ class WebDavClient(
     }
 
     /**
-     * Create the target directory if the server expects it. Failures are ignored:
-     * many drives auto-create on PUT, and a 405 here is not worth blocking an
-     * otherwise fine upload.
+     * Make sure the target collection exists.
+     *
+     * Reports failures rather than swallowing them: a wrong URL or password shows
+     * up here first, and silently ignoring it turned "your credentials are wrong"
+     * into a confusing PUT error further down. 405 means the server does not allow
+     * MKCOL but the collection is already there, which is fine.
      */
-    suspend fun ensureDir(): Unit = withContext(Dispatchers.IO) {
+    suspend fun ensureDir(): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
-            val req = authed(Request.Builder().url(prefs.url.trimEnd('/') + "/").method("MKCOL", null)).build()
-            client.newCall(req).execute().close()
+            val req = authed(
+                Request.Builder().url(prefs.url.trimEnd('/') + "/").method("MKCOL", null)
+            ).build()
+            client.newCall(req).execute().use { resp ->
+                when {
+                    resp.isSuccessful || resp.code == 405 -> Unit
+                    resp.code == 401 || resp.code == 403 ->
+                        throw IOException("认证失败（HTTP ${resp.code}），请检查账号与应用密码")
+                    resp.code == 404 -> throw IOException("服务器地址不存在（HTTP 404），请检查路径")
+                    else -> throw IOException("无法访问服务器（HTTP ${resp.code} ${resp.message}）")
+                }
+            }
         }
-        Unit
     }
+
+    /** Does a real round-trip so the user can validate the config on demand. */
+    suspend fun testConnection(): Result<Unit> = ensureDir()
 
     companion object {
         /** Backup file name on the drive. */

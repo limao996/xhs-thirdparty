@@ -24,3 +24,7 @@ shots/
 .acl-recovery/
 *.apk
 
+
+# ---- local verification fixtures ----
+webdav_root/
+webdav_*.log

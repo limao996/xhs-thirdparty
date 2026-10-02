@@ -201,6 +201,19 @@ fun BackupScreen(onBack: () -> Unit) {
                 WebDavClient.save(context, WebDavClient.WebDavConfig(url, user, pass))
                 status = "配置已保存"
             }) { Text("保存配置") }
+            Spacer(Modifier.size(Spacing.s))
+            OutlinedButton(onClick = {
+                WebDavClient.save(context, WebDavClient.WebDavConfig(url, user, pass))
+                run("正在测试连接") {
+                    val cfg = WebDavClient.WebDavConfig(url, user, pass)
+                    if (cfg.url.isBlank()) throw java.io.IOException("请先填写服务器地址")
+                    WebDavClient(App.INSTANCE.httpClient, cfg).testConnection().getOrThrow()
+                    "连接正常"
+                }
+            }) { Text("测试连接") }
+            Spacer(Modifier.size(Spacing.s))
+            OutlinedButton(onClick = {
+            }) { Text("保存配置") }
 
             Spacer(Modifier.height(Spacing.s))
             Row {
@@ -210,7 +223,7 @@ fun BackupScreen(onBack: () -> Unit) {
                         val cfg = WebDavClient.WebDavConfig(url, user, pass)
                         if (cfg.url.isBlank()) throw java.io.IOException("请先填写服务器地址")
                         val dav = WebDavClient(App.INSTANCE.httpClient, cfg)
-                        dav.ensureDir()
+                        dav.ensureDir().getOrThrow()
                         dav.upload(WebDavClient.FILE_NAME, BackupManager.export(context))
                             .getOrThrow()
                         "已上传到 WebDAV"
