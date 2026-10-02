@@ -165,7 +165,9 @@ fun SearchScreen(
                 !state.searched && state.history.isEmpty() -> EmptyState(
                     title = "搜索短视频 / 笔记 / 作者",
                     modifier = Modifier.fillMaxSize(),
-                    description = "在下方切换「内容」或「作者」来搜索",
+                    // the 内容 / 作者 tabs sit ABOVE this block, so the old
+                    // "在下方切换" pointed the wrong way
+                    description = "输入关键词，在上方切换「内容」或「作者」",
                     icon = Icons.Filled.Search
                 )
                 // No pull-to-refresh here: the list is produced by the query, so
