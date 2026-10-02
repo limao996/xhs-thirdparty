@@ -91,6 +91,10 @@ class CredentialStore(context: Context) {
             }
             ?: emptyList()
 
+    /** Replace the whole account history (used when restoring a backup). */
+    fun replaceHistory(lines: List<String>) {
+        prefs.edit().putString(KEY_HISTORY, lines.take(HISTORY_MAX).joinToString("\n")).apply()
+    }
     /** Record the account now in use, moving it to the front of the history. */
     fun rememberAccount(uid: Int, name: String) {
         val id = deviceId

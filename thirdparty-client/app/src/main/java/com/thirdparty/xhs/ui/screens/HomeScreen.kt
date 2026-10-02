@@ -69,6 +69,7 @@ fun HomeScreen(
     onOpenFollowing: () -> Unit,
     onOpenFans: () -> Unit,
     onOpenMyNotes: (Int) -> Unit,
+    onOpenBackup: () -> Unit,
     guestViewModel: GuestViewModel = viewModel(factory = RepoViewModelFactory())
 ) {
     val context = LocalContext.current
@@ -82,6 +83,14 @@ fun HomeScreen(
 
     LaunchedEffect(Unit) {
         guestViewModel.ensureFreshGuest()
+    }
+
+    // A backup restore swaps out the stored account; reload the cached account
+    // state so the top bar and 我的 page stop showing the pre-restore id.
+    val dataEpoch by App.INSTANCE.dataEpoch.collectAsStateWithLifecycle()
+    LaunchedEffect(dataEpoch) {
+        if (dataEpoch == 0) return@LaunchedEffect
+        guestViewModel.refreshAccountState()
     }
 
     val immersive = tab == HomeTab.FEED
@@ -153,6 +162,7 @@ fun HomeScreen(
                             onOpenFollowing = onOpenFollowing,
                             onOpenFans = onOpenFans,
                             onOpenMyNotes = { uid -> onOpenMyNotes(uid) },
+                            onOpenBackup = onOpenBackup,
                             historyCount = history.size,
                             autoVip = autoVip,
                             onSetAutoVip = { on ->

@@ -58,6 +58,7 @@ import com.thirdparty.xhs.ui.theme.BottomNavClearance
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material3.Switch
 import androidx.compose.ui.draw.clip
+import androidx.compose.material.icons.filled.CloudUpload
 
 /**
  * 我的：账号信息（用户名/ID/VIP）+ 收藏 / 最近浏览 / 我关注的作者 / 切换游客 / 外观主题。
@@ -75,6 +76,8 @@ fun ProfileScreen(
     onOpenFollowing: (() -> Unit)? = null,
     onOpenFans: (() -> Unit)? = null,
     onOpenMyNotes: ((Int) -> Unit)? = null,
+    /** 备份与恢复 */
+    onOpenBackup: (() -> Unit)? = null,
     /** VIP-expiry auto switch */
     autoVip: Boolean = false,
     onSetAutoVip: ((Boolean) -> Unit)? = null,
@@ -178,6 +181,13 @@ fun ProfileScreen(
         ProfileEntry(Icons.Filled.Favorite, "我的收藏", "${state.savedCount} 条", onOpenSaved)
         ProfileEntry(Icons.Filled.History, "最近浏览", "${state.historyCount} 条", onOpenHistory)
         ProfileEntry(Icons.Filled.Group, "我关注的作者", "${state.followedCount} 位", onOpenFollowed)
+        if (onOpenBackup != null) {
+            ProfileEntry(
+                Icons.Filled.CloudUpload, "备份与恢复",
+                "本地文件或 WebDAV，含账号 / 收藏 / 浏览 / 关注",
+                onOpenBackup
+            )
+        }
 
         if (onRotateGuest != null) {
             HorizontalDivider()

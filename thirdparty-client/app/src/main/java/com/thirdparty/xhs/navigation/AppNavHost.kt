@@ -44,6 +44,7 @@ import androidx.compose.foundation.layout.padding
 import com.thirdparty.xhs.App
 import com.thirdparty.xhs.ui.screens.UserListScreen
 import com.thirdparty.xhs.ui.viewmodel.UserListMode
+import com.thirdparty.xhs.ui.screens.BackupScreen
 
 /**
  * A Scaffold wrapper hosting the local (Room) list for a given mode.
@@ -147,7 +148,8 @@ fun AppNavHost(
                 onOpenFollowing = { nav.navigate(Routes.FOLLOWING) },
                 onOpenFans = { nav.navigate(Routes.FANS) },
                 // 作品 on the account card opens that account's own author page
-                onOpenMyNotes = { uid -> nav.navigate(Routes.author(uid)) }
+                onOpenMyNotes = { uid -> nav.navigate(Routes.author(uid)) },
+                onOpenBackup = { nav.navigate(Routes.BACKUP) }
             )
         }
 
@@ -181,6 +183,10 @@ fun AppNavHost(
                 onBack = { nav.popBackStack() },
                 onOpenAuthor = { uid -> nav.navigate(Routes.author(uid)) }
             )
+        }
+
+        composable(Routes.BACKUP) {
+            BackupScreen(onBack = { nav.popBackStack() })
         }
 
         composable(Routes.FANS) {

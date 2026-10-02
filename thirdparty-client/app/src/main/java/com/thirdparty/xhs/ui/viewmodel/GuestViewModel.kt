@@ -162,6 +162,15 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
         }
     }
 
+    /**
+     * Re-read the cached account state from storage. Used after a backup restore
+     * replaced the identity behind the app's back.
+     */
+    fun refreshAccountState() {
+        refreshLabel()
+        refreshVip()
+        refreshHistory()
+    }
     /** Re-check on demand (e.g. when the profile page loads). */
     fun checkVipExpiry() {
         if (!_autoVip.value) return

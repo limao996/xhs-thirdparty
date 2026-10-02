@@ -16,6 +16,8 @@ object Routes {
     const val FOLLOWING = "following"
     /** "粉丝" — accounts following this user (v2/member/fun-list) */
     const val FANS = "fans"
+    /** 备份与恢复 */
+    const val BACKUP = "backup"
 
     fun detail(noteId: Long): String = "detail/$noteId"
     fun author(userId: Int): String = "author/$userId"

@@ -23,6 +23,15 @@ class App : Application() {
     /** Day/Night/System theme preference (default follow system). */
     val themeState = MutableStateFlow(ThemeMode.SYSTEM)
 
+    /**
+     * Bumped whenever stored data is replaced wholesale (e.g. a backup restore).
+     * Screens that cache account state observe this and reload — without it the
+     * top bar kept showing the guest id from before the restore.
+     */
+    val dataEpoch = MutableStateFlow(0)
+
+    fun notifyDataRestored() { dataEpoch.value = dataEpoch.value + 1 }
+
     override fun onCreate() {
         super.onCreate()
         INSTANCE = this
