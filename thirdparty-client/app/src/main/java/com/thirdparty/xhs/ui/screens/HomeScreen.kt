@@ -168,11 +168,19 @@ fun HomeScreen(
             }
             }
 
-            // immersive translucent header overlay
+            // immersive translucent header overlay.
+            //
+            // background BEFORE statusBarsPadding on purpose: the other order
+            // insets the content first and paints the scrim only BELOW that inset,
+            // leaving the status-bar strip unpainted — a visible seam between the
+            // clock and the title bar. Painting first makes the same translucent
+            // colour run behind the status bar, so the bar reads as part of the
+            // header and the seam is gone.
             if (immersive) {
                 Row(
-                    Modifier.fillMaxWidth().statusBarsPadding()
+                    Modifier.fillMaxWidth()
                         .background(Scrim.header)
+                        .statusBarsPadding()
                         .padding(horizontal = Spacing.m, vertical = Spacing.s),
                     verticalAlignment = Alignment.CenterVertically
                 ) {

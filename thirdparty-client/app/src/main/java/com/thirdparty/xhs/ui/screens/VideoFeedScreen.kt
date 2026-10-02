@@ -202,14 +202,7 @@ private fun VideoPage(
             .pointerInput(item.noteId) {
                 detectTapGestures(
                     onTap = { infoVisible = !infoVisible },
-                    onDoubleTap = {
-                        val p = player
-                        // `paused` is derived from the player itself now, so this
-                        // only has to flip playback
-                        if (p != null) {
-                            if (p.isPlaying) p.pause() else p.play()
-                        }
-                    }
+                    onDoubleTap = { togglePlayback(player) }
                 )
             }
     ) {
@@ -269,7 +262,17 @@ private fun VideoPage(
                 Modifier.align(Alignment.BottomStart).fillMaxWidth()
                     .padding(bottom = BottomNavHeight + navBarInset)
                     .background(Scrim.strong)
-                    .clickable { onClickDetail() }
+                    // Single tap opens the detail; a DOUBLE tap must still reach the
+                    // player. This strip sits over the video, so a plain `clickable`
+                    // swallowed the gesture and a double-tap here opened the detail
+                    // instead of pausing — which is why double-tap appeared broken
+                    // whenever the finger landed on the lower part of the video.
+                    .pointerInput(item.noteId) {
+                        detectTapGestures(
+                            onTap = { onClickDetail() },
+                            onDoubleTap = { togglePlayback(player) }
+                        )
+                    }
                     .padding(Spacing.l)
             ) {
                 Text(
@@ -380,4 +383,10 @@ private fun rememberPreparedPlayer(
         }
     }
     return player
+}
+
+/** Flip play/pause on a feed player; shared by the video surface and the info bar. */
+private fun togglePlayback(player: androidx.media3.common.Player?) {
+    if (player == null) return
+    if (player.isPlaying) player.pause() else player.play()
 }
