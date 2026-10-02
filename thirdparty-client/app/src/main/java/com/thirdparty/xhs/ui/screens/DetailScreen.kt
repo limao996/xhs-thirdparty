@@ -333,26 +333,33 @@ private fun DetailContent(
             HorizontalDivider()
 
             state.author?.let { author ->
-                Row(Modifier.padding(vertical = Spacing.m), verticalAlignment = Alignment.CenterVertically) {
+                // The whole card opens the author page, so a separate 主页 button is
+                // redundant — and having two big buttons side by side made both look
+                // oversized. The 关注 button keeps its own onClick: a child's click
+                // wins over the row's, so tapping it follows rather than navigating.
+                Row(
+                    Modifier.fillMaxWidth()
+                        .clip(XhsShapes.small)
+                        .clickable { onOpenAuthor(author.userId) }
+                        .padding(vertical = Spacing.s),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     XhsAvatar(url = author.headImg, contentDescription = author.userName,
                         modifier = Modifier.size(AvatarSize.list))
                     Spacer(Modifier.width(Spacing.m))
-                    Column(Modifier.weight(1f).clickable { onOpenAuthor(author.userId) }) {
+                    Column(Modifier.weight(1f)) {
                         Text(author.userName, style = MaterialTheme.typography.titleSmall)
                         if (author.signature.isNotBlank())
                             Text(author.signature, maxLines = 1, style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                    Spacer(Modifier.width(Spacing.s))
                     Surface(onClick = { viewModel.toggleFollow() }, shape = XhsShapes.small,
                         color = if (state.followed) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.primary) {
                         Text(if (state.followed) "已关注" else "+ 关注",
-                            Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelMedium,
                             color = if (state.followed) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onPrimary)
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Surface(onClick = { onOpenAuthor(author.userId) }, shape = XhsShapes.small,
-                        color = MaterialTheme.colorScheme.surfaceVariant) {
-                        Text("主页", Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
                     }
                 }
                 HorizontalDivider()
