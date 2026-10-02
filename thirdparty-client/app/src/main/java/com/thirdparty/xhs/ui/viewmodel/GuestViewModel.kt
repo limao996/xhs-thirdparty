@@ -11,6 +11,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.update
 import com.thirdparty.xhs.net.HistoryAccount
 import com.thirdparty.xhs.net.IdentityGuess
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 
 /**
  * Guest account state: the current account, manual switching, and the history of
@@ -22,6 +24,11 @@ import com.thirdparty.xhs.net.IdentityGuess
  * generate a fresh random id.
  */
 class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
+    private companion object {
+        /** how often the VIP validity is re-checked while 自动切换 is on */
+        const val VIP_POLL_MS = 5_000L
+    }
+
     private val _accountLabel = MutableStateFlow("游客ID：加载中…")
     val accountLabel: StateFlow<String> = _accountLabel.asStateFlow()
 
@@ -98,6 +105,37 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
             refreshVip()
             remember()
             _rotating.value = false
+        }
+    }
+
+    /**
+     * While 自动切换 is on, re-check the account's VIP validity every 5 seconds and
+     * swap as soon as it lapses (or is about to — see VIP_MIN_REMAINING_S).
+     *
+     * Driving this off the [autoVip] flow means the first pass starts immediately
+     * when the app opens with the toggle already on (satisfying "进入软件先判断一次"),
+     * and `collectLatest` cancels the loop the moment the user turns it off.
+     */
+    init {
+        viewModelScope.launch {
+            _autoVip.collectLatest { on ->
+                if (!on) return@collectLatest
+                while (true) {
+                    // Time the work and subtract it, so the cadence is a real 5s
+                    // rather than 5s of sleep ON TOP of a network round-trip.
+                    // Measured: an uncompensated loop ticked every ~9s, because
+                    // each check costs ~4s against the server.
+                    val startedAt = System.currentTimeMillis()
+                    val switched = runCatching { repo.switchToVipAccount() }.getOrDefault(false)
+                    if (switched) {
+                        refreshLabel()
+                        refreshVip()
+                        remember()
+                    }
+                    val elapsed = System.currentTimeMillis() - startedAt
+                    delay((VIP_POLL_MS - elapsed).coerceAtLeast(0L))
+                }
+            }
         }
     }
 

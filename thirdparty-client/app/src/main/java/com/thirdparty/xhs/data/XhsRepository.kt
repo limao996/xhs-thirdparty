@@ -314,7 +314,13 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
     suspend fun switchToVipAccount(): Boolean = withContext(Dispatchers.IO) {
         if (!api.autoSwitchOnVipExpiry) return@withContext false
         val current = myProfile() ?: return@withContext false
-        if (current.isVip) return@withContext false
+        // "有效期不足" covers both an already-expired window and one about to
+        // lapse: switching exactly at expiry would drop the user mid-action, so a
+        // window with under a minute left counts as insufficient too.
+        val nowS = System.currentTimeMillis() / 1000
+        val stillEnough = current.isVip &&
+            (current.vipEnd <= 0L || (current.vipEnd - nowS) > VIP_MIN_REMAINING_S)
+        if (stillEnough) return@withContext false
         repeat(VIP_SWITCH_ATTEMPTS) {
             val id = api.freshRandomMac()
             if (api.loginAsDevice(id).optInt("result") == 1) {
@@ -331,6 +337,8 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
     private companion object {
         /** how many fresh accounts to try before giving up on finding VIP */
         const val VIP_SWITCH_ATTEMPTS = 5
+        /** a window with less than this much left counts as "insufficient" */
+        const val VIP_MIN_REMAINING_S = 60L
     }
 
     /** The identity currently in use. */
