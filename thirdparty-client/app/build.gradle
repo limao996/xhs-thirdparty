@@ -20,9 +20,39 @@ android {
         vectorDrawables { useSupportLibrary true }
     }
 
-    buildTypes {
+    /**
+     * A release APK the system will actually install needs a signature.
+     *
+     * Self-signed and checked in on purpose: this is a personal client, so a
+     * reproducible release build matters more than keeping the key secret, and
+     * every future release must be signed by the SAME key or Android will refuse
+     * to upgrade an installed copy.
+     */
+    signingConfigs {
         release {
-            minifyEnabled false
+            storeFile file('../keystore/release.jks')
+            storePassword 'xhs-thirdparty'
+            keyAlias 'xhs'
+            keyPassword 'xhs-thirdparty'
+        }
+    }
+
+    buildTypes {
+        debug {
+            // Distinct package so a debug build and a release build can be
+            // installed side by side, and so testing never touches the release
+            // install's data (prefs, Room DB, account identity are per-package).
+            applicationIdSuffix '.debug'
+            versionNameSuffix '-debug'
+        }
+        release {
+            signingConfig signingConfigs.release
+            // R8 shrinking + resource shrinking are on for the release package.
+            // This is verified by RUNNING the built APK (install → navigate the
+            // real screens), not by "it compiled" — a stripped reflection path only
+            // shows up at runtime.
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }

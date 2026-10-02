@@ -6,7 +6,11 @@
     <!-- video playback: media3 ExoPlayer wake lock + keep-screen-on -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- A personal WebDAV drive may be plain http:// on the LAN; Android
+         denies cleartext by default from API 28, which would make those
+         servers unreachable. API traffic itself stays HTTPS. -->
     <application
+        android:usesCleartextTraffic="true"
         android:name=".App"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
