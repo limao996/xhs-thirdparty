@@ -430,7 +430,12 @@ private fun AutoHideController(
             )
         }
     ) {
-        // replay button when ended
+        // Replay button once the work has finished.
+        //
+        // The detail player does not loop, so this is the only way back to the
+        // start — it must not be missable. A finished clip otherwise shows its last
+        // frame with no controls and reads as a frozen player.
+        LaunchedEffect(ended) { if (ended) visible = true }
         if (ended) {
             IconButton(onClick = { player.seekTo(0); player.play() },
                 modifier = Modifier.align(Alignment.Center)) {

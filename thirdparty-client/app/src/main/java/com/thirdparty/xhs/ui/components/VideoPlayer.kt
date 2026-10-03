@@ -117,7 +117,13 @@ fun buildVideoPlayer(
         .setSeekForwardIncrementMs(SEEK_INCREMENT_MS)
         .build()
         .apply {
-            repeatMode = Player.REPEAT_MODE_ONE
+            // The feed loops (a swipe feed is consumed in seconds and swiping past a
+            // stopped clip is a dead end). The detail page must NOT: a finished work
+            // stops at its last frame and waits for the user to press 重播, so the
+            // player reaches STATE_ENDED and stays there. Looping it made the clip
+            // restart on its own, which reads as "it never ends".
+            repeatMode =
+                if (longForm) Player.REPEAT_MODE_OFF else Player.REPEAT_MODE_ONE
             // Seeking: ExoPlayer's DEFAULT is EXACT, which makes the extractor start
             // at the preceding keyframe and decode forward. A 1s tolerance lets it
             // take any sync point that close instead, without a visible loss of
