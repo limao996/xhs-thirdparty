@@ -44,6 +44,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.SeekParameters
 import com.thirdparty.xhs.ui.theme.Scrim
 import com.thirdparty.xhs.ui.theme.Spacing
 import kotlinx.coroutines.delay
@@ -92,7 +93,15 @@ fun buildVideoPlayer(
      */
     longForm: Boolean = false
 ): ExoPlayer =
-    ExoPlayer.Builder(context.applicationContext)
+    ExoPlayer.Builder(
+        context.applicationContext,
+        // Decoder fallback: after a seek every decoder is flushed, and some
+        // decoders never resume. When the primary one does that the player sits in
+        // BUFFERING forever. Fallback lets ExoPlayer move to another decoder
+        // instead of retrying a dead one.
+        androidx.media3.exoplayer.DefaultRenderersFactory(context.applicationContext)
+            .setEnableDecoderFallback(true)
+    )
         .setWakeMode(C.WAKE_MODE_LOCAL)
         .setAudioAttributes(
             AudioAttributes.Builder()
@@ -108,10 +117,20 @@ fun buildVideoPlayer(
         .build()
         .apply {
             repeatMode = Player.REPEAT_MODE_ONE
+            // Seeking: ExoPlayer's DEFAULT is EXACT, which makes the extractor start
+            // at the preceding keyframe and decode forward. A 1s tolerance lets it
+            // take any sync point that close instead, without a visible loss of
+            // precision. Matters for progressive files; HLS already lands on the
+            // segment boundary either way.
+            setSeekParameters(if (longForm) SEEK_PARAMETERS_TOLERANT else SeekParameters.EXACT)
             setMediaItem(MediaItem.fromUri(url))
             prepare()
             playWhenReady = autoPlay
         }
+
+private val SEEK_PARAMETERS_TOLERANT =
+    androidx.media3.exoplayer.SeekParameters(SEEK_TOLERANCE_US, SEEK_TOLERANCE_US)
+private const val SEEK_TOLERANCE_US = 1_000_000L
 
 /**
  * Deep buffer, for a work the user may watch end to end.
@@ -156,10 +175,25 @@ private fun feedLoadControl() =
 private const val MIN_BUFFER_MS = 15_000
 /** 90s ceiling so a fast link still starts quickly. */
 private const val MAX_BUFFER_MS = 90_000
-/** don't begin until this much is buffered (default is 2.5s — too eager for 弱网). */
+/** 5s to begin a cold start — ExoPlayer's default 2.5s was too eager for 弱网. */
 private const val BUFFER_FOR_PLAYBACK_MS = 5_000
-/** after a rebuffer, wait for more before resuming, so it does not stutter again. */
-private const val BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS = 15_000
+
+/**
+ * After a seek the player counts as **rebuffering**, and ExoPlayer then requires
+ * this much media before it resumes — a different threshold from the cold start.
+ *
+ * This used to be 15s. Measured against the real content (note 13689345): the
+ * media is HLS, 142 segments of 5s, 707s total. So 15s meant **every single seek
+ * had to download 3 full segments before a frame appeared**, while the first load
+ * only needed 5s (one segment) — which is exactly the reported symptom: "刚进来
+ * 加载很快，一跳转就缓冲特别久，跳回最前面也一样".
+ *
+ * 4s is one segment, so a seek resumes on the next segment boundary. Weak-network
+ * resilience is not lost: [MIN_BUFFER_MS]/[MAX_BUFFER_MS] still build a deep
+ * buffer *while playing*, which is what actually prevents mid-playback stalls.
+ * Paying a 15s gate on every seek was protecting against the wrong thing.
+ */
+private const val BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS = 4_000
 /** 2 minutes of rewindable history, served from memory. */
 private const val BACK_BUFFER_MS = 120_000
 private const val SEEK_INCREMENT_MS = 10_000L
@@ -168,7 +202,7 @@ private const val SEEK_INCREMENT_MS = 10_000L
 private const val FEED_MIN_BUFFER_MS = 8_000
 private const val FEED_MAX_BUFFER_MS = 25_000
 private const val FEED_BUFFER_FOR_PLAYBACK_MS = 1_500
-private const val FEED_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS = 4_000
+private const val FEED_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS = 2_000
 
 /**
  * Pause playback while the host lifecycle is not at least STARTED and resume
@@ -542,3 +576,102 @@ fun PlayerView(
 private fun errorListener(onError: (PlaybackException) -> Unit) = object : Player.Listener {
     override fun onPlayerError(error: PlaybackException) = onError(error)
 }
+
+/**
+ * Rebuilds playback when the player is stuck buffering although the data is
+ * already there.
+ *
+ * Every seek flushes the decoder, and a decoder that does not resume leaves the
+ * player in BUFFERING indefinitely: referenced measurements on the emulator
+ * (`c2.goldfish.h264.decoder`) show the buffer growing past 70s ahead with
+ * `playWhenReady=true`, no suppression, and `playing=false` forever — the user
+ * just sees "buffering" and nothing plays. Download speed is not the issue there
+ * (a 5s HLS segment takes ~1.5s).
+ *
+ * ExoPlayer has no timeout for this, so it is detected here: the player is
+ * BUFFERING, enough media is already buffered, and it has been that way for
+ * [STUCK_BUFFERING_MS]. Recovery is a full stop/prepare/seek, which rebuilds the
+ * codecs — the one action that clears a poisoned decoder.
+ *
+ * The thresholds matter: a genuinely slow link also sits in BUFFERING, but its
+ * `ahead` stays small, so it never trips the check.
+ */
+@Composable
+fun RecoverStuckPlayback(player: Player?, onGaveUp: () -> Unit = {}) {
+    val gaveUp = rememberUpdatedState(onGaveUp)
+    LaunchedEffect(player) {
+        val p = player ?: return@LaunchedEffect
+        var since = 0L
+        var attempts = 0
+        while (true) {
+            if (p.playbackState == Player.STATE_BUFFERING) {
+                if (since == 0L) since = android.os.SystemClock.elapsedRealtime()
+                val stallMs = android.os.SystemClock.elapsedRealtime() - since
+                val ahead = p.bufferedPosition - p.currentPosition
+                // Two ways to be stuck, and both are needed:
+                //  - the data is already here and it still will not play
+                //  - it is BUFFERING but not even fetching any more
+                // Requiring only the first misses the case observed after a
+                // rebuild, where the buffer never refills: the check never fires
+                // again and the user is left with a spinner that never ends.
+                val dataReady = ahead >= STUCK_ENOUGH_AHEAD_MS
+                val notFetching = !p.isLoading
+                // Once a rebuild has happened we know this is a real stall, not a
+                // slow link, so a plain time budget is then enough to conclude it
+                // will not recover. A slow link never reaches here at all: its
+                // `ahead` stays small, so no rebuild is ever attempted.
+                val stalledTooLong = attempts > 0 && stallMs > STUCK_GIVE_UP_MS
+                if (stallMs > STUCK_BUFFERING_MS &&
+                    (dataReady || notFetching || stalledTooLong)
+                ) {
+                    if (attempts >= MAX_STUCK_RECOVERIES) {
+                        // The decoder is not coming back. Rebuilding forever would
+                        // leave the user watching an endless spinner with no way
+                        // out, so stop and let the caller show its error panel —
+                        // which has a 重试 button.
+                        gaveUp.value()
+                        return@LaunchedEffect
+                    }
+                    attempts++
+                    val pos = p.currentPosition
+                    val wasPlaying = p.playWhenReady
+                    p.stop()
+                    p.seekTo(pos)
+                    p.prepare()
+                    p.playWhenReady = wasPlaying
+                    since = 0L
+                }
+            } else {
+                // a healthy state clears the budget, so a later unrelated stall
+                // still gets its own full set of attempts
+                since = 0L
+                if (p.playbackState == Player.STATE_READY && p.isPlaying) attempts = 0
+            }
+            delay(STUCK_POLL_MS)
+        }
+    }
+}
+
+/** how long the player may sit in BUFFERING with data available before we rebuild */
+private const val STUCK_BUFFERING_MS = 6_000L
+/** "the data is already there": this much buffered ahead */
+private const val STUCK_ENOUGH_AHEAD_MS = 5_000L
+private const val STUCK_POLL_MS = 500L
+/** after a rebuild, how long to keep waiting before concluding it will not recover */
+private const val STUCK_GIVE_UP_MS = 20_000L
+/** rebuilds before giving up and handing over to the error panel */
+private const val MAX_STUCK_RECOVERIES = 2
+
+/**
+ * Surfaced when the stuck-playback watchdog has exhausted its rebuilds.
+ *
+ * It is not from the player — it is our conclusion that the decoder stopped
+ * responding after a seek. Reusing [PlaybackErrorOverlay] rather than inventing a
+ * second error UI keeps one place that explains a failure and offers 重试.
+ */
+val STUCK_PLAYBACK_EXCEPTION: androidx.media3.common.PlaybackException =
+    androidx.media3.common.PlaybackException(
+        "seek-following decoder stall",
+        null,
+        androidx.media3.common.PlaybackException.ERROR_CODE_UNSPECIFIED
+    )

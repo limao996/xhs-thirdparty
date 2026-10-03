@@ -29,6 +29,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import com.thirdparty.xhs.BuildConfig
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -152,7 +153,10 @@ fun MediaPlayer(
         // Buffering feedback — but never together with the error panel: the
         // player keeps retrying in BUFFERING while the panel is up, so both
         // used to draw on top of each other and neither was readable.
-        val playbackError = rememberPlaybackError(player)
+        var decoderStuck by remember(player) { mutableStateOf(false) }
+        RecoverStuckPlayback(player) { decoderStuck = true }
+        val playbackError =
+            rememberPlaybackError(player) ?: if (decoderStuck) STUCK_PLAYBACK_EXCEPTION else null
         if (playbackError == null) {
             BufferingIndicator(player, modifier = Modifier.fillMaxSize())
         }
@@ -219,17 +223,64 @@ private fun AutoHideController(
                 duration = if (player.duration > 0) player.duration.toFloat() else 0f
                 position = player.currentPosition.toFloat()
                 bufferedFraction = bufferedOf(player)
+                if (BuildConfig.DEBUG) {
+                    android.util.Log.i(
+                        "XhsSeek",
+                        "state=${stateName(state)} pos=${player.currentPosition} " +
+                            "buffered=${player.bufferedPosition} " +
+                            "ahead=${player.bufferedPosition - player.currentPosition} " +
+                            "loading=${player.isLoading} playing=${player.isPlaying}"
+                    )
+                }
             }
             override fun onPositionDiscontinuity(a: Player.PositionInfo, b: Player.PositionInfo, reason: Int) {
                 position = player.currentPosition.toFloat()
+                if (BuildConfig.DEBUG) {
+                    android.util.Log.i(
+                        "XhsSeek",
+                        "discontinuity reason=$reason -> pos=${player.currentPosition} " +
+                            "buffered=${player.bufferedPosition}"
+                    )
+                }
             }
             // bufferedPosition moves independently of the playhead
             override fun onIsLoadingChanged(isLoading: Boolean) {
                 bufferedFraction = bufferedOf(player)
+                if (BuildConfig.DEBUG) {
+                    android.util.Log.i(
+                        "XhsSeek",
+                        "loading=$isLoading pos=${player.currentPosition} " +
+                            "buffered=${player.bufferedPosition} state=${stateName(player.playbackState)}"
+                    )
+                }
+            }
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                if (BuildConfig.DEBUG) {
+                    android.util.Log.w("XhsSeek", "error=${error.errorCodeName} ${error.message}")
+                }
             }
         }
         player.addListener(listener)
         onDispose { player.removeListener(listener) }
+    }
+
+    // While buffering, log how far ahead the buffer is every 500ms. If the number
+    // keeps growing the player IS downloading and simply will not start; if it is
+    // stuck, the loader is blocked.
+    if (BuildConfig.DEBUG) {
+        LaunchedEffect(player) {
+            while (true) {
+                if (player.playbackState == Player.STATE_BUFFERING) {
+                    android.util.Log.i(
+                        "XhsSeek",
+                        "TICK pwr=${player.playWhenReady} suppress=${player.playbackSuppressionReason} " +
+                            "ahead=${player.bufferedPosition - player.currentPosition} " +
+                            "buffered=${player.bufferedPosition} loading=${player.isLoading}"
+                    )
+                }
+                delay(500)
+            }
+        }
     }
 
     // Auto-hide after 3s of no interaction — but NEVER while the user's finger
@@ -440,4 +491,13 @@ private fun bufferedOf(player: Player): Float {
     val d = player.duration
     if (d <= 0L) return 0f
     return (player.bufferedPosition.toFloat() / d).coerceIn(0f, 1f)
+}
+
+/** ExoPlayer state as a readable name, for the seek diagnostics. */
+private fun stateName(state: Int): String = when (state) {
+    Player.STATE_IDLE -> "IDLE"
+    Player.STATE_BUFFERING -> "BUFFERING"
+    Player.STATE_READY -> "READY"
+    Player.STATE_ENDED -> "ENDED"
+    else -> "?$state"
 }

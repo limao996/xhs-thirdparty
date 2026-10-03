@@ -56,6 +56,8 @@ import com.thirdparty.xhs.ui.components.EmptyState
 import com.thirdparty.xhs.ui.components.FeeBadge
 import com.thirdparty.xhs.ui.components.PauseWhenNotStarted
 import com.thirdparty.xhs.ui.components.PlaybackErrorOverlay
+import com.thirdparty.xhs.ui.components.RecoverStuckPlayback
+import com.thirdparty.xhs.ui.components.STUCK_PLAYBACK_EXCEPTION
 import com.thirdparty.xhs.ui.components.PlayerView
 import com.thirdparty.xhs.ui.components.XhsAsyncImage
 import com.thirdparty.xhs.ui.components.VideoProgress
@@ -184,7 +186,9 @@ private fun VideoPage(
     val playing = rememberIsPlaying(player)
     val paused = active && player != null && !playing &&
         player.playbackState == Player.STATE_READY
-    val playbackError = rememberPlaybackError(player)
+    var decoderStuck by remember(player) { mutableStateOf(false) }
+    val playbackError =
+        rememberPlaybackError(player) ?: if (decoderStuck) STUCK_PLAYBACK_EXCEPTION else null
 
     // only the current page plays; neighbours stay prepared (paused)
     LaunchedEffect(active, player) {
@@ -259,6 +263,7 @@ private fun VideoPage(
             }
             // feedback while the stream buffers / starts up — hidden once the
             // error panel is up, otherwise the two draw on top of each other
+            RecoverStuckPlayback(player) { decoderStuck = true }
             if (playbackError == null) {
                 BufferingIndicator(player, modifier = Modifier.fillMaxSize(), active = active)
             }
