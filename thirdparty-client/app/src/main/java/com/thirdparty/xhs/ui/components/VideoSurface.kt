@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,6 +50,10 @@ fun VideoSurface(
     // would flicker, so the binding happens once per view via factory and only
     // again if the player instance actually changes.
     val currentPlayer by rememberUpdatedState(player)
+    // The TextureView THIS composition created, so disposal can name it. See the
+    // DisposableEffect at the bottom — clearing "the" surface instead is what made
+    // fullscreen go black.
+    val createdView = remember { java.util.concurrent.atomic.AtomicReference<TextureView?>(null) }
 
     Box(
         modifier.background(Color.Black),
@@ -62,6 +67,7 @@ fun VideoSurface(
                         ViewGroup.LayoutParams.MATCH_PARENT
                     )
                     runCatching { player?.setVideoTextureView(this) }
+                    createdView.set(this)
                 }
             },
             update = { view ->
@@ -93,7 +99,23 @@ fun VideoSurface(
         onDispose {
             // Detach so nothing is drawn to a surface that is on its way out; this
             // is what stops the last frame surviving the transition.
-            runCatching { player?.clearVideoSurface() }
+            //
+            // But detach OUR view, not "whatever the player is using now".
+            // clearVideoSurface() clears the surface the player currently has, and
+            // the detail page renders ONE shared player through two different
+            // compositions (windowed and fullscreen). Toggling fullscreen composes
+            // the incoming surface — the player is now rendering into it — and then
+            // the outgoing composition is disposed and cleared the player's current
+            // surface, which was the new one. Result: the video kept playing with
+            // nothing attached to draw into, i.e. a black screen with a live
+            // progress bar (reproduced: fullscreen showed 0:44 / 1:19 and a pause
+            // icon over pure black), and again on the way back out.
+            // clearVideoTextureView(view) is documented as a no-op unless that exact
+            // view is the active output, which is precisely the semantics needed
+            // here.
+            createdView.get()?.let { view ->
+                runCatching { player?.clearVideoTextureView(view) }
+            }
         }
     }
 }

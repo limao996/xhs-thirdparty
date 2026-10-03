@@ -124,8 +124,22 @@ fun MediaPlayer(
     // dispose when we own the player — a shared one is paused by its owner, and
     // pausing here would stop the video every time the layout switches.
     PauseWhenNotStarted(player, pauseOnDispose = ownsPlayer)
-    // mirrored locally: the surface needs it to letterbox inside a clamped box
-    var videoAspect by remember(player) { mutableStateOf(0f) }
+    // mirrored locally: the surface needs it to letterbox inside a clamped box.
+    //
+    // Seeded from the player's CURRENT video size, not from 0. The windowed and
+    // fullscreen layouts are different compositions, so entering fullscreen builds
+    // a fresh MediaPlayer around the same player: `onVideoSizeChanged` is a
+    // *change* notification and does not fire again for a size the player already
+    // has, so starting at 0 meant the fullscreen surface never learned the ratio
+    // and fell back to fillMaxSize() — the full-screen picture would have been
+    // stretched (and, before the surface fix, simply black).
+    var videoAspect by remember(player) {
+        mutableStateOf(
+            player.videoSize.let {
+                if (it.width > 0 && it.height > 0) it.width.toFloat() / it.height.toFloat() else 0f
+            }
+        )
+    }
     // report the natural aspect ratio so callers can size the container
     DisposableEffect(player, onAspect) {
         val listener = object : Player.Listener {
@@ -139,6 +153,14 @@ fun MediaPlayer(
         }
         player.addListener(listener)
         onDispose { player.removeListener(listener) }
+    }
+    // and report what is already known to the host, so a layout that never sees a
+    // change event still sizes itself correctly
+    LaunchedEffect(player) {
+        val vs = player.videoSize
+        if (vs.width > 0 && vs.height > 0) {
+            onAspect?.invoke(vs.width.toFloat() / vs.height.toFloat())
+        }
     }
     DisposableEffect(player) {
         onDispose {

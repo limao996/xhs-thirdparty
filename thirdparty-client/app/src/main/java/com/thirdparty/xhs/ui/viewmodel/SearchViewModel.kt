@@ -47,6 +47,38 @@ class SearchViewModel(private val repo: XhsRepository) : ViewModel() {
 
     fun onQueryChange(q: String) { _ui.value = _ui.value.copy(query = q) }
 
+    /**
+     * Empty the field **and** drop the results it produced.
+     *
+     * The clear action used to only set the query to "", which left the previous
+     * query's results on screen under an empty field: the page still claimed to be
+     * showing search results with nothing to explain what for, and the next typed
+     * character appeared to search the old list. 清除 means "back to the initial
+     * state", so the results, the searched flag and the paging cursor all go too.
+     * The mode (内容/作者) and the local 最近搜索 history are deliberately kept —
+     * neither belongs to the query being cleared.
+     */
+    fun clearQuery() {
+        page = 1
+        loading = false
+        paging.reset()
+        _ui.update {
+            it.copy(
+                query = "",
+                results = emptyList(),
+                users = emptyList(),
+                searched = false,
+                searching = false,
+                loadingMore = false,
+                empty = false,
+                error = false,
+                hasMore = true,
+                // a reset list must start at the top, same as a new search
+                refreshTick = it.refreshTick + 1
+            )
+        }
+    }
+
     fun setMode(mode: SearchResultMode) {
         if (_ui.value.mode == mode) return
         _ui.value = _ui.value.copy(
@@ -88,6 +120,12 @@ class SearchViewModel(private val repo: XhsRepository) : ViewModel() {
             when (_ui.value.mode) {
                 SearchResultMode.CONTENT -> {
                     val list = runCatching { repo.searchNote(q, 1) }.getOrNull()
+                    // A response that lands after the field was cleared (or after
+                    // a newer query was typed) must not repopulate the page it no
+                    // longer belongs to — that is exactly how 清除 used to look
+                    // broken: it emptied the field, and a second later the old
+                    // results were back.
+                    if (_ui.value.query.trim() != q) return@launch
                     _ui.update {
                         it.copy(
                             searching = false,
@@ -100,6 +138,7 @@ class SearchViewModel(private val repo: XhsRepository) : ViewModel() {
                 }
                 SearchResultMode.USER -> {
                     val users = runCatching { repo.searchUsers(q, 1) }.getOrNull()
+                    if (_ui.value.query.trim() != q) return@launch
                     _ui.update {
                         it.copy(
                             searching = false,

@@ -88,15 +88,18 @@ fun SearchScreen(
                         onSearch = { viewModel.search() },
                         active = false,
                         onActiveChange = {},
-                        placeholder = { Text("搜索短视频 / 笔记 / 作者") },
+                        placeholder = { Text("搜索作品 / 作者") },
                         leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "搜索") },
                         // Clear action, only while there is something to clear. The
                         // bar has no other way to empty the field — the keyboard's
                         // backspace is the only alternative, and that means deleting
                         // the text character by character.
+                        //
+                        // Resets the search STATE too, not just the text: emptying
+                        // only the field left the old query's results on screen.
                         trailingIcon = {
                             if (state.query.isNotEmpty()) {
-                                IconButton(onClick = { viewModel.onQueryChange("") }) {
+                                IconButton(onClick = { viewModel.clearQuery() }) {
                                     Icon(Icons.Filled.Close, contentDescription = "清除")
                                 }
                             }

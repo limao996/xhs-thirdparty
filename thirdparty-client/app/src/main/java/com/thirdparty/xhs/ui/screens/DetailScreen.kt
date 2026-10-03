@@ -22,6 +22,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Fullscreen
@@ -29,6 +31,10 @@ import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.ModeComment
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.Button
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -83,6 +89,7 @@ import com.thirdparty.xhs.ui.components.buildVideoPlayer
 import kotlinx.coroutines.delay
 import com.thirdparty.xhs.ui.components.CommentRepliesDialog
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
 
 /**
  * 详情页：视频播放器 + 标题 + 作者 + 介绍 + 标签 + 评论区。
@@ -377,37 +384,36 @@ private fun DetailContent(
     //  on top of the video — that was the broken layout.)
     Column(Modifier.fillMaxSize().padding(pad).verticalScroll(rememberScrollState())) {
         if (isVideo) {
-            // Size the container to the video's real ratio (portrait default for
-            // short video); avoids huge black bars from a fixed 16:9 box.
+            // Windowed player: a compact, inset media card.
+            //
+            // Height is the MINIMUM, not the maximum (user's call). It used to size
+            // itself to the video's own ratio and then clamp to half the screen, so
+            // every portrait clip opened at half the screen and pushed the title,
+            // author and actions off the first screenful. The floor — 16:10 against
+            // the view width — is the narrowest box the player's own top bar and seek
+            // bar fit in comfortably, so that floor is now the default; the
+            // half-screen term survives only as a cap for a very short window.
+            //
             // In landscape, sizing by WIDTH would compute a height far taller than
-            // the window (a portrait ratio at 2400px wide is ~5200px tall), so the
-            // video overflowed the screen with black on one side and cropped on the
-            // other. Constrain by height instead and centre it, so the whole frame
-            // fits — which is what 横屏 support has to mean.
+            // the window (a portrait ratio at 2400px wide is ~5200px tall), so there
+            // the box is constrained by height and the ratio keeps the whole frame
+            // visible — which is what 横屏 support has to mean.
             val config = androidx.compose.ui.platform.LocalConfiguration.current
             val landscape = config.orientation ==
                 android.content.res.Configuration.ORIENTATION_LANDSCAPE
-            // Windowed player height, bounded at both ends.
-            //
-            // Upper bound: half the screen, so a portrait video never pushes the
-            // title / author / actions off the first screen.
-            //
-            // Lower bound: 16:10 against the view width. A very wide clip (21:9,
-            // or a letterboxed source) computed a natural height so short that the
-            // player's own top bar and seek bar, which are laid out inside this
-            // container, ended up crammed against each other. 16:10 is the
-            // narrowest a player can be and still show that chrome comfortably.
-            //
-            // The two bounds are ordered defensively: on a sufficiently tall,
-            // narrow window the minimum can exceed half the screen, and
-            // coerceIn throws when min > max.
             val halfScreen = (config.screenHeightDp * 0.5f).dp
-            val minRatioHeight = (config.screenWidthDp * 10f / 16f).dp
-            val minVideoHeight = minOf(minRatioHeight, halfScreen)
-            val maxVideoHeight = maxOf(halfScreen, minVideoHeight)
-            val naturalHeight = (config.screenWidthDp / videoAspect).dp
-            val windowedHeight = naturalHeight.coerceIn(minVideoHeight, maxVideoHeight)
-            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            // measured against the player's OWN width (the page inset is 2×Spacing.m),
+            // so 16:10 stays 16:10 now that the card no longer runs edge to edge
+            val playerWidth = config.screenWidthDp - Spacing.m.value * 2f
+            val windowedHeight = minOf((playerWidth * 10f / 16f).dp, halfScreen)
+            // M3 Expressive hero media: inset from the page edges and clipped to the
+            // large shape token. Full-bleed made the player read as a hole in the
+            // page rather than as the page's media element.
+            val mediaShape = MaterialTheme.shapes.large
+            Box(
+                Modifier.fillMaxWidth().padding(horizontal = Spacing.m, vertical = Spacing.s),
+                contentAlignment = Alignment.Center
+            ) {
                 MediaPlayer(
                     url = item.mediaUrl,
                     externalPlayer = sharedPlayer,
@@ -420,9 +426,9 @@ private fun DetailContent(
                     // windowed playback starts with the bar hidden; a tap reveals it
                     controlsHiddenInitially = true,
                     modifier = if (landscape) {
-                        Modifier.height(windowedHeight).aspectRatio(videoAspect)
+                        Modifier.height(windowedHeight).aspectRatio(videoAspect).clip(mediaShape)
                     } else {
-                        Modifier.fillMaxWidth().height(windowedHeight)
+                        Modifier.fillMaxWidth().height(windowedHeight).clip(mediaShape)
                     }
                 )
             }
@@ -468,48 +474,76 @@ private fun DetailContent(
             HorizontalDivider()
 
             state.author?.let { author ->
-                // The whole card opens the author page, so a separate 主页 button is
-                // redundant — and having two big buttons side by side made both look
-                // oversized. The 关注 button keeps its own onClick: a child's click
-                // wins over the row's, so tapping it follows rather than navigating.
-                Row(
-                    Modifier.fillMaxWidth()
-                        .clip(XhsShapes.small)
-                        .clickable { onOpenAuthor(author.userId) }
-                        .padding(vertical = Spacing.s),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    XhsAvatar(url = author.headImg, contentDescription = author.userName,
-                        modifier = Modifier.size(AvatarSize.list))
-                    Spacer(Modifier.width(Spacing.m))
-                    Column(Modifier.weight(1f)) {
+                // MD3 list row, and MD3 buttons.
+                //
+                // The row was a hand-rolled Row (its own padding and metrics, and a
+                // raw `Surface` for the button), which is how it ended up looking
+                // unlike every other author row in the app. `ListItem` brings the
+                // standard metrics, and it is the same shape as FollowedAuthorRow.
+                //
+                // The whole row still opens the author page; the button is a child
+                // and consumes its own taps, so 关注 follows instead of navigating.
+                // M3 buttons put an icon and a label side by side, which also gives
+                // the "+" that used to be smuggled into the string a real place.
+                ListItem(
+                    headlineContent = {
                         Text(author.userName, style = MaterialTheme.typography.titleSmall)
-                        if (author.signature.isNotBlank())
-                            Text(author.signature, maxLines = 1, style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Spacer(Modifier.width(Spacing.s))
-                    Surface(onClick = { viewModel.toggleFollow() }, shape = Corners.full,
-                        color = if (state.followed) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.primary) {
-                        Text(if (state.followed) "已关注" else "+ 关注",
-                            Modifier.padding(horizontal = Spacing.m, vertical = Spacing.xs),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (state.followed) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onPrimary)
-                    }
-                }
+                    },
+                    supportingContent = {
+                        if (author.signature.isNotBlank()) {
+                            Text(
+                                author.signature,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    },
+                    leadingContent = {
+                        XhsAvatar(
+                            url = author.headImg,
+                            contentDescription = author.userName,
+                            modifier = Modifier.size(AvatarSize.list)
+                        )
+                    },
+                    trailingContent = {
+                        if (state.followed) {
+                            OutlinedButton(onClick = { viewModel.toggleFollow() }) {
+                                Icon(Icons.Filled.Check, contentDescription = null,
+                                    modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(Spacing.xs + 2.dp))
+                                Text("已关注", style = MaterialTheme.typography.labelLarge)
+                            }
+                        } else {
+                            Button(onClick = { viewModel.toggleFollow() }) {
+                                Icon(Icons.Filled.Add, contentDescription = null,
+                                    modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(Spacing.xs + 2.dp))
+                                Text("关注", style = MaterialTheme.typography.labelLarge)
+                            }
+                        }
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    modifier = Modifier
+                        .clip(Corners.small)
+                        .clickable { onOpenAuthor(author.userId) }
+                )
                 HorizontalDivider()
             }
 
             if (item.content.isNotBlank()) {
-                Spacer(Modifier.height(12.dp))
-                Text("介绍", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(4.dp))
+                // section header in the M3 title role rather than a variant-coloured
+                // label: 介绍 is a section, not a caption
+                Spacer(Modifier.height(Spacing.l))
+                Text("介绍", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(Spacing.s))
                 Text(item.content, style = MaterialTheme.typography.bodyMedium)
             }
 
             val topic = item.detailTopic()
             if (topic.isNotBlank()) {
-                Spacer(Modifier.height(Spacing.s))
+                Spacer(Modifier.height(Spacing.m))
                 Surface(shape = Corners.small, color = MaterialTheme.colorScheme.secondaryContainer) {
                     Text("#$topic", Modifier.padding(horizontal = Spacing.m, vertical = Spacing.xs),
                         style = MaterialTheme.typography.labelMedium,
@@ -517,9 +551,13 @@ private fun DetailContent(
                 }
             }
 
+            // 评论 gets the same divider-led section treatment as 介绍 — it used to
+            // run straight on from the description with no visual break.
+            Spacer(Modifier.height(Spacing.l))
+            HorizontalDivider()
             Spacer(Modifier.height(Spacing.l))
             Text("评论 ${item.commentCount}", style = MaterialTheme.typography.titleSmall)
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(Spacing.xs))
             if (state.commentsLoading && state.comments.isEmpty()) {
                 LoadingIndicator(Modifier.size(28.dp))
             } else if (state.comments.isEmpty() && state.commentsError) {
