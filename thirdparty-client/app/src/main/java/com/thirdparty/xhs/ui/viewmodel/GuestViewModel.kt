@@ -6,6 +6,7 @@ import com.thirdparty.xhs.data.XhsRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
 /**
@@ -42,9 +43,10 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
     init {
         // The account can now change inside a request, with no user action behind it
         // (that is the whole point of the on-demand gate), so the label and VIP state
-        // have to follow the epoch the repository bumps.
+        // have to follow the epoch the repository bumps. drop(1) skips the replayed
+        // current value — an epoch from an earlier switch is not a new change.
         viewModelScope.launch {
-            repo.accountEpoch.collect {
+            repo.accountEpoch.drop(1).collect {
                 if (it > 0) {
                     refreshLabel()
                     refreshVip()

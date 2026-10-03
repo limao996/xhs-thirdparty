@@ -276,14 +276,26 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
 
     /**
      * Log in as one specific identity (manual account switch).
-     * Unlike [rotateGuest] this targets a chosen pooled account.
+     * Unlike [rotateGuest] this targets a chosen account.
      */
     suspend fun switchGuestTo(mac: String): Boolean = withContext(Dispatchers.IO) {
-        api.loginAsDevice(mac).optInt("result") == 1
+        val ok = api.loginAsDevice(mac).optInt("result") == 1
+        if (ok) noteIdentityChanged()
+        ok
     }
 
     /** A brand-new randomly generated identity (the manual switch path). */
     fun freshRandomMac(): String = api.freshRandomMac()
+
+    /**
+     * The account in use changed — tell whoever is showing content that was fetched
+     * under the previous one (media URLs are handed out per account, so a switch has to
+     * re-issue them). Called from EVERY path that changes the identity, so the epoch
+     * means what its name says.
+     */
+    private fun noteIdentityChanged() {
+        runCatching { _accountEpoch.value = _accountEpoch.value + 1 }
+    }
 
     /** Whether to switch accounts once the current VIP window expires. */
     var autoSwitchOnVipExpiry: Boolean
@@ -390,7 +402,7 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
         // The identity in use has changed — tell the UI, which is otherwise still
         // showing the previous account's id (the switch now happens inside a request,
         // with no user action behind it).
-        runCatching { _accountEpoch.value = _accountEpoch.value + 1 }
+        noteIdentityChanged()
         val next = myProfile()
         if (next?.isVip == true) {
             switchFailStreak = 0

@@ -42,8 +42,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.displayCutout
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.MediaItem
@@ -111,20 +109,10 @@ fun MediaPlayer(
     var resumeMs by rememberSaveable(url) { androidx.compose.runtime.mutableLongStateOf(0L) }
     val player = externalPlayer ?: remember(url) { buildVideoPlayer(context, url, longForm = true) }
 
-    // 顶栏要给状态栏/摄像头挖孔让位。两条 insets 一起用，因为只有它们**一起**才覆盖全：
-    //
-    //  - `displayCutout`：摄像头挖孔的安全区。这是"避开摄像头"的正牌 API，而且它是
-    //    **全屏时依然有效**的 —— 挖孔不是系统栏，隐藏状态栏不会让它变成 0。
-    //  - `statusBars`：挖孔之外那份。全屏时它是 0（栏被隐藏了），所以趁"栏可见"的时候
-    //    （窗口态播放器必然先渲染）把它记下来复用。
-    //
-    // 取两者较大值。只记 statusBars 是不够的：挖孔比状态栏高的机型上依然会压到摄像头。
-    val density = androidx.compose.ui.platform.LocalDensity.current
-    val liveCutoutTop = WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
-    val liveStatusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    var seenStatusBar by remember { mutableStateOf(0.dp) }
-    SideEffect { if (liveStatusBar > seenStatusBar) seenStatusBar = liveStatusBar }
-    val topClearance = maxOf(seenStatusBar, liveCutoutTop)
+    // 摄像头挖孔的安全区。这是"避开摄像头"的正牌 API，而且**全屏时依然有效** ——
+    // 挖孔不是系统栏，隐藏状态栏不会让它变成 0（statusBars 会变 0，所以不能用它）。
+    // 现场直接读即可，不需要记住任何东西。
+    val cutoutTop = WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
 
     // pick up where the previous instance left off (a no-op on first entry).
     // Skipped for a shared player: the owner keeps the position itself, so
@@ -243,7 +231,7 @@ fun MediaPlayer(
         )
         AutoHideController(
             player, fullscreen, onToggleFullscreen, controlsHiddenInitially, title,
-            topClearance = topClearance
+            topClearance = cutoutTop
         )
         // Buffering feedback — but never together with the error panel: the
         // player keeps retrying in BUFFERING while the panel is up, so both
@@ -513,11 +501,20 @@ private fun AutoHideController(
             // Everything that is not an everyday action lives in the menu, so the
             // bars stay uncrowded instead of stacking eight controls in one row.
             //
-            // 竖屏全屏时把顶栏压下来一条状态栏的高度，避开挖孔/摄像头（见上面的
-            // seenStatusBar）。横屏不加：挖孔在侧边，顶上多一条边距只会白占位置。
+            // 竖屏全屏时给顶栏留出上边距：
+            //  - 有挖孔 → 让开摄像头（用挖孔安全区的高度）
+            //  - 没有挖孔 → 只留一点点呼吸边距
+            //
+            // 非挖孔屏**不能**按状态栏高度塞：全屏时两条栏本来就隐藏着，非挖孔屏上
+            // 更没有任何东西需要避让，按状态栏高度留白只会白占一条 ~48dp 的黑带。
+            // 横屏不加（挖孔在侧边，顶上多一条边距只会挤掉画面）。
             val portrait = LocalConfiguration.current.orientation !=
                 android.content.res.Configuration.ORIENTATION_LANDSCAPE
-            val topInset = if (fullscreen && portrait) topClearance else 0.dp
+            val topInset = when {
+                !fullscreen || !portrait -> 0.dp
+                topClearance > 0.dp -> topClearance
+                else -> Spacing.s
+            }
             Row(
                 Modifier.align(Alignment.TopCenter).fillMaxWidth()
                     .background(Scrim.strong)

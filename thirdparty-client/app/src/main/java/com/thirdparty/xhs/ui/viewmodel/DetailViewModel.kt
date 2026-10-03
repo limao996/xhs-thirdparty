@@ -9,6 +9,7 @@ import com.thirdparty.xhs.data.XhsRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
 data class DetailUiState(
@@ -47,10 +48,31 @@ class DetailViewModel(
                 if (uid > 0) _ui.value = _ui.value.copy(followed = repo.isFollowed(uid))
             }
         }
+        // Content follows the account.
+        //
+        // A switch inside the account gate re-issues the media URLs (they are handed out
+        // per account), so the page has to be re-fetched — otherwise the video or 图文
+        // images kept pointing at what the OLD account was given, which is exactly the
+        // "视频/图文也要考虑自动切换" case.
+        viewModelScope.launch {
+            // drop(1): the flow replays its current value to a new collector, and an
+            // epoch left over from an earlier switch must not trigger a second load.
+            repo.accountEpoch.drop(1).collect { if (it > 0) load() }
+        }
     }
 
     fun load() {
         viewModelScope.launch {
+            // Ask the account gate BEFORE anything is shown.
+            //
+            // This page can be opened from the cache (最近浏览 / 我的收藏), and then
+            // nothing in the path is an API call: the note, its video URL and its 图文
+            // images all come straight from the DB, issued for whatever account was in
+            // use when they were stored. A lapsed VIP window is exactly what makes those
+            // fail, and the gate inside XhsApi never sees it. Asking here means the
+            // account is fixed BEFORE the media is played, and the fresh fetch below
+            // re-issues the URLs for the new one.
+            runCatching { repo.ensureAccountForRequest() }
             val cached = repo.cachedDetail(noteId)
             if (cached != null) {
                 _ui.value = DetailUiState(cached, loading = true, saved = repo.isSaved(noteId))
