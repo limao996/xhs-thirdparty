@@ -146,6 +146,159 @@ fun DetailScreen(
         }
     }
 
+    // ---- media plumbing, hoisted OUT of the metadata branch -------------------
+    //
+    // All of this used to live inside `else -> { val item = state.item!! ... }`, i.e.
+    // behind this page's own JSON request. That is wrong for video: when the page was
+    // opened by tapping a clip in 推荐 the player is ALREADY PLAYING, so waiting for a
+    // separate note request before drawing it meant the picture showed up seconds late
+    // — the user watching a spinner with the video running right behind it.
+    //
+    // Adopting, sizing and releasing the player is therefore keyed on the NOTE, and the
+    // metadata only decides what is drawn BELOW the media.
+    val inherited = remember(noteId) {
+        com.thirdparty.xhs.ui.components.PlaybackHandoff.takeForDetail(noteId)
+    }
+    // 0 while the video's shape is unknown (see the sizing below). Seeded from an
+    // inherited player, which already knows its video size — no second
+    // `onVideoSizeChanged` is ever coming for it.
+    var videoAspect by remember(noteId) {
+        mutableFloatStateOf(
+            inherited?.player?.videoSize?.let {
+                if (it.width > 0 && it.height > 0) it.width.toFloat() / it.height.toFloat() else 0f
+            } ?: 0f
+        )
+    }
+    val itemMediaUrl = state.item?.mediaUrl.orEmpty()
+    // the media to draw: a handed-over player is already proof that this is video
+    val isVideoNote = inherited != null ||
+        (state.item?.isVideo == true && itemMediaUrl.isNotEmpty())
+    val sharedPlayer: androidx.media3.exoplayer.ExoPlayer? = if (!isVideoNote) null
+    else inherited?.player ?: remember(itemMediaUrl) {
+        if (itemMediaUrl.isEmpty()) null
+        else buildVideoPlayer(context.applicationContext, itemMediaUrl, longForm = true)
+    }
+    // A handed-over player arrives wearing the FEED's settings — it loops there, and
+    // this screen must stop at the end (that is the 播完显示「重播」behaviour). Done
+    // once, in an effect.
+    LaunchedEffect(inherited) {
+        val a = inherited ?: return@LaunchedEffect
+        com.thirdparty.xhs.ui.components.applyLongFormPlayerSettings(a.player)
+        if (a.wasPlaying) runCatching { a.player.play() } else runCatching { a.player.pause() }
+    }
+    // Fullscreen orientation follows the VIDEO's shape: a landscape clip should fill a
+    // landscape screen, a portrait clip should stay portrait. Restored to unspecified
+    // when leaving fullscreen/screen.
+    val activity = context as? android.app.Activity
+    DisposableEffect(fullscreen, videoAspect, activity) {
+        if (fullscreen && isVideoNote) {
+            activity?.requestedOrientation = if (videoAspect > 1f) {
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            } else {
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+            }
+        }
+        onDispose {
+            activity?.requestedOrientation =
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
+    // survive the Activity relaunch that an orientation change causes
+    var resumeMs by rememberSaveable(noteId) {
+        androidx.compose.runtime.mutableLongStateOf(0L)
+    }
+    LaunchedEffect(sharedPlayer) {
+        if (sharedPlayer == null) return@LaunchedEffect
+        // Continue from where 推荐 left off when the detail was opened by tapping that
+        // same video there. Consumed once — a later open of this note (deep link, saved
+        // list) must start at the start. Consumed even when the player itself was handed
+        // over: leaving it behind would make the NEXT unrelated open of this note resume
+        // a position from this transition.
+        val handoff = com.thirdparty.xhs.ui.components.PlaybackHandoff.take(noteId)
+        // Nothing to seek when the feed's own player was adopted: it never stopped, so
+        // it is already at the position the user was watching. Seeking here as well
+        // could only move it backwards (the stored position is up to half a second old).
+        if (inherited != null) return@LaunchedEffect
+
+        val target = handoff?.positionMs?.takeIf { it > 0L } ?: resumeMs
+        if (handoff?.playing == true) sharedPlayer.play()
+
+        if (target > 0L) {
+            // Seek immediately, so a player that is already prepared moves at once with
+            // no extra frame of the opening seconds...
+            runCatching { sharedPlayer.seekTo(target) }
+            // ...and again once the media is ready. This is a second player built from
+            // scratch, and on an HLS stream a seek issued before the playlist has
+            // settled can be clamped or dropped — which showed up as the detail page
+            // starting from zero even though the position had been handed over.
+            var applied = false
+            sharedPlayer.addListener(object : androidx.media3.common.Player.Listener {
+                override fun onPlaybackStateChanged(state: Int) {
+                    if (state == androidx.media3.common.Player.STATE_READY && !applied) {
+                        applied = true
+                        runCatching { sharedPlayer.seekTo(target) }
+                    }
+                }
+            })
+        }
+    }
+    LaunchedEffect(sharedPlayer) {
+        if (sharedPlayer == null) return@LaunchedEffect
+        // Save the position so a recreate (orientation change) does not restart a long
+        // work from zero.
+        //
+        // Two rules, both fixing the same report — "播放完毕后回到 5~7 秒 而不是重新播放":
+        //  1. save while PAUSED too. Only recording while playing meant the stored value
+        //     was always some earlier playing position, so a restore could jump to a spot
+        //     the user had already left.
+        //  2. clear it once the playhead reaches the end. A finished (or looping) item
+        //     otherwise leaves a mid-video value behind, and the next recreate resumes
+        //     from it instead of starting over.
+        while (true) {
+            val p = sharedPlayer
+            val duration = p.duration
+            val position = p.currentPosition
+            resumeMs = when {
+                p.playbackState == androidx.media3.common.Player.STATE_ENDED -> 0L
+                duration > 0L && position >= duration - END_OF_MEDIA_MARGIN_MS -> 0L
+                else -> position
+            }
+            delay(500)
+        }
+    }
+    // A looping item must not leave a resume position behind: the loop is the video
+    // restarting, and if the player is recreated while it plays round again, restoring
+    // the pre-loop position looks like the player jumping to the middle of the clip
+    // instead of replaying.
+    DisposableEffect(sharedPlayer) {
+        val p = sharedPlayer
+        val listener = if (p == null) null else object :
+            androidx.media3.common.Player.Listener {
+            override fun onPositionDiscontinuity(
+                oldPosition: androidx.media3.common.Player.PositionInfo,
+                newPosition: androidx.media3.common.Player.PositionInfo,
+                reason: Int
+            ) {
+                if (reason == androidx.media3.common.Player.DISCONTINUITY_REASON_AUTO_TRANSITION) {
+                    resumeMs = 0L
+                }
+            }
+        }
+        if (p != null && listener != null) p.addListener(listener)
+        onDispose { if (p != null && listener != null) p.removeListener(listener) }
+    }
+    DisposableEffect(sharedPlayer) {
+        onDispose {
+            // The detail page owns its player, adopted or built: releasing it here is
+            // what stops audio continuing after 返回. The feed cannot take an adopted one
+            // back — by the time this runs the feed has already recomposed and built its
+            // own, so the two would just swap players mid-playback.
+            sharedPlayer?.stop()
+            sharedPlayer?.clearMediaItems()
+            sharedPlayer?.release()
+        }
+    }
+
     Scaffold(
         topBar = {
             // hide the app bar entirely in fullscreen for true immersion
@@ -176,10 +329,12 @@ fun DetailScreen(
                         // (the fullscreen branch also requires isVideo). It now opens
                         // the image viewer there instead.
                         //
-                        // For video notes this is byte-for-byte the old behaviour:
-                        // `isVideo` is itself `item.isVideo && mediaUrl.isNotEmpty()`.
-                        val videoNote = state.item?.isVideo == true &&
-                            !state.item?.mediaUrl.isNullOrEmpty()
+                        // For video notes this is byte-for-byte the old behaviour.
+                        // `isVideoNote` rather than `state.item.isVideo`: a handed-over
+                        // player proves this is video even before the note's own request
+                        // answers, and without that the 全屏 button would open the IMAGE
+                        // viewer on a video for those first seconds.
+                        val videoNote = isVideoNote
                         IconButton(onClick = {
                             // `fullscreen` hides the app bar and the system bars; the
                             // image branch used to set only `openImage`, so the viewer
@@ -199,198 +354,53 @@ fun DetailScreen(
         }
     ) { pad ->
         when {
-            state.loading -> Box(Modifier.fillMaxSize().padding(pad), contentAlignment = Alignment.Center) {
+            // `inherited == null` on both: with a player in hand there is something to
+            // show already, so the page must not be blanked by its own metadata request
+            // (that is the case this whole hoist exists for).
+            state.loading && inherited == null -> Box(Modifier.fillMaxSize().padding(pad), contentAlignment = Alignment.Center) {
                 LoadingIndicator()
             }
-            state.missing || state.item == null -> Box(Modifier.fillMaxSize().padding(pad), contentAlignment = Alignment.Center) {
+            state.missing && inherited == null -> Box(Modifier.fillMaxSize().padding(pad), contentAlignment = Alignment.Center) {
                 Text("内容加载失败（可能已下线或需付费）")
             }
             else -> {
-                val item = state.item!!
-                val isVideo = item.isVideo && item.mediaUrl.isNotEmpty()
-                // Hoisted so the fullscreen branch below can pick the orientation
-                // that matches the video instead of assuming portrait.
-                var videoAspect by remember(item.noteId) { mutableFloatStateOf(9f / 16f) }
-                // Fullscreen orientation follows the VIDEO's shape: a landscape clip
-                // should fill a landscape screen, a portrait clip should stay
-                // portrait. Restored to unspecified when leaving fullscreen/screen.
-                val activity = context as? android.app.Activity
-                DisposableEffect(fullscreen, videoAspect, activity) {
-                    if (fullscreen && isVideo) {
-                        activity?.requestedOrientation = if (videoAspect > 1f) {
-                            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                        } else {
-                            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
-                        }
-                    }
-                    onDispose {
-                        activity?.requestedOrientation =
-                            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                    }
-                }
-                // ONE player for both layouts. The windowed and fullscreen branches
-                // are different composables, so if each built its own player then
-                // toggling fullscreen would tear one down and start the other from
-                // zero — the video appeared to restart every time.
-                //
-                // And when this page was opened by tapping a video in 推荐, that
-                // video's player is HANDED OVER and adopted here: one ExoPlayer for the
-                // same stream means no second prepare, no second playlist fetch and no
-                // re-buffer — the clip simply carries on where it was, which is what
-                // carrying only the POSITION could never achieve (the picture still
-                // restarted and buffered). It arrives wearing the feed's settings (the
-                // feed loops, the detail must not), so they are switched to this
-                // screen's before anything renders it.
-                val adopted = remember(item.mediaUrl) {
-                    if (!isVideo) null
-                    else com.thirdparty.xhs.ui.components.PlaybackHandoff.takeForDetail(item.noteId)
-                }
-                val sharedPlayer = if (isVideo) {
-                    if (adopted == null) {
-                        remember(item.mediaUrl) {
-                            buildVideoPlayer(
-                                context = context.applicationContext,
-                                url = item.mediaUrl,
-        longForm = true
-                            )
-                        }
-                    } else {
-                        adopted.player
-                    }
-                } else null
-                // The adoption itself is a one-off: the settings switch and the resume
-                // belong in an effect, not in the composition body, where they would
-                // re-run on every recomposition for no reason.
-                LaunchedEffect(adopted) {
-                    val a = adopted ?: return@LaunchedEffect
-                    // It arrives wearing the FEED's settings — it loops there, and this
-                    // screen must stop at the end (that is the 播完显示「重播」behaviour);
-                    // its seeks are exact there, and a long work wants the tolerant mode.
-                    com.thirdparty.xhs.ui.components.applyLongFormPlayerSettings(a.player)
-                    if (a.wasPlaying) runCatching { a.player.play() } else runCatching { a.player.pause() }
-                }
-                // survive the Activity relaunch that an orientation change causes
-                var resumeMs by rememberSaveable(item.mediaUrl) {
-                    androidx.compose.runtime.mutableLongStateOf(0L)
-                }
-                LaunchedEffect(sharedPlayer) {
-                    if (sharedPlayer == null) return@LaunchedEffect
-                    // Continue from where 推荐 left off when the detail was opened
-                    // by tapping that same video there. Consumed once — a later open
-                    // of this note (deep link, saved list) must start at the start.
-                    //
-                    // Consumed even when the player itself was handed over: leaving it
-                    // behind would make the NEXT unrelated open of this note resume a
-                    // position from this transition.
-                    val handoff = com.thirdparty.xhs.ui.components.PlaybackHandoff.take(item.noteId)
-                    // Nothing to seek when the feed's own player was adopted: it never
-                    // stopped, so it is already at the position the user was watching.
-                    // Seeking here as well could only move it backwards (the stored
-                    // position is up to half a second old).
-                    if (adopted != null) return@LaunchedEffect
-
-                    val target = handoff?.positionMs?.takeIf { it > 0L } ?: resumeMs
-                    if (handoff?.playing == true) sharedPlayer.play()
-
-                    if (target > 0L) {
-                        // Seek immediately, so a player that is already prepared moves
-                        // at once with no extra frame of the opening seconds...
-                        runCatching { sharedPlayer.seekTo(target) }
-                        // ...and again once the media is ready. This is a second
-                        // player built from scratch, and on an HLS stream a seek
-                        // issued before the playlist has settled can be clamped or
-                        // dropped — which showed up as the detail page starting from
-                        // zero even though the position had been handed over.
-                        var applied = false
-                        sharedPlayer.addListener(object : androidx.media3.common.Player.Listener {
-                            override fun onPlaybackStateChanged(state: Int) {
-                                if (state == androidx.media3.common.Player.STATE_READY && !applied) {
-                                    applied = true
-                                    runCatching { sharedPlayer.seekTo(target) }
-                                }
-                            }
-                        })
-                    }
-                }
-                LaunchedEffect(sharedPlayer) {
-                    if (sharedPlayer == null) return@LaunchedEffect
-                    // Save the position so a recreate (orientation change) does not
-                    // restart a long work from zero.
-                    //
-                    // Two rules, both fixing the same report — "播放完毕后回到 5~7 秒
-                    // 而不是重新播放":
-                    //  1. save while PAUSED too. Only recording while playing meant
-                    //     the stored value was always some earlier playing position,
-                    //     so a restore could jump to a spot the user had already left.
-                    //  2. clear it once the playhead reaches the end. A finished (or
-                    //     looping) item otherwise leaves a mid-video value behind, and
-                    //     the next recreate resumes from it instead of starting over.
-                    while (true) {
-                        val p = sharedPlayer
-                        val duration = p.duration
-                        val position = p.currentPosition
-                        resumeMs = when {
-                            p.playbackState == androidx.media3.common.Player.STATE_ENDED -> 0L
-                            duration > 0L && position >= duration - END_OF_MEDIA_MARGIN_MS -> 0L
-                            else -> position
-                        }
-                        delay(500)
-                    }
-                }
-                // A looping item must not leave a resume position behind: the loop
-                // is the video restarting, and if the player is recreated while it
-                // plays round again, restoring the pre-loop position looks like the
-                // player jumping to the middle of the clip instead of replaying.
-                DisposableEffect(sharedPlayer) {
-                    val p = sharedPlayer
-                    val listener = if (p == null) null else object :
-                        androidx.media3.common.Player.Listener {
-                        override fun onPositionDiscontinuity(
-                            oldPosition: androidx.media3.common.Player.PositionInfo,
-                            newPosition: androidx.media3.common.Player.PositionInfo,
-                            reason: Int
-                        ) {
-                            if (reason == androidx.media3.common.Player.DISCONTINUITY_REASON_AUTO_TRANSITION) {
-                                resumeMs = 0L
-                            }
-                        }
-                    }
-                    if (p != null && listener != null) p.addListener(listener)
-                    onDispose { if (p != null && listener != null) p.removeListener(listener) }
-                }
-                DisposableEffect(sharedPlayer) {
-                    onDispose {
-                        // The detail page owns its player, adopted or built: releasing it
-                        // here is what stops audio continuing after 返回. The feed cannot
-                        // take an adopted one back — by the time this runs, the feed has
-                        // already recomposed and built its own (probed: a popped entry's
-                        // effects are disposed after the destination it returns to
-                        // composes), so the two would just swap players mid-playback.
-                        sharedPlayer?.stop()
-                        sharedPlayer?.clearMediaItems()
-                        sharedPlayer?.release()
-                    }
-                }
-                if (fullscreen && isVideo) {
-                    // 真全屏：视频铺满整屏
+                // True fullscreen stays OUTSIDE the scrolling content: it must be the
+                // player and nothing else. (Rendering it inside the scroll column — the
+                // first attempt at this restructure — left the title, author and comments
+                // scrolling along underneath a player that only wrapped its own height.)
+                if (fullscreen && isVideoNote) {
                     Box(Modifier.fillMaxSize()) {
                         MediaPlayer(
-                            url = item.mediaUrl,
+                            url = itemMediaUrl,
                             externalPlayer = sharedPlayer,
                             fullscreen = true,
-                            title = item.title,
-                            onAspect = { r -> if (r > 0f) videoAspect = r },
+                            title = state.item?.title.orEmpty(),
+                            onAspect = { if (it > 0f) videoAspect = it },
                             onToggleFullscreen = { fullscreen = !fullscreen },
                             modifier = Modifier.fillMaxSize()
                         )
                     }
                 } else {
-                    DetailContent(state, viewModel, onOpenAuthor, pad, isVideo, onEnterFullscreen = { fullscreen = true }, openImage = openImage, onOpenImage = { page ->
-                        openImage = page
-                        // closing the viewer must also restore the app bar and the
-                        // system bars, otherwise the detail screen stays chromeless
-                        if (page == null) fullscreen = false
-                    }, sharedPlayer = sharedPlayer, videoAspect = videoAspect, onAspect = { videoAspect = it })
+                    // nullable on purpose: an inherited player draws the media before
+                    // this page's own request comes back
+                    DetailContent(
+                        state = state,
+                        viewModel = viewModel,
+                        onOpenAuthor = onOpenAuthor,
+                        pad = pad,
+                        isVideo = isVideoNote,
+                        onEnterFullscreen = { fullscreen = true },
+                        openImage = openImage,
+                        onOpenImage = { page ->
+                            openImage = page
+                            // closing the viewer must also restore the app bar and the
+                            // system bars, otherwise the detail screen stays chromeless
+                            if (page == null) fullscreen = false
+                        },
+                        sharedPlayer = sharedPlayer,
+                        videoAspect = videoAspect,
+                        onAspect = { if (it > 0f) videoAspect = it }
+                    )
                 }
             }
         }
@@ -414,13 +424,17 @@ private fun DetailContent(
     onOpenImage: (Int?) -> Unit,
     onEnterFullscreen: () -> Unit = {},
     sharedPlayer: androidx.media3.exoplayer.ExoPlayer? = null,
-    videoAspect: Float = 9f / 16f,
+    /** width/height of the video, or 0 while it is not known yet */
+    videoAspect: Float = 0f,
     onAspect: (Float) -> Unit = {}
 ) {
-    val item = state.item!!
+    // NULLABLE, deliberately. When the player was inherited from 推荐 it is already
+    // playing, so the media is drawn while this note's own request is still in flight;
+    // only the sections below the media wait for `state.item`.
+    val item = state.item
     // which comment's reply thread is open in the dialog (null = none).
     // Declared here, not inside the scrolling Column, so the dialog below can see it.
-    var openReplies by remember(item.noteId) {
+    var openReplies by remember(state.item?.noteId) {
         mutableStateOf<com.thirdparty.xhs.data.CommentItem?>(null)
     }
     // Single scrolling column: media on top, then all the content BELOW it.
@@ -428,28 +442,30 @@ private fun DetailContent(
     //  on top of the video — that was the broken layout.)
     Column(Modifier.fillMaxSize().padding(pad).verticalScroll(rememberScrollState())) {
         if (isVideo) {
-            // Windowed player: a compact, inset media card.
+            // Windowed player: an inset media card, sized inside a RANGE.
             //
-            // Height is the MINIMUM, not the maximum (user's call). It used to size
-            // itself to the video's own ratio and then clamp to half the screen, so
-            // every portrait clip opened at half the screen and pushed the title,
-            // author and actions off the first screenful. The floor — 16:10 against
-            // the view width — is the narrowest box the player's own top bar and seek
-            // bar fit in comfortably, so that floor is now the default; the
-            // half-screen term survives only as a cap for a very short window.
+            // Fitting the video's own shape and then clamping it was the original
+            // behaviour, but the clamp used `screenWidthDp` (ignoring the card's own
+            // inset) and pinned every portrait clip to the ceiling. The floor-only
+            // version that followed made every clip the same height instead — "尺寸怎么
+            // 固定住了". So: fit the shape, clamp into [floor, ceiling], and use the
+            // FLOOR while the shape is still unknown, which is what keeps the title,
+            // author and actions on the first screenful the moment the page opens.
             //
-            // In landscape, sizing by WIDTH would compute a height far taller than
-            // the window (a portrait ratio at 2400px wide is ~5200px tall), so there
-            // the box is constrained by height and the ratio keeps the whole frame
-            // visible — which is what 横屏 support has to mean.
+            // In landscape, sizing by WIDTH would compute a height far taller than the
+            // window (a portrait ratio at 2400px wide is ~5200px tall), so there the box
+            // is constrained by height and the ratio keeps the whole frame visible —
+            // which is what 横屏 support has to mean.
             val config = androidx.compose.ui.platform.LocalConfiguration.current
             val landscape = config.orientation ==
                 android.content.res.Configuration.ORIENTATION_LANDSCAPE
-            val halfScreen = (config.screenHeightDp * 0.5f).dp
             // measured against the player's OWN width (the page inset is 2×Spacing.m),
             // so 16:10 stays 16:10 now that the card no longer runs edge to edge
             val playerWidth = config.screenWidthDp - Spacing.m.value * 2f
-            val windowedHeight = minOf((playerWidth * 10f / 16f).dp, halfScreen)
+            val floorHeight = (playerWidth * 10f / 16f).dp
+            val ceilingHeight = maxOf((config.screenHeightDp * 0.5f).dp, floorHeight)
+            val windowedHeight = if (videoAspect <= 0f) floorHeight
+            else (playerWidth / videoAspect).dp.coerceIn(floorHeight, ceilingHeight)
             // M3 Expressive hero media: inset from the page edges and clipped to the
             // large shape token. Full-bleed made the player read as a hole in the
             // page rather than as the page's media element.
@@ -459,10 +475,12 @@ private fun DetailContent(
                 contentAlignment = Alignment.Center
             ) {
                 MediaPlayer(
-                    url = item.mediaUrl,
+                    // the note may still be loading when a player was inherited; the
+                    // url is only a key then, because externalPlayer is always set here
+                    url = item?.mediaUrl.orEmpty(),
                     externalPlayer = sharedPlayer,
                     fullscreen = false,
-                    title = item.title,
+                    title = item?.title.orEmpty(),
                     // without this the in-player fullscreen button is inert:
                     // MediaPlayer defaults the callback to a no-op
                     onToggleFullscreen = onEnterFullscreen,
@@ -476,7 +494,7 @@ private fun DetailContent(
                     }
                 )
             }
-        } else {
+        } else if (item != null) {
             val images = item.images.ifEmpty {
                 listOf(item.cover).filter { it.isNotEmpty() }.map { NoteImage(it) }
             }
@@ -489,6 +507,30 @@ private fun DetailContent(
                 maxHeight = (galleryConfig.screenHeightDp * 0.5f).dp,
                 onOpen = { onOpenImage(it) }
             )
+        }
+
+        // Everything below the media needs the note, so while an INHERITED player is
+        // already on screen and this request is still in flight, the page shows the
+        // media plus this indicator rather than a blank column (or, worse, blanking the
+        // whole screen the way the old `state.loading` branch did).
+        if (item == null) {
+            Box(
+                Modifier.fillMaxWidth().padding(vertical = Spacing.xxl),
+                contentAlignment = Alignment.Center
+            ) {
+                // A request that FAILED (with a player already up) must say so rather
+                // than spin forever — the media plays on either way.
+                if (state.missing) {
+                    Text(
+                        "内容加载失败（可能已下线或需付费）",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    LoadingIndicator()
+                }
+            }
+            return@Column
         }
 
         Column(Modifier.padding(horizontal = Spacing.l, vertical = Spacing.m)) {
@@ -634,26 +676,30 @@ private fun DetailContent(
         }
 
     }
-    openImage?.let { page ->
-        com.thirdparty.xhs.ui.components.FullscreenImageViewer(
-            images = item.images.ifEmpty {
-                listOf(item.cover).filter { it.isNotEmpty() }.map { com.thirdparty.xhs.data.NoteImage(it) }
-            },
-            initialPage = page,
-            modifier = Modifier.padding(pad),
-            onDismiss = { onOpenImage(null) }
-        )
-    }
+    // Both dialogs need the note (images, comment ids), and the function returns above
+    // when it has not arrived yet.
+    item?.let { note ->
+        openImage?.let { page ->
+            com.thirdparty.xhs.ui.components.FullscreenImageViewer(
+                images = note.images.ifEmpty {
+                    listOf(note.cover).filter { it.isNotEmpty() }.map { com.thirdparty.xhs.data.NoteImage(it) }
+                },
+                initialPage = page,
+                modifier = Modifier.padding(pad),
+                onDismiss = { onOpenImage(null) }
+            )
+        }
 
-    openReplies?.let { oc ->
-        CommentRepliesDialog(
-            noteId = item.noteId,
-            commentId = oc.commentId,
-            commentUserName = oc.userName,
-            totalCount = oc.replyCount,
-            preview = oc.replies,
-            onDismiss = { openReplies = null }
-        )
+        openReplies?.let { oc ->
+            CommentRepliesDialog(
+                noteId = note.noteId,
+                commentId = oc.commentId,
+                commentUserName = oc.userName,
+                totalCount = oc.replyCount,
+                preview = oc.replies,
+                onDismiss = { openReplies = null }
+            )
+        }
     }
 }
 
