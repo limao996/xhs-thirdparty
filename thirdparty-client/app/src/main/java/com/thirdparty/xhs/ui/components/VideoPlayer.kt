@@ -205,6 +205,18 @@ private const val FEED_BUFFER_FOR_PLAYBACK_MS = 1_500
 private const val FEED_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS = 2_000
 
 /**
+ * What the buffering overlay counts towards.
+ *
+ * A determined video resumes once the load control has this much buffered ahead
+ * of the playhead, so "how soon will it play again" is `ahead / this`. Kept in
+ * step with [BUFFER_FOR_PLAYBACK_MS] (5s) and
+ * [BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS] (4s) — the thresholds the player
+ * actually applies — so the bar filling up coincides with playback resuming.
+ */
+private const val WAIT_START_MS = 5_000L
+private const val WAIT_RESUME_MS = 4_000L
+
+/**
  * Pause playback while the host lifecycle is not at least STARTED and resume
  * afterwards if it was playing before. Without this the feed keeps playing
  * (and keeps its audio) after the user presses Home.
@@ -272,11 +284,20 @@ fun rememberExoPlayer(
 /**
  * Centered buffering feedback, shown over the video.
  *
- * Shows **how much is buffered**, not just a spinner: on a weak link the useful
- * question is "is it making progress or stuck?", and an indeterminate spinner
- * cannot answer that. The percentage comes from [Player.getBufferedPercentage]
- * (a whole-stream figure for progressive files, and per-window for HLS) and is
- * paired with a thin progress line so the state is readable at a glance.
+ * Beyond the spinner it shows **progress towards resuming**, which is the one
+ * figure that answers "how much longer". What it must NOT show is how much of the
+ * whole work has been downloaded: while the player is stalled
+ * `bufferedPosition == currentPosition`, so that number is the playback position
+ * wearing a percentage sign and it advances at exactly the playback rate. That is
+ * what got reported as "缓冲中进度怎么是播放进度".
+ *
+ * So the bar counts `bufferedPosition - currentPosition` against the load
+ * control's resume threshold ([WAIT_START_MS] for a cold start, [WAIT_RESUME_MS]
+ * after a stall). It therefore fills while the playhead is frozen, and reaching
+ * the end coincides with playback resuming.
+ *
+ * When that figure is unavailable (no duration yet, e.g. a live or not-yet-parsed
+ * stream) **no bar is drawn** — a fabricated progress figure is worse than none.
  *
  * [active] gates the IDLE case. Every page in the feed keeps a prepared player
  * alive, and an unprepared neighbour sits in STATE_IDLE — treating that as
@@ -293,30 +314,50 @@ fun BufferingIndicator(
     var state by remember(player) {
         androidx.compose.runtime.mutableIntStateOf(player?.playbackState ?: Player.STATE_IDLE)
     }
-    var percent by remember(player) { androidx.compose.runtime.mutableIntStateOf(0) }
+    // How far along the CURRENT wait is, 0..1 — never how much of the whole work
+    // has been downloaded.
+    //
+    // `bufferedPercentage` was the wrong figure: while the player is stalled,
+    // `bufferedPosition == currentPosition`, so it reprints the playhead as a
+    // share of the total and moves at exactly the playback rate. Reported as
+    // "缓冲中进度怎么是播放进度".
+    //
+    // The honest question is "how soon will it start again", which is how much of
+    // the resume threshold has arrived: `bufferedPosition - currentPosition` over
+    // the amount the load control needs. `null` when that cannot be computed, and
+    // then no bar is drawn at all — a made-up figure is worse than none.
+    var waitFraction by remember(player) {
+        androidx.compose.runtime.mutableStateOf<Float?>(null)
+    }
+    // a cold start needs less than a resume after a stall
+    var hasPlayed by remember(player) { androidx.compose.runtime.mutableStateOf(false) }
     DisposableEffect(player) {
         val p = player
         val listener = if (p == null) null else object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 state = playbackState
-                percent = p.bufferedPercentage
-            }
-
-            override fun onIsLoadingChanged(isLoading: Boolean) {
-                percent = p.bufferedPercentage
+                if (playbackState == Player.STATE_READY) hasPlayed = true
             }
         }
         if (p != null && listener != null) p.addListener(listener)
         onDispose { if (p != null && listener != null) p.removeListener(listener) }
     }
-    // keep the figure moving while it is visible: bufferedPercentage only changes
-    // on load events, which are coarse and irregular
+    // Poll: the listener API only fires on state changes, so the bar would sit
+    // still through a long wait.
     LaunchedEffect(player, state, active) {
         if (!active) return@LaunchedEffect
-        if (state != Player.STATE_IDLE && state != Player.STATE_BUFFERING) return@LaunchedEffect
+        if (state != Player.STATE_IDLE && state != Player.STATE_BUFFERING) {
+            waitFraction = null
+            return@LaunchedEffect
+        }
         while (true) {
-            player?.let { percent = it.bufferedPercentage }
-            delay(400)
+            val pl = player
+            waitFraction = if (pl == null || pl.duration <= 0L) null else {
+                val ahead = (pl.bufferedPosition - pl.currentPosition).coerceAtLeast(0L)
+                val needMs = if (hasPlayed) WAIT_RESUME_MS else WAIT_START_MS
+                (ahead.toFloat() / needMs).coerceIn(0f, 1f)
+            }
+            delay(250)
         }
     }
 
@@ -343,11 +384,14 @@ fun BufferingIndicator(
             )
             androidx.compose.foundation.layout.Spacer(Modifier.height(Spacing.s))
             androidx.compose.material3.Text(
-                if (percent > 0) "缓冲中 $percent%" else "缓冲中",
+                "缓冲中",
                 color = Scrim.onMedia,
                 style = MaterialTheme.typography.labelMedium
             )
-            if (percent > 0) {
+            // Only drawn when there is a real wait progress to draw. The label
+            // carries no percentage: "24%" of the whole work is the playback
+            // position in disguise, which is what made this misleading.
+            waitFraction?.let { fraction ->
                 androidx.compose.foundation.layout.Spacer(Modifier.height(Spacing.xs))
                 androidx.compose.foundation.layout.Box(
                     Modifier
@@ -359,7 +403,7 @@ fun BufferingIndicator(
                     androidx.compose.foundation.layout.Box(
                         Modifier
                             .fillMaxHeight()
-                            .fillMaxWidth(percent / 100f)
+                            .fillMaxWidth(fraction)
                             .clip(Corners.full)
                             .background(tint)
                     )

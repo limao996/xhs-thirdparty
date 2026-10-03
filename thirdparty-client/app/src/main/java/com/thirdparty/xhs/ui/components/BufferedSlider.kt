@@ -39,16 +39,24 @@ object SeekTrack {
     val thumb: Color = Color.White
 }
 
-// M3 Expressive slider geometry, from the official tokens
-// (androidx.compose.material3.tokens.SliderTokens):
-//   ActiveTrackHeight        = 16.dp
-//   ActiveTrackShape         = CornerFull
-//   ActiveHandleWidth        = 4.dp
-//   ActiveHandleHeight       = 44.dp
-//   ActiveHandleLeadingSpace = 6.dp   (the gap between handle and track)
+// Geometry copied from the official M3 Expressive slider
+// (androidx.compose.material3.tokens.SliderTokens and the private drawTrack in
+// Slider.kt), because a screenshot comparison showed the track did not match:
+//
+//   ActiveTrackHeight / InactiveTrackHeight = 16.dp   (both full height)
+//   ActiveTrackShape   = CornerFull                   (outer ends only)
+//   ActiveHandleWidth  = 4.dp,  ActiveHandleHeight = 44.dp
+//   ActiveHandleLeadingSpace = 6.dp
+//   TrackInsideCornerSize    = 2.dp   <-- the end that faces the thumb gap is
+//                                          almost square, NOT a full pill
+//
+// The gap on each side of the handle is `handleWidth / 2 + 6.dp` = 8.dp, and the
+// track is split there rather than drawn underneath the handle.
 private val TrackHeight = 16.dp
 private val HandleWidth = 4.dp
 private val HandleLeadingSpace = 6.dp
+/** the nearly-square corner the official track uses next to the handle gap */
+private val InsideCornerSize = 2.dp
 private val StopIndicatorSize = 4.dp
 
 /**
@@ -108,39 +116,52 @@ fun BufferedSlider(
         track = { sliderState ->
             val played = sliderState.value.coerceIn(0f, 1f)
             Canvas(Modifier.fillMaxWidth().height(TrackHeight)) {
-                val radius = CornerRadius(size.height / 2f, size.height / 2f)
-                val gap = HandleLeadingSpace.toPx()
-                val handle = HandleWidth.toPx()
+                val outer = CornerRadius(size.height / 2f, size.height / 2f)
+                val inside = InsideCornerSize.toPx()
+                // the official split: value*width, then a gap of
+                // handleWidth/2 + leadingSpace on each side of the handle
+                val gap = HandleWidth.toPx() / 2f + HandleLeadingSpace.toPx()
 
-                fun segment(widthPx: Float, color: Color) {
+                /**
+                 * Draws one segment with **per-end** corner radii, as the official
+                 * track does: the outer end of the track is fully rounded, while the
+                 * end facing the handle gap is nearly square ([InsideCornerSize]).
+                 * `drawRoundRect` takes a single radius, so this goes through a Path.
+                 */
+                fun bar(x: Float, widthPx: Float, color: Color, startR: Float, endR: Float) {
                     if (widthPx <= 0f) return
-                    drawRoundRect(
-                        color = color,
-                        topLeft = Offset.Zero,
-                        // never shorter than the bar is tall, or a small value
-                        // renders as a squashed blob instead of a rounded end
-                        size = Size(
-                            width = widthPx.coerceIn(size.height, size.width),
-                            height = size.height
-                        ),
-                        cornerRadius = radius
+                    val w = widthPx.coerceIn(size.height, size.width)
+                    val roundRect = androidx.compose.ui.geometry.RoundRect(
+                        rect = androidx.compose.ui.geometry.Rect(Offset(x, 0f), Size(w, size.height)),
+                        topLeft = CornerRadius(startR),
+                        bottomLeft = CornerRadius(startR),
+                        topRight = CornerRadius(endR),
+                        bottomRight = CornerRadius(endR)
                     )
+                    val path = androidx.compose.ui.graphics.Path().apply { addRoundRect(roundRect) }
+                    drawPath(path, color)
                 }
 
-                // 1. the whole track, dimmest
-                segment(size.width, inactiveColor)
-                // 2. downloaded, one step brighter (never less than the playhead)
-                segment(size.width * buffered.coerceAtLeast(played), bufferedColor)
-                // 3. played, brightest. Shortened by the gap plus half the handle
-                //    so the handle sits in its own space instead of on the track —
-                //    the same separation the official track makes.
-                segment(size.width * played - gap - handle / 2f, playedColor)
-                // 4. stop indicator at the end of the track (part of the M3 track)
-                drawCircle(
-                    color = inactiveColor,
-                    radius = StopIndicatorSize.toPx() / 2f,
-                    center = Offset(size.width - StopIndicatorSize.toPx() / 2f, size.height / 2f)
-                )
+                val valueEnd = size.width * played
+
+                // 1. the whole track, dimmest — covers the area the handle cuts into,
+                //    so no seam shows through the gaps
+                bar(0f, size.width, inactiveColor, outer.x, outer.x)
+                // 2. downloaded, one step brighter. Runs from just past the handle to
+                //    the downloaded end, so "buffered ahead" is the visible band
+                //    between the playhead and the undownloaded remainder.
+                val bufferedEnd = size.width * buffered.coerceAtLeast(played)
+                bar(valueEnd + gap, bufferedEnd - valueEnd - gap, bufferedColor, inside, outer.x)
+                // 3. played, brightest, ending one gap short of the handle with the
+                //    near-square corner that faces it
+                bar(0f, valueEnd - gap, playedColor, outer.x, inside)
+
+                // 4. stop indicators, both ends (the official track draws both).
+                //    The left one uses the played colour so it stays visible once the
+                //    playhead has passed it.
+                val r = StopIndicatorSize.toPx() / 2f
+                drawCircle(playedColor, r, Offset(r, size.height / 2f))
+                drawCircle(inactiveColor, r, Offset(size.width - r, size.height / 2f))
             }
         }
     )
