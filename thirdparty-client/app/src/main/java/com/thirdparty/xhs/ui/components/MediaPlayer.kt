@@ -218,7 +218,7 @@ private fun AutoHideController(
             override fun onPlaybackStateChanged(state: Int) {
                 playing = player.isPlaying
                 ended = state == Player.STATE_ENDED
-                duration = if (player.duration > 0) player.duration.toFloat() else 0f
+                duration = effectiveDurationMs(player).toFloat()
                 position = player.currentPosition.toFloat()
                 bufferedFraction = bufferedOf(player)
                 if (BuildConfig.DEBUG) {
@@ -315,7 +315,7 @@ private fun AutoHideController(
     LaunchedEffect(player, visible, playing, dragging) {
         if (!visible || !playing || dragging) return@LaunchedEffect
         while (true) {
-            duration = if (player.duration > 0) player.duration.toFloat() else 0f
+            duration = effectiveDurationMs(player).toFloat()
             position = player.currentPosition.toFloat()
             bufferedFraction = bufferedOf(player)
             delay(PROGRESS_POLL_MS)
@@ -491,8 +491,35 @@ private val SPEEDS = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
 private const val DEFAULT_SPEED_IDX = 2
 
 private fun fmt(ms: Long): String {
-    val s = ms / 1000; val m = s / 60
+    // Round to the nearest second rather than truncating: truncation made a clip
+    // whose real length is 10.9s read as "0:10", and the clock is what the user
+    // compares the bar against.
+    val s = (ms + 500) / 1000
+    val m = s / 60
     return "%d:%02d".format(m, s % 60)
+}
+
+/**
+ * Duration to lay the seek bar out against.
+ *
+ * The container can under-report it — seen on 粉丝团 clips, where the real media is
+ * longer than the duration the extractor reports. The bar then reached 100% while
+ * the video kept playing, sat pinned there for the remaining seconds, and only
+ * reset when the item looped; reported as "播放完毕后进度会卡回5秒左右".
+ *
+ * Once the playhead is past the reported duration, that report is the thing that
+ * is wrong, so the observed position becomes the reference and the bar keeps
+ * tracking instead of pinning. `bufferedFraction` uses the same figure so both
+ * agree.
+ */
+private fun effectiveDurationMs(player: Player): Long {
+    val reported = player.duration
+    val position = player.currentPosition
+    return when {
+        reported <= 0L -> 0L
+        position > reported -> position
+        else -> reported
+    }
 }
 
 /** How often the visible controls re-read the playback position. */
