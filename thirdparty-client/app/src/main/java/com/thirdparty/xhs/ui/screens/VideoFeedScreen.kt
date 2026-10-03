@@ -340,7 +340,10 @@ private fun VideoPage(
                             // detail page that could not adopt (nothing waiting), and
                             // it is what makes 重播/断点续播 land in the right place.
                             currentPlayer.value?.let {
-                                val playing = runCatching { it.isPlaying }.getOrDefault(false)
+                                // playWhenReady, not isPlaying: the latter is false while
+                                // the player is momentarily buffering, and handing that
+                                // over reads as "the user had it paused".
+                                val playing = runCatching { it.playWhenReady }.getOrDefault(false)
                                 val pos = runCatching { it.currentPosition }.getOrDefault(0L)
                                 runCatching {
                                     com.thirdparty.xhs.ui.components.PlaybackHandoff.stash(
@@ -442,8 +445,15 @@ private fun rememberPreparedPlayer(
             kotlinx.coroutines.delay(500)
         }
     }
-    // stop playback/audio when the app leaves the foreground
-    PauseWhenNotStarted(player)
+    // stop playback/audio when the app leaves the foreground.
+    //
+    // NOT on dispose, though (`pauseOnDispose = false`): this disposal happens as part
+    // of the navigation that HANDS THIS PLAYER OVER to the detail page, and pausing
+    // here stopped the very video the detail page had just taken over — racing with
+    // the detail's own resume, which is why the clip "sometimes" arrived paused. When
+    // the page is disposed without a hand-over, the player is released below anyway
+    // (stop + clear + release), which ends the audio just as well.
+    PauseWhenNotStarted(player, pauseOnDispose = false)
     DisposableEffect(player) {
         val p = player
         val listener = if (p == null) null else object : Player.Listener {

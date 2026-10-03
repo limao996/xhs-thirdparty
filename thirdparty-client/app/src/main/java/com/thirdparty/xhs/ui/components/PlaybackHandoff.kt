@@ -42,10 +42,18 @@ import java.util.WeakHashMap
  */
 object PlaybackHandoff {
 
-    data class Pending(val positionMs: Long, val playing: Boolean)
+    data class Pending(val positionMs: Long, val playIntent: Boolean)
 
-    /** A handed-over player, and whether it was playing when it was given up. */
-    class Held(val player: ExoPlayer, val wasPlaying: Boolean)
+    /**
+     * A handed-over player, and the play/pause INTENT it was handed over with.
+     *
+     * The intent is `playWhenReady`, not `isPlaying`: `isPlaying` is false whenever the
+     * player is momentarily buffering, so sampling it turned an ordinary mid-buffer tap
+     * into "handed over paused" — and the detail page then dutifully paused a video the
+     * user was watching. `playWhenReady` is the user's own play/pause choice and does not
+     * flicker with the network.
+     */
+    class Held(val player: ExoPlayer, val playIntent: Boolean)
 
     private var noteId: Long = -1L
     private var pending: Pending? = null
@@ -64,9 +72,9 @@ object PlaybackHandoff {
 
     /** Called by the feed right before navigating to the detail page. */
     @Synchronized
-    fun stash(noteId: Long, positionMs: Long, playing: Boolean) {
+    fun stash(noteId: Long, positionMs: Long, playIntent: Boolean) {
         this.noteId = noteId
-        this.pending = Pending(positionMs.coerceAtLeast(0L), playing)
+        this.pending = Pending(positionMs.coerceAtLeast(0L), playIntent)
     }
 
     /** Called by the detail page once its own player exists. Clears the store. */
@@ -104,7 +112,7 @@ object PlaybackHandoff {
         }
         owned[player] = true
         heldNoteId = noteId
-        held = Held(player, player.isPlaying)
+        held = Held(player, player.playWhenReady)
     }
 
     /**

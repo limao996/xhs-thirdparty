@@ -184,7 +184,9 @@ fun DetailScreen(
     LaunchedEffect(inherited) {
         val a = inherited ?: return@LaunchedEffect
         com.thirdparty.xhs.ui.components.applyLongFormPlayerSettings(a.player)
-        if (a.wasPlaying) runCatching { a.player.play() } else runCatching { a.player.pause() }
+        // Resume exactly the intent the feed handed over: playing (even if it was mid
+        // buffer when the user tapped) stays playing, a deliberate pause stays paused.
+        if (a.playIntent) runCatching { a.player.play() } else runCatching { a.player.pause() }
     }
     // Fullscreen orientation follows the VIDEO's shape: a landscape clip should fill a
     // landscape screen, a portrait clip should stay portrait. Restored to unspecified
@@ -221,7 +223,7 @@ fun DetailScreen(
         if (inherited != null) return@LaunchedEffect
 
         val target = handoff?.positionMs?.takeIf { it > 0L } ?: resumeMs
-        if (handoff?.playing == true) sharedPlayer.play()
+        if (handoff?.playIntent == true) sharedPlayer.play()
 
         if (target > 0L) {
             // Seek immediately, so a player that is already prepared moves at once with
