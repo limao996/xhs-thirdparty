@@ -395,10 +395,10 @@ fun BufferingIndicator(
                 androidx.compose.foundation.layout.Spacer(Modifier.height(Spacing.xs))
                 androidx.compose.foundation.layout.Box(
                     Modifier
-                        .width(120.dp)
-                        .height(3.dp)
+                        .width(150.dp)
+                        .height(4.dp)
                         .clip(Corners.full)
-                        .background(Scrim.onMediaVariant)
+                        .background(SeekTrack.inactive)
                 ) {
                     androidx.compose.foundation.layout.Box(
                         Modifier

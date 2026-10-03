@@ -41,7 +41,6 @@ import com.thirdparty.xhs.ui.theme.Scrim
 import com.thirdparty.xhs.ui.theme.Spacing
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Spacer
@@ -177,7 +176,6 @@ private fun AutoHideController(
     startHidden: Boolean = false,
     title: String = ""
 ) {
-    val scope = rememberCoroutineScope()
     var visible by remember(player) { mutableStateOf(!startHidden) }
     var playing by remember(player) { mutableStateOf(player.isPlaying) }
     var duration by remember(player) { mutableFloatStateOf(0f) }
@@ -283,14 +281,29 @@ private fun AutoHideController(
         }
     }
 
-    // Auto-hide after 3s of no interaction — but NEVER while the user's finger
-    // is on the slider (the controls would vanish mid-drag and cancel the
-    // gesture) and NEVER while the overflow menu is open: hiding `visible`
-    // removes the whole control block, DropdownMenu included, so the menu would
-    // close itself out from under the user mid-choice.
-    LaunchedEffect(visible, playing, interaction, dragging, menuOpen) {
-        if (visible && playing && !dragging && !menuOpen) {
-            delay(3000)
+    // "the user is waiting on the network, or it has not started yet" — the bar
+    // should stay put so the buffering state is readable.
+    val waiting = player.playbackState == Player.STATE_BUFFERING ||
+        player.playbackState == Player.STATE_IDLE
+
+    // Single auto-hide timer, restarted by every interaction.
+    //
+    // It used to be worse than this in two ways:
+    //  1. the tap handler ALSO started its own `scope.launch { delay(3000) }`.
+    //     Only this effect restarts on interaction, so after tapping to reveal the
+    //     controls and then adjusting the slider, that second timer still fired
+    //     three seconds after the tap and pulled the bar away mid-use.
+    //  2. the timeout was 3s, and it ran while paused and while buffering — i.e.
+    //     exactly when the user is looking at the controls or waiting on the
+    //     network. Reported as "自动隐藏特别反人类".
+    //
+    // Now: one timer, 5s, and it never runs while paused, buffering, ended, mid
+    // drag or with the overflow menu open. Hiding `visible` removes the whole
+    // control block including the DropdownMenu, so the menu would otherwise close
+    // itself under the user's finger.
+    LaunchedEffect(visible, playing, interaction, dragging, menuOpen, waiting) {
+        if (visible && playing && !dragging && !menuOpen && !waiting && !ended) {
+            delay(AUTO_HIDE_MS)
             visible = false
         }
     }
@@ -315,8 +328,11 @@ private fun AutoHideController(
             // a double-tap for free. Ripples over video look like artifacts.
             detectTapGestures(
                 onTap = {
+                    // No timer here: the LaunchedEffect above owns auto-hide and
+                    // restarts with every interaction. A timer started here could
+                    // not be reset by later touches.
                     visible = !visible
-                    if (visible) { scope.launch { delay(3000); visible = false } }
+                    if (visible) interaction++
                 },
                 onDoubleTap = {
                     if (player.isPlaying) player.pause() else player.play()
@@ -481,6 +497,14 @@ private fun fmt(ms: Long): String {
 
 /** How often the visible controls re-read the playback position. */
 private const val PROGRESS_POLL_MS = 250L
+
+/**
+ * How long the controls stay up after the last interaction.
+ *
+ * 5s, up from 3s: at 3s the user had to lunge for the slider before the bar
+ * disappeared, which is what made the player feel hostile to use.
+ */
+private const val AUTO_HIDE_MS = 5_000L
 
 /**
  * Fraction of the video the player already holds, 0..1.
