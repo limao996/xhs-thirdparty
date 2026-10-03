@@ -601,18 +601,16 @@ private fun timeStr(ms: Long): String =
     SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(ms))
 
 /**
- * Share the note through the system sheet, falling back to copying the link
- * when the backend did not provide a `share_url`.
+ * Share the note as a clipboard 口令.
+ *
+ * Copies a full description rather than just `title\nlink` — see [ShareText] for
+ * what it contains and why. The token is buried in that text on purpose: the
+ * return-to-app flow finds it by regex, so the extra lines do not break it, and
+ * the recipient gets something worth reading even if they never paste it back.
  */
 private fun shareNote(context: android.content.Context, item: NoteItem?) {
     if (item == null) return
-    // 口令式分享：链接只作为**文本**存在，不做成可点击的深链。
-    // 复制后用户回到本应用，由 MainActivity 检测剪贴板并询问是否跳转。
-    val link = com.thirdparty.xhs.DeepLink.noteUrl(item.noteId)
-    val text = buildString {
-        if (item.title.isNotBlank()) append(item.title).append('\n')
-        append(link)
-    }
+    val text = com.thirdparty.xhs.data.ShareText.of(item)
     val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
         as? android.content.ClipboardManager
     val copied = runCatching {
@@ -621,7 +619,7 @@ private fun shareNote(context: android.content.Context, item: NoteItem?) {
     }.getOrDefault(false)
     android.widget.Toast.makeText(
         context,
-        if (copied) "口令已复制，回到应用可自动打开" else "复制失败",
+        if (copied) "分享文案已复制，回到应用可自动打开" else "复制失败",
         android.widget.Toast.LENGTH_SHORT
     ).show()
 }
