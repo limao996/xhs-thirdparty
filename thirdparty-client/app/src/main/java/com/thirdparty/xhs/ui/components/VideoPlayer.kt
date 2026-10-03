@@ -379,10 +379,10 @@ fun BufferingIndicator(
 fun VideoProgress(
     player: Player?,
     modifier: Modifier = Modifier,
-    trackColor: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color(0x33FFFFFF),
+    trackColor: androidx.compose.ui.graphics.Color = SeekTrack.inactive,
     /** the already-buffered span, drawn between played and empty */
-    bufferedColor: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color(0x80FFFFFF),
-    fillColor: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.White
+    bufferedColor: androidx.compose.ui.graphics.Color = SeekTrack.buffered,
+    fillColor: androidx.compose.ui.graphics.Color = SeekTrack.thumb
 ) {
     var fraction by remember(player) { androidx.compose.runtime.mutableFloatStateOf(0f) }
     var buffered by remember(player) { androidx.compose.runtime.mutableFloatStateOf(0f) }

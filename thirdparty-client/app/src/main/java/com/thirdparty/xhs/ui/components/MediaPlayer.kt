@@ -411,7 +411,9 @@ private fun AutoHideController(
                 val fraction = if (duration > 0f) (position / duration).coerceIn(0f, 1f) else 0f
                 // BufferedSlider, not Slider: it draws the already-buffered span as
                 // a third segment, so a stalled stream (buffer ahead of the
-                // playhead) is visibly different from an unwatched one.
+                // playhead) is visibly different from an unwatched one. The
+                // component is the official M3 Expressive Slider — the 16dp track
+                // and 4×44dp bar handle come from its own tokens.
                 BufferedSlider(
                     value = if (dragging) dragFraction else fraction,
                     buffered = bufferedFraction,
@@ -426,7 +428,7 @@ private fun AutoHideController(
                         dragging = false
                         interaction++
                     },
-                    height = if (dense) 28.dp else 44.dp,
+                    playedColor = MaterialTheme.colorScheme.primary
                 )
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = if (dense) 2.dp else Spacing.xs),
