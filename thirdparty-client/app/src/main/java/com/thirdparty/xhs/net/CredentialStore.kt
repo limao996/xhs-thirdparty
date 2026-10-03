@@ -48,26 +48,47 @@ class CredentialStore(context: Context) {
             .putString(KEY_DEVICE, identity)
             .putLong(KEY_VIP_END, 0L)
             .putString(KEY_MANUAL_PICK, "")
+            .putBoolean(KEY_MANUAL_PICK_NO_VIP, false)
             .apply()
     }
 
     /**
      * The identity the user picked BY HAND out of 历史账号, if any ("" when none).
      *
-     * The automatic VIP switch must leave that account alone. Its whole premise is
-     * that the current account is anonymous and disposable, and a hand-picked one is
-     * not — the user went into 历史账号 specifically to go back to it. Without this the
-     * pick survived at most one poll tick on a non-VIP account, and since every
-     * rotation REGISTERS a fresh identity, "switching to an old account" quietly
+     * The automatic VIP switch leaves a hand-picked account alone **when that account
+     * has no VIP window of its own** — see [manualPickNoVip]. Its whole premise is that
+     * the account is anonymous and disposable, and an account the user deliberately went
+     * back to is not; without this the pick survived at most one poll tick, and since
+     * every rotation REGISTERS a fresh identity, "switching to an old account" quietly
      * created a brand-new account seconds later.
      *
+     * A hand-picked account that HAS a VIP window is NOT exempt: when its window lapses,
+     * the poll switches away exactly as it does for any other account. The exemption is
+     * about "there is nothing here to preserve", not about the pick itself.
+     *
      * Cleared by [setDevice] (any identity change ends the old pick, and the history
-     * path re-marks it immediately after switching), so it can never outlive the
-     * account it refers to.
+     * path re-marks it immediately after switching), so it can never outlive the account
+     * it refers to.
      */
     var manualPick: String
         get() = prefs.getString(KEY_MANUAL_PICK, "") ?: ""
-        set(v) = prefs.edit().putString(KEY_MANUAL_PICK, v).apply()
+        set(v) = prefs.edit()
+            .putString(KEY_MANUAL_PICK, v)
+            // the verdict below belongs to the previous pick
+            .putBoolean(KEY_MANUAL_PICK_NO_VIP, false)
+            .apply()
+
+    /**
+     * True once the poll has established that the hand-picked account has no VIP window
+     * at all (not even an expired one).
+     *
+     * Remembered because the answer does not move on its own, while the poll runs every
+     * five seconds: without the memory an exempt account would cost a profile request
+     * per tick, forever, purely to re-learn the same thing.
+     */
+    var manualPickNoVip: Boolean
+        get() = prefs.getBoolean(KEY_MANUAL_PICK_NO_VIP, false)
+        set(v) = prefs.edit().putBoolean(KEY_MANUAL_PICK_NO_VIP, v).apply()
 
     /**
      * The current account's VIP end, as last seen from the server (epoch seconds,
@@ -169,6 +190,7 @@ class CredentialStore(context: Context) {
         private const val KEY_AUTO_VIP = "auto_switch_on_vip_expiry"
         private const val KEY_VIP_END = "current_vip_end"
         private const val KEY_MANUAL_PICK = "manual_pick_identity"
+        private const val KEY_MANUAL_PICK_NO_VIP = "manual_pick_has_no_vip"
         private const val KEY_BIOMETRIC = "biometric_lock"
         private const val KEY_HISTORY_LIMIT = "history_limit"
     }

@@ -364,44 +364,34 @@ fun DetailScreen(
                 Text("内容加载失败（可能已下线或需付费）")
             }
             else -> {
-                // True fullscreen stays OUTSIDE the scrolling content: it must be the
-                // player and nothing else. (Rendering it inside the scroll column — the
-                // first attempt at this restructure — left the title, author and comments
-                // scrolling along underneath a player that only wrapped its own height.)
-                if (fullscreen && isVideoNote) {
-                    Box(Modifier.fillMaxSize()) {
-                        MediaPlayer(
-                            url = itemMediaUrl,
-                            externalPlayer = sharedPlayer,
-                            fullscreen = true,
-                            title = state.item?.title.orEmpty(),
-                            onAspect = { if (it > 0f) videoAspect = it },
-                            onToggleFullscreen = { fullscreen = !fullscreen },
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-                } else {
-                    // nullable on purpose: an inherited player draws the media before
-                    // this page's own request comes back
-                    DetailContent(
-                        state = state,
-                        viewModel = viewModel,
-                        onOpenAuthor = onOpenAuthor,
-                        pad = pad,
-                        isVideo = isVideoNote,
-                        onEnterFullscreen = { fullscreen = true },
-                        openImage = openImage,
-                        onOpenImage = { page ->
-                            openImage = page
-                            // closing the viewer must also restore the app bar and the
-                            // system bars, otherwise the detail screen stays chromeless
-                            if (page == null) fullscreen = false
-                        },
-                        sharedPlayer = sharedPlayer,
-                        videoAspect = videoAspect,
-                        onAspect = { if (it > 0f) videoAspect = it }
-                    )
-                }
+                // NOTE: fullscreen is a LAYOUT of this same content, not a separate
+                // branch. It used to render a second MediaPlayer composition, which
+                // meant toggling re-parented the player's AndroidView and threw away its
+                // TextureView — and a fresh TextureView is black, because a finished
+                // video has no further frames to draw into it. That is the reported
+                // "播完之后一切全屏就黑屏、也重播不了". Now the media keeps its place in
+                // the composition and only its size changes, so the surface — and the
+                // last frame on it — survives the toggle.
+                DetailContent(
+                    state = state,
+                    viewModel = viewModel,
+                    onOpenAuthor = onOpenAuthor,
+                    pad = pad,
+                    isVideo = isVideoNote,
+                    onEnterFullscreen = { fullscreen = true },
+                    openImage = openImage,
+                    onOpenImage = { page ->
+                        openImage = page
+                        // closing the viewer must also restore the app bar and the
+                        // system bars, otherwise the detail screen stays chromeless
+                        if (page == null) fullscreen = false
+                    },
+                    sharedPlayer = sharedPlayer,
+                    videoAspect = videoAspect,
+                    onAspect = { if (it > 0f) videoAspect = it },
+                    fullscreen = fullscreen,
+                    onToggleFullscreen = { fullscreen = !fullscreen }
+                )
             }
         }
     }
@@ -426,7 +416,9 @@ private fun DetailContent(
     sharedPlayer: androidx.media3.exoplayer.ExoPlayer? = null,
     /** width/height of the video, or 0 while it is not known yet */
     videoAspect: Float = 0f,
-    onAspect: (Float) -> Unit = {}
+    onAspect: (Float) -> Unit = {},
+    fullscreen: Boolean = false,
+    onToggleFullscreen: () -> Unit = {}
 ) {
     // NULLABLE, deliberately. When the player was inherited from 推荐 it is already
     // playing, so the media is drawn while this note's own request is still in flight;
@@ -440,7 +432,15 @@ private fun DetailContent(
     // Single scrolling column: media on top, then all the content BELOW it.
     // (Previously media and text were siblings in a Box, so the text drew
     //  on top of the video — that was the broken layout.)
-    Column(Modifier.fillMaxSize().padding(pad).verticalScroll(rememberScrollState())) {
+    //
+    // Fullscreen changes only how this column is laid out — no scroll, no padding, the
+    // media fills it — so the media's place in the composition (and with it its view and
+    // surface) is identical in both modes.
+    Column(
+        Modifier.fillMaxSize()
+            .then(if (fullscreen) Modifier else Modifier.padding(pad))
+            .then(if (fullscreen) Modifier else Modifier.verticalScroll(rememberScrollState()))
+    ) {
         if (isVideo) {
             // Windowed player: an inset media card, sized inside a RANGE.
             //
@@ -471,7 +471,10 @@ private fun DetailContent(
             // page rather than as the page's media element.
             val mediaShape = MaterialTheme.shapes.large
             Box(
-                Modifier.fillMaxWidth().padding(horizontal = Spacing.m, vertical = Spacing.s),
+                Modifier.then(
+                    if (fullscreen) Modifier.fillMaxSize()
+                    else Modifier.fillMaxWidth().padding(horizontal = Spacing.m, vertical = Spacing.s)
+                ),
                 contentAlignment = Alignment.Center
             ) {
                 MediaPlayer(
@@ -479,18 +482,20 @@ private fun DetailContent(
                     // url is only a key then, because externalPlayer is always set here
                     url = item?.mediaUrl.orEmpty(),
                     externalPlayer = sharedPlayer,
-                    fullscreen = false,
+                    fullscreen = fullscreen,
                     title = item?.title.orEmpty(),
                     // without this the in-player fullscreen button is inert:
                     // MediaPlayer defaults the callback to a no-op
-                    onToggleFullscreen = onEnterFullscreen,
+                    onToggleFullscreen = onToggleFullscreen,
                     onAspect = onAspect,
                     // windowed playback starts with the bar hidden; a tap reveals it
                     controlsHiddenInitially = true,
-                    modifier = if (landscape) {
-                        Modifier.height(windowedHeight).aspectRatio(videoAspect).clip(mediaShape)
-                    } else {
-                        Modifier.fillMaxWidth().height(windowedHeight).clip(mediaShape)
+                    modifier = when {
+                        fullscreen -> Modifier.fillMaxSize()
+                        // aspectRatio(0) throws, and 0 means "not known yet"
+                        landscape && videoAspect > 0f ->
+                            Modifier.height(windowedHeight).aspectRatio(videoAspect).clip(mediaShape)
+                        else -> Modifier.fillMaxWidth().height(windowedHeight).clip(mediaShape)
                     }
                 )
             }
@@ -508,6 +513,9 @@ private fun DetailContent(
                 onOpen = { onOpenImage(it) }
             )
         }
+
+        // true fullscreen shows the media and nothing else
+        if (fullscreen) return@Column
 
         // Everything below the media needs the note, so while an INHERITED player is
         // already on screen and this request is still in flight, the page shows the

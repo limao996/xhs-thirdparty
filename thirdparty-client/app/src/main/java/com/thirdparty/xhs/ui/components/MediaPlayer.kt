@@ -291,14 +291,24 @@ private fun AutoHideController(
     title: String = ""
 ) {
     var visible by remember(player) { mutableStateOf(!startHidden) }
+    // Seeded FROM the player, not from zero/false.
+    //
+    // This controller can be built around a player that is already in the middle of
+    // something — the one handed over by the feed, or one whose layout just changed. It
+    // only learns about later changes through listener callbacks, and no callback arrives
+    // for the state a player already had, so starting from defaults read "0:00 / 0:00"
+    // with no play/pause state and, after the video had ENDED, no 重播 affordance at all
+    // (which is why "播完之后切全屏" could not even be replayed).
     var playing by remember(player) { mutableStateOf(player.isPlaying) }
-    var duration by remember(player) { mutableFloatStateOf(0f) }
-    var position by remember(player) { mutableFloatStateOf(0f) }
+    var duration by remember(player) { mutableFloatStateOf(effectiveDurationMs(player).toFloat()) }
+    var position by remember(player) { mutableFloatStateOf(player.currentPosition.toFloat()) }
     // how much of the video the player already holds (0..1). Drives the buffered
     // segment on the seek bar, so "waiting for network" is distinguishable from
     // "not watched yet".
-    var bufferedFraction by remember(player) { mutableFloatStateOf(0f) }
-    var ended by remember(player) { mutableStateOf(false) }
+    var bufferedFraction by remember(player) { mutableFloatStateOf(bufferedOf(player)) }
+    var ended by remember(player) {
+        mutableStateOf(player.playbackState == Player.STATE_ENDED)
+    }
     // While the user drags the slider we show a local value and only seek on
     // release. Otherwise the 250ms position poll fights the drag, and every
     // pixel of movement would issue a seek — expensive on an HLS stream.

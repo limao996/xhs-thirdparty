@@ -327,17 +327,17 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
     suspend fun switchToVipAccount(): Boolean = withContext(Dispatchers.IO) {
         if (!api.autoSwitchOnVipExpiry) return@withContext false
 
-        // Never rotate away from the account the user picked BY HAND from 历史账号.
+        // The account the user picked BY HAND from 历史账号, and whether it has already
+        // been established that it owns no VIP window at all.
         //
-        // This is checked first, before any request, because the exemption is about the
-        // account's identity rather than its VIP state: a hand-picked account without
-        // VIP is a deliberate choice, and the poll is supposed to fire only on
-        // disposable accounts. Without this, picking 历史账号 entry with no VIP got you
-        // at most one tick — and every rotation REGISTERS a new identity, so the pick
-        // looked like it was working and then quietly created a brand-new account
-        // seconds later, which is exactly what the user reported.
+        // The exemption is deliberately narrow: it covers a hand-picked account that has
+        // NOTHING to preserve (no window, not even an expired one — the reported case,
+        // where picking a plain account was followed by the poll registering a brand-new
+        // one seconds later). A hand-picked account that HAS a VIP window is treated like
+        // any other: when its window lapses, the poll switches away.
         val picked = api.manualPick
-        if (picked.isNotEmpty() && picked == api.currentDeviceMac()) return@withContext false
+        val onPicked = picked.isNotEmpty() && picked == api.currentDeviceMac()
+        if (onPicked && api.manualPickNoVip) return@withContext false
 
         // No network -> there is nothing to decide and nothing to switch to.
         // Attempting anyway just burns a request that fails slowly on a weak
@@ -368,6 +368,21 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
         if (stillEnough) {
             switchFailStreak = 0
             return@withContext false
+        }
+
+        // The VIP window is out. If this account was picked by hand, decide ONCE whether
+        // there is anything worth preserving:
+        //  - no window at all (never VIP): remember that and leave it alone. Re-deciding
+        //    every 5s would cost a profile request per tick forever to re-learn it.
+        //  - it HAS a window (one that has now lapsed): fall through and switch, exactly
+        //    as for any other account — a hand-picked account with VIP still takes part
+        //    in the polling, which is what the user asked for.
+        if (onPicked) {
+            val hasAnyWindow = current.isVip || current.vipEnd > 0L
+            if (!hasAnyWindow) {
+                api.manualPickNoVip = true
+                return@withContext false
+            }
         }
 
         // Exactly ONE new identity per attempt. Registering an identity makes it

@@ -260,12 +260,18 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
         set(v) { credentialStore.autoSwitchOnVipExpiry = v }
 
     /**
-     * The account the user picked by hand from 历史账号 ("" when none), which the
-     * automatic switch must never rotate away from. See [CredentialStore.manualPick].
+     * The account the user picked by hand from 历史账号 ("" when none). See
+     * [CredentialStore.manualPick] — it is exempt from the automatic switch only while
+     * it has no VIP window of its own.
      */
     var manualPick: String
         get() = credentialStore.manualPick
         set(v) { credentialStore.manualPick = v }
+
+    /** Remembered verdict: the hand-picked account has no VIP window at all. */
+    var manualPickNoVip: Boolean
+        get() = credentialStore.manualPickNoVip
+        set(v) { credentialStore.manualPickNoVip = v }
 
     /** How many 最近浏览 entries to keep (default 2000). */
     var historyLimit: Int
