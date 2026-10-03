@@ -346,18 +346,31 @@ fun VideoProgress(
     player: Player?,
     modifier: Modifier = Modifier,
     trackColor: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color(0x33FFFFFF),
+    /** the already-buffered span, drawn between played and empty */
+    bufferedColor: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color(0x80FFFFFF),
     fillColor: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.White
 ) {
     var fraction by remember(player) { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    var buffered by remember(player) { androidx.compose.runtime.mutableFloatStateOf(0f) }
     LaunchedEffect(player) {
         val p = player ?: return@LaunchedEffect
         while (true) {
             val d = p.duration
             fraction = if (d > 0) (p.currentPosition.toFloat() / d).coerceIn(0f, 1f) else 0f
+            // how far ahead playback can continue without waiting — the same
+            // signal the detail page's seek bar shows, so the feed is not the one
+            // surface where a stalled stream looks the same as a fresh one
+            buffered = if (d > 0) (p.bufferedPosition.toFloat() / d).coerceIn(0f, 1f) else 0f
             delay(250)
         }
     }
     Box(modifier.background(trackColor)) {
+        Box(
+            Modifier
+                .fillMaxHeight()
+                .fillMaxWidth(buffered.coerceAtLeast(fraction))
+                .background(bufferedColor)
+        )
         Box(
             Modifier
                 .fillMaxHeight()

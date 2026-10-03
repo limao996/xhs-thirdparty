@@ -178,6 +178,10 @@ private fun AutoHideController(
     var playing by remember(player) { mutableStateOf(player.isPlaying) }
     var duration by remember(player) { mutableFloatStateOf(0f) }
     var position by remember(player) { mutableFloatStateOf(0f) }
+    // how much of the video the player already holds (0..1). Drives the buffered
+    // segment on the seek bar, so "waiting for network" is distinguishable from
+    // "not watched yet".
+    var bufferedFraction by remember(player) { mutableFloatStateOf(0f) }
     var ended by remember(player) { mutableStateOf(false) }
     // While the user drags the slider we show a local value and only seek on
     // release. Otherwise the 250ms position poll fights the drag, and every
@@ -214,9 +218,14 @@ private fun AutoHideController(
                 ended = state == Player.STATE_ENDED
                 duration = if (player.duration > 0) player.duration.toFloat() else 0f
                 position = player.currentPosition.toFloat()
+                bufferedFraction = bufferedOf(player)
             }
             override fun onPositionDiscontinuity(a: Player.PositionInfo, b: Player.PositionInfo, reason: Int) {
                 position = player.currentPosition.toFloat()
+            }
+            // bufferedPosition moves independently of the playhead
+            override fun onIsLoadingChanged(isLoading: Boolean) {
+                bufferedFraction = bufferedOf(player)
             }
         }
         player.addListener(listener)
@@ -244,6 +253,7 @@ private fun AutoHideController(
         while (true) {
             duration = if (player.duration > 0) player.duration.toFloat() else 0f
             position = player.currentPosition.toFloat()
+            bufferedFraction = bufferedOf(player)
             delay(PROGRESS_POLL_MS)
         }
     }
@@ -348,8 +358,12 @@ private fun AutoHideController(
                     .background(Scrim.strong).padding(vertical = if (dense) 1.dp else Spacing.xs)
             ) {
                 val fraction = if (duration > 0f) (position / duration).coerceIn(0f, 1f) else 0f
-                Slider(
+                // BufferedSlider, not Slider: it draws the already-buffered span as
+                // a third segment, so a stalled stream (buffer ahead of the
+                // playhead) is visibly different from an unwatched one.
+                BufferedSlider(
                     value = if (dragging) dragFraction else fraction,
+                    buffered = bufferedFraction,
                     onValueChange = { f ->
                         dragging = true
                         dragFraction = f
@@ -361,12 +375,7 @@ private fun AutoHideController(
                         dragging = false
                         interaction++
                     },
-                    modifier = Modifier.height(if (dense) 28.dp else 44.dp),
-                    colors = SliderDefaults.colors(
-                        thumbColor = Scrim.onMedia,
-                        activeTrackColor = MaterialTheme.colorScheme.primary,
-                        inactiveTrackColor = Scrim.onMediaVariant
-                    )
+                    height = if (dense) 28.dp else 44.dp,
                 )
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = if (dense) 2.dp else Spacing.xs),
@@ -419,3 +428,16 @@ private fun fmt(ms: Long): String {
 
 /** How often the visible controls re-read the playback position. */
 private const val PROGRESS_POLL_MS = 250L
+
+/**
+ * Fraction of the video the player already holds, 0..1.
+ *
+ * `bufferedPosition` is the END of the buffered span, so this is "how far ahead
+ * playback can go without waiting". 0 while the duration is still unknown
+ * (live / HLS before the manifest settles), which simply hides the segment.
+ */
+private fun bufferedOf(player: Player): Float {
+    val d = player.duration
+    if (d <= 0L) return 0f
+    return (player.bufferedPosition.toFloat() / d).coerceIn(0f, 1f)
+}
