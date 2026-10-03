@@ -25,6 +25,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -76,6 +78,7 @@ fun FullscreenImageViewer(
 
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
+    var viewSize by remember { mutableStateOf(IntSize.Zero) }
     // zoom is per-page: carrying it across a swipe would leave the next image
     // mysteriously cropped
     LaunchedEffect(pagerState.currentPage) {
@@ -123,7 +126,9 @@ fun FullscreenImageViewer(
         ) { page ->
             val active = page == pagerState.currentPage
             Box(
-                Modifier.fillMaxSize().pointerInput(page) {
+                Modifier.fillMaxSize()
+                    .onSizeChanged { viewSize = it }
+                    .pointerInput(page) {
                     // NOT detectTransformGestures: that consumes every drag, so the
                     // pager never saw a swipe and horizontal paging was dead. Take
                     // the gesture only for a pinch, or to pan an image that is
@@ -137,7 +142,15 @@ fun FullscreenImageViewer(
                             val multiTouch = event.changes.count { it.pressed } > 1
                             if (multiTouch || scale > 1f) {
                                 scale = (scale * pinch).coerceIn(1f, MAX_ZOOM)
-                                offset = if (scale > 1f) offset + pan else Offset.Zero
+                                // Panning used to be unbounded, so a zoomed image
+                                // could be pushed completely off the screen with no
+                                // way back except leaving the viewer. Bound it to
+                                // what the zoom level actually reveals.
+                                offset = if (scale > 1f) {
+                                    clampPan(offset + pan, scale, viewSize)
+                                } else {
+                                    Offset.Zero
+                                }
                                 event.changes.forEach { it.consume() }
                             }
                         } while (event.changes.any { it.pressed })
@@ -158,7 +171,38 @@ fun FullscreenImageViewer(
                 )
             }
         }
+
+        // Reset affordance, shown only while zoomed. Without it the only ways back
+        // were pinching out again or closing the viewer, which is not discoverable
+        // when the image has been panned off-screen.
+        if (scale > 1.01f) {
+            Box(Modifier.fillMaxWidth().padding(bottom = Spacing.l), contentAlignment = Alignment.Center) {
+                ResetZoomButton(onClick = { scale = 1f; offset = Offset.Zero })
+            }
+        }
     }
+}
+
+/** Padding kept around a zoomed image so an edge is never flush with the screen. */
+private const val PAN_SLACK_FRACTION = 0.12f
+
+/**
+ * Limits panning to the area the current zoom actually reveals.
+ *
+ * A fitted image scaled by `s` overflows the view by `size * (s - 1) / 2` on each
+ * side; past that there is only empty background. Panning used to be unbounded, so
+ * a zoomed image could be pushed completely off-screen with no way back, and the
+ * cap is computed from the container size so it scales with the zoom.
+ */
+private fun clampPan(offset: Offset, scale: Float, view: IntSize): Offset {
+    if (scale <= 1f || view.width == 0 || view.height == 0) return Offset.Zero
+    val slack = 1f + PAN_SLACK_FRACTION
+    val maxX = view.width * (scale - 1f) / 2f * slack
+    val maxY = view.height * (scale - 1f) / 2f * slack
+    return Offset(
+        offset.x.coerceIn(-maxX, maxX),
+        offset.y.coerceIn(-maxY, maxY)
+    )
 }
 
 /** How far a pinch may zoom in. */

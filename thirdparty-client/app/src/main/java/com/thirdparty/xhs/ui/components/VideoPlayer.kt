@@ -47,6 +47,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.SeekParameters
 import com.thirdparty.xhs.ui.theme.Scrim
 import com.thirdparty.xhs.ui.theme.Spacing
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
 /**
@@ -383,14 +384,16 @@ fun BufferingIndicator(
                 color = tint,
             )
             androidx.compose.foundation.layout.Spacer(Modifier.height(Spacing.s))
+            // The percentage here is progress towards RESUMING, not how much of the
+            // whole work is downloaded — see the note on waitFraction. Showing the
+            // whole-file figure is what previously made this read as the playback
+            // position. When no real figure exists the label drops the number
+            // rather than inventing one.
             androidx.compose.material3.Text(
-                "缓冲中",
+                waitFraction?.let { "缓冲中 ${(it * 100).roundToInt()}%" } ?: "缓冲中",
                 color = Scrim.onMedia,
                 style = MaterialTheme.typography.labelMedium
             )
-            // Only drawn when there is a real wait progress to draw. The label
-            // carries no percentage: "24%" of the whole work is the playback
-            // position in disguise, which is what made this misleading.
             waitFraction?.let { fraction ->
                 androidx.compose.foundation.layout.Spacer(Modifier.height(Spacing.xs))
                 androidx.compose.foundation.layout.Box(

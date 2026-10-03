@@ -30,6 +30,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import com.thirdparty.xhs.BuildConfig
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -139,14 +145,54 @@ fun MediaPlayer(
         }
     }
 
-    Box(modifier = modifier.background(Color.Black)) {
+    // Pinch-zoom, fullscreen only.
+    //
+    // In windowed mode the player is a small in-page box and zooming it would
+    // fight the page's own scrolling, so the gesture is left alone there.
+    var scale by remember(player) { mutableFloatStateOf(1f) }
+    var offset by remember(player) { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    var viewSize by remember(player) { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+    // leaving fullscreen or changing video must not carry the zoom over
+    LaunchedEffect(fullscreen, url) { scale = 1f; offset = androidx.compose.ui.geometry.Offset.Zero }
+
+    Box(
+        modifier = modifier.background(Color.Black)
+            .then(
+                if (!fullscreen) Modifier else Modifier
+                    .onSizeChanged { viewSize = it }
+                    .pointerInput(url) {
+                        // Same shape as the image viewer's handler: take the gesture
+                        // only for a pinch, or to pan while already zoomed. Consuming
+                        // every drag here would kill the tap/double-tap controls.
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false)
+                            do {
+                                val event = awaitPointerEvent()
+                                val pinch = event.calculateZoom()
+                                val pan = event.calculatePan()
+                                val multiTouch = event.changes.count { it.pressed } > 1
+                                if (multiTouch || scale > 1f) {
+                                    scale = (scale * pinch).coerceIn(1f, MAX_PLAYER_ZOOM)
+                                    offset = clampPlayerPan(offset + pan, scale, viewSize)
+                                    event.changes.forEach { it.consume() }
+                                }
+                            } while (event.changes.any { it.pressed })
+                        }
+                    }
+            )
+    ) {
         PlayerView(
             player = player,
             useController = false,
             // never stretch: FIT letterboxes; the caller sizes the container to
             // the video's own ratio so no bars appear in windowed mode
             resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT,
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize().graphicsLayer(
+                scaleX = scale,
+                scaleY = scale,
+                translationX = offset.x,
+                translationY = offset.y
+            )
         )
         AutoHideController(player, fullscreen, onToggleFullscreen, controlsHiddenInitially, title)
         // Buffering feedback — but never together with the error panel: the
@@ -165,7 +211,49 @@ fun MediaPlayer(
             onRetry = { retryPlayback(player) },
             modifier = Modifier.fillMaxSize()
         )
+
+        // Reset affordance while zoomed, same one the image viewer shows. Only in
+        // fullscreen: that is the only mode where zooming is possible.
+        if (fullscreen && scale > 1.01f) {
+            Box(
+                Modifier.align(Alignment.BottomCenter)
+                    .padding(bottom = FULLSCREEN_RESET_INSET),
+                contentAlignment = Alignment.Center
+            ) {
+                ResetZoomButton(onClick = {
+                    scale = 1f
+                    offset = androidx.compose.ui.geometry.Offset.Zero
+                })
+            }
+        }
     }
+}
+
+/** Highest magnification the fullscreen player allows. */
+private const val MAX_PLAYER_ZOOM = 4f
+/** Keeps the reset pill clear of the seek bar. */
+private val FULLSCREEN_RESET_INSET = 96.dp
+
+/**
+ * Bounds panning to what the zoom reveals, in the same way the image viewer does.
+ *
+ * Unbounded panning let a zoomed frame be dragged entirely off-screen, leaving
+ * only black with no hint of how to get back.
+ */
+private fun clampPlayerPan(
+    offset: androidx.compose.ui.geometry.Offset,
+    scale: Float,
+    view: androidx.compose.ui.unit.IntSize
+): androidx.compose.ui.geometry.Offset {
+    if (scale <= 1f || view.width == 0 || view.height == 0) {
+        return androidx.compose.ui.geometry.Offset.Zero
+    }
+    val maxX = view.width * (scale - 1f) / 2f
+    val maxY = view.height * (scale - 1f) / 2f
+    return androidx.compose.ui.geometry.Offset(
+        offset.x.coerceIn(-maxX, maxX),
+        offset.y.coerceIn(-maxY, maxY)
+    )
 }
 
 @Composable
