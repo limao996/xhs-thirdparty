@@ -122,22 +122,50 @@ fun buildVideoPlayer(
             // stops at its last frame and waits for the user to press 重播, so the
             // player reaches STATE_ENDED and stays there. Looping it made the clip
             // restart on its own, which reads as "it never ends".
-            repeatMode =
-                if (longForm) Player.REPEAT_MODE_OFF else Player.REPEAT_MODE_ONE
-            // Seeking: ExoPlayer's DEFAULT is EXACT, which makes the extractor start
-            // at the preceding keyframe and decode forward. A 1s tolerance lets it
-            // take any sync point that close instead, without a visible loss of
-            // precision. Matters for progressive files; HLS already lands on the
-            // segment boundary either way.
-            setSeekParameters(if (longForm) SEEK_PARAMETERS_TOLERANT else SeekParameters.EXACT)
+            //
+            // Set through the same helpers used when a player MOVES between the two
+            // screens (see applyFeedPlayerSettings / applyLongFormPlayerSettings);
+            // one definition for both, or a handed-over player would arrive with the
+            // personality of the screen it came from.
+            if (longForm) applyLongFormPlayerSettings(this) else applyFeedPlayerSettings(this)
             setMediaItem(MediaItem.fromUri(url))
             prepare()
             playWhenReady = autoPlay
         }
 
+/**
+ * Seek behaviour: ExoPlayer's DEFAULT is EXACT, which makes the extractor start at
+ * the preceding keyframe and decode forward. A 1s tolerance lets it take any sync
+ * point that close instead, without a visible loss of precision. Matters for
+ * progressive files; HLS already lands on the segment boundary either way.
+ */
 private val SEEK_PARAMETERS_TOLERANT =
     androidx.media3.exoplayer.SeekParameters(SEEK_TOLERANCE_US, SEEK_TOLERANCE_US)
 private const val SEEK_TOLERANCE_US = 1_000_000L
+
+/**
+ * The feed's personality: loop forever, seek exactly.
+ *
+ * A player handed from the detail page back to the feed must be put into this state
+ * again, or the feed would open a clip that stops at its end.
+ */
+fun applyFeedPlayerSettings(player: ExoPlayer) {
+    player.repeatMode = Player.REPEAT_MODE_ONE
+    player.setSeekParameters(androidx.media3.exoplayer.SeekParameters.EXACT)
+}
+
+/**
+ * The detail page's personality: play through once, tolerate an inexact seek.
+ *
+ * Applied to every player the detail page plays with — including one it adopted
+ * from the feed. Leaving `repeatMode` at the feed's REPEAT_MODE_ONE is exactly the
+ * "detail page loops forever instead of stopping at the end" bug, and it would come
+ * back for precisely the videos a user taps through from the feed.
+ */
+fun applyLongFormPlayerSettings(player: ExoPlayer) {
+    player.repeatMode = Player.REPEAT_MODE_OFF
+    player.setSeekParameters(SEEK_PARAMETERS_TOLERANT)
+}
 
 /**
  * Deep buffer, for a work the user may watch end to end.

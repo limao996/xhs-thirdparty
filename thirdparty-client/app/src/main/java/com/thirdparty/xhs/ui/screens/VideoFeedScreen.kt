@@ -327,16 +327,30 @@ private fun VideoPage(
                         interactionSource = noRipple,
                         indication = null,
                         onClick = {
-                            // Hand the position over and stop this player: the detail
-                            // page builds its own ExoPlayer, and leaving this one
-                            // running would play two audio streams at once.
+                            // Hand the player ITSELF over, not just its position: the
+                            // detail page would otherwise build a second ExoPlayer on
+                            // the same stream and pay for a fresh prepare, a fresh
+                            // playlist fetch and a fresh buffer — which is what the
+                            // "restart with a re-buffer" actually was, position
+                            // handoff or not. No pause here either: the detail picks
+                            // the same player straight up, and pausing would show a
+                            // frozen frame for the whole transition.
+                            //
+                            // The position is still stashed: it is the fallback for a
+                            // detail page that could not adopt (nothing waiting), and
+                            // it is what makes 重播/断点续播 land in the right place.
                             currentPlayer.value?.let {
+                                val playing = runCatching { it.isPlaying }.getOrDefault(false)
+                                val pos = runCatching { it.currentPosition }.getOrDefault(0L)
                                 runCatching {
                                     com.thirdparty.xhs.ui.components.PlaybackHandoff.stash(
-                                        item.noteId, it.currentPosition, it.isPlaying
+                                        item.noteId, pos, playing
                                     )
                                 }
-                                runCatching { it.pause() }
+                                runCatching {
+                                    com.thirdparty.xhs.ui.components.PlaybackHandoff
+                                        .givePlayer(item.noteId, it)
+                                }
                             }
                             onClickDetail()
                         },
@@ -445,6 +459,14 @@ private fun rememberPreparedPlayer(
     DisposableEffect(player, prepare) {
         onDispose {
             player?.let {
+                // A player that was handed to the detail page on the way out is NOT
+                // ours to release any more: this disposal runs as part of the very
+                // navigation that transferred it, so releasing here would kill the
+                // player the detail page is about to render. Once the feed has taken it
+                // back the mark is cleared and this releases normally.
+                if (com.thirdparty.xhs.ui.components.PlaybackHandoff.isHandedOver(it)) {
+                    return@onDispose
+                }
                 it.stop()
                 it.clearMediaItems()
                 it.release()

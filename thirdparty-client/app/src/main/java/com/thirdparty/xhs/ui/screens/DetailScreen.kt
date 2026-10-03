@@ -232,15 +232,43 @@ fun DetailScreen(
                 // are different composables, so if each built its own player then
                 // toggling fullscreen would tear one down and start the other from
                 // zero — the video appeared to restart every time.
+                //
+                // And when this page was opened by tapping a video in 推荐, that
+                // video's player is HANDED OVER and adopted here: one ExoPlayer for the
+                // same stream means no second prepare, no second playlist fetch and no
+                // re-buffer — the clip simply carries on where it was, which is what
+                // carrying only the POSITION could never achieve (the picture still
+                // restarted and buffered). It arrives wearing the feed's settings (the
+                // feed loops, the detail must not), so they are switched to this
+                // screen's before anything renders it.
+                val adopted = remember(item.mediaUrl) {
+                    if (!isVideo) null
+                    else com.thirdparty.xhs.ui.components.PlaybackHandoff.takeForDetail(item.noteId)
+                }
                 val sharedPlayer = if (isVideo) {
-                    remember(item.mediaUrl) {
-                        buildVideoPlayer(
-                            context = context.applicationContext,
-                            url = item.mediaUrl,
+                    if (adopted == null) {
+                        remember(item.mediaUrl) {
+                            buildVideoPlayer(
+                                context = context.applicationContext,
+                                url = item.mediaUrl,
         longForm = true
-                        )
+                            )
+                        }
+                    } else {
+                        adopted.player
                     }
                 } else null
+                // The adoption itself is a one-off: the settings switch and the resume
+                // belong in an effect, not in the composition body, where they would
+                // re-run on every recomposition for no reason.
+                LaunchedEffect(adopted) {
+                    val a = adopted ?: return@LaunchedEffect
+                    // It arrives wearing the FEED's settings — it loops there, and this
+                    // screen must stop at the end (that is the 播完显示「重播」behaviour);
+                    // its seeks are exact there, and a long work wants the tolerant mode.
+                    com.thirdparty.xhs.ui.components.applyLongFormPlayerSettings(a.player)
+                    if (a.wasPlaying) runCatching { a.player.play() } else runCatching { a.player.pause() }
+                }
                 // survive the Activity relaunch that an orientation change causes
                 var resumeMs by rememberSaveable(item.mediaUrl) {
                     androidx.compose.runtime.mutableLongStateOf(0L)
@@ -250,7 +278,17 @@ fun DetailScreen(
                     // Continue from where 推荐 left off when the detail was opened
                     // by tapping that same video there. Consumed once — a later open
                     // of this note (deep link, saved list) must start at the start.
+                    //
+                    // Consumed even when the player itself was handed over: leaving it
+                    // behind would make the NEXT unrelated open of this note resume a
+                    // position from this transition.
                     val handoff = com.thirdparty.xhs.ui.components.PlaybackHandoff.take(item.noteId)
+                    // Nothing to seek when the feed's own player was adopted: it never
+                    // stopped, so it is already at the position the user was watching.
+                    // Seeking here as well could only move it backwards (the stored
+                    // position is up to half a second old).
+                    if (adopted != null) return@LaunchedEffect
+
                     val target = handoff?.positionMs?.takeIf { it > 0L } ?: resumeMs
                     if (handoff?.playing == true) sharedPlayer.play()
 
@@ -322,6 +360,12 @@ fun DetailScreen(
                 }
                 DisposableEffect(sharedPlayer) {
                     onDispose {
+                        // The detail page owns its player, adopted or built: releasing it
+                        // here is what stops audio continuing after 返回. The feed cannot
+                        // take an adopted one back — by the time this runs, the feed has
+                        // already recomposed and built its own (probed: a popped entry's
+                        // effects are disposed after the destination it returns to
+                        // composes), so the two would just swap players mid-playback.
                         sharedPlayer?.stop()
                         sharedPlayer?.clearMediaItems()
                         sharedPlayer?.release()
