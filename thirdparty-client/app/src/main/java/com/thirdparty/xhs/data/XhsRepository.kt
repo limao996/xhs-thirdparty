@@ -285,33 +285,53 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
     /** A brand-new randomly generated identity (the manual switch path). */
     fun freshRandomMac(): String = api.freshRandomMac()
 
-    /** Previously used accounts, most recent first. */
-    fun accountHistory(): List<com.thirdparty.xhs.net.HistoryAccount> = api.accountHistory()
-
-    /** Record the account now in use (called after a successful login). */
-    suspend fun rememberCurrentAccount() = withContext(Dispatchers.IO) {
-        val p = myProfile() ?: return@withContext
-        api.rememberAccount(p.userId, p.userName)
-    }
-
-    /** Forget one history entry. */
-    fun forgetAccount(identity: String) = api.forgetAccount(identity)
-
     /** Whether to switch accounts once the current VIP window expires. */
     var autoSwitchOnVipExpiry: Boolean
         get() = api.autoSwitchOnVipExpiry
         set(v) { api.autoSwitchOnVipExpiry = v }
 
     /**
-     * The account the user picked by hand out of 历史账号 ("" when none).
-     *
-     * While this is the account in use, the automatic VIP switch leaves it alone — see
-     * [switchToVipAccount]. Set by the history picker; cleared by any other identity
-     * change ([api] does that inside `setDevice`).
+     * Bumped whenever the account in use changes behind the UI's back (the automatic
+     * switch during a request). The guest UI watches it so the 我的 page stops showing
+     * the previous account's id.
      */
-    var manualPickAccount: String
-        get() = api.manualPick
-        set(v) { api.manualPick = v }
+    private val _accountEpoch = kotlinx.coroutines.flow.MutableStateFlow(0)
+    val accountEpoch: kotlinx.coroutines.flow.StateFlow<Int> = _accountEpoch
+
+    init {
+        // The VIP-expiry switch used to run on a 5-second timer owned by HomeScreen's
+        // ViewModel. It now runs HERE, just before a request that needs the account:
+        // nothing polls, nothing happens while the app is idle or in the background, and
+        // when the window has lapsed the request that would have failed instead goes out
+        // with a fresh account.
+        api.beforeAccountRequest = { ensureAccountForRequest() }
+    }
+
+    /**
+     * Account gate: called by [api] before every request that needs an account.
+     *
+     * Cheap by construction. A VIP window is not a live quantity, so while the CACHED
+     * expiry is still comfortably in the future this is a single local read and returns
+     * — no request, no work. Only at (or near) expiry does it cost a round trip, and
+     * that is exactly the moment the account has to change anyway.
+     *
+     * The switch itself takes about a second; that delay lands on the first request
+     * after the window lapses rather than in the background, which is the trade this
+     * design makes for not polling.
+     */
+    suspend fun ensureAccountForRequest() {
+        if (!api.autoSwitchOnVipExpiry) return
+        // Nothing stored yet: establishing the first account is the startup path's job
+        // (see GuestViewModel.ensureFreshGuest), not this gate's.
+        if (api.currentUserHash().isEmpty()) return
+        val nowS = System.currentTimeMillis() / 1000
+        val cached = api.cachedVipEnd
+        if (cached > 0L && cached - nowS > VIP_MIN_REMAINING_S) return
+        // Offline: there is nothing to decide and nothing to switch to. The request
+        // itself will report its own failure.
+        if (!hasNetwork()) return
+        switchToVipAccount()
+    }
 
     /**
      * Switch to a fresh account that HAS VIP, used when the current one's window
@@ -327,18 +347,6 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
     suspend fun switchToVipAccount(): Boolean = withContext(Dispatchers.IO) {
         if (!api.autoSwitchOnVipExpiry) return@withContext false
 
-        // The account the user picked BY HAND from 历史账号, and whether it has already
-        // been established that it owns no VIP window at all.
-        //
-        // The exemption is deliberately narrow: it covers a hand-picked account that has
-        // NOTHING to preserve (no window, not even an expired one — the reported case,
-        // where picking a plain account was followed by the poll registering a brand-new
-        // one seconds later). A hand-picked account that HAS a VIP window is treated like
-        // any other: when its window lapses, the poll switches away.
-        val picked = api.manualPick
-        val onPicked = picked.isNotEmpty() && picked == api.currentDeviceMac()
-        if (onPicked && api.manualPickNoVip) return@withContext false
-
         // No network -> there is nothing to decide and nothing to switch to.
         // Attempting anyway just burns a request that fails slowly on a weak
         // link and can flip the account mid-request on a flaky one.
@@ -346,16 +354,15 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
 
         val nowS0 = System.currentTimeMillis() / 1000
         // Decide from the CACHED window first. A VIP end does not move on its own,
-        // so the poll must not spend a request every time — it only needs the
+        // so a check must not spend a request every time — it only needs the
         // server when the local value says the window has lapsed (or is unknown).
         val cached = api.cachedVipEnd
         if (cached > 0L && cached - nowS0 > VIP_MIN_REMAINING_S) return@withContext false
 
-        // Escalating cooldown. It used to create up to VIP_SWITCH_ATTEMPTS brand
+        // Escalating cooldown. This used to create up to VIP_SWITCH_ATTEMPTS brand
         // new identities per check; on a weak link or when the backend stops
-        // handing out VIP that produced a pile of junk accounts, and the ones
-        // created in between were never recorded in 历史账号 — which is exactly
-        // what "创建多个账号 / 历史账号没更新" looked like.
+        // handing out VIP that produced a pile of junk accounts — which is exactly
+        // what "创建多个账号" looked like.
         if (nowS0 < nextSwitchAllowedAtS) return@withContext false
 
         val current = myProfile() ?: return@withContext false
@@ -370,21 +377,6 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
             return@withContext false
         }
 
-        // The VIP window is out. If this account was picked by hand, decide ONCE whether
-        // there is anything worth preserving:
-        //  - no window at all (never VIP): remember that and leave it alone. Re-deciding
-        //    every 5s would cost a profile request per tick forever to re-learn it.
-        //  - it HAS a window (one that has now lapsed): fall through and switch, exactly
-        //    as for any other account — a hand-picked account with VIP still takes part
-        //    in the polling, which is what the user asked for.
-        if (onPicked) {
-            val hasAnyWindow = current.isVip || current.vipEnd > 0L
-            if (!hasAnyWindow) {
-                api.manualPickNoVip = true
-                return@withContext false
-            }
-        }
-
         // Exactly ONE new identity per attempt. Registering an identity makes it
         // the account in use, so trying several in a row leaves the user on the
         // last one and orphans the rest.
@@ -395,9 +387,10 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
             backoffSwitch(nowS)
             return@withContext false
         }
-        // Record it immediately: the identity in use has already changed, so the
-        // history must reflect that before the next poll comes round.
-        runCatching { rememberCurrentAccount() }
+        // The identity in use has changed — tell the UI, which is otherwise still
+        // showing the previous account's id (the switch now happens inside a request,
+        // with no user action behind it).
+        runCatching { _accountEpoch.value = _accountEpoch.value + 1 }
         val next = myProfile()
         if (next?.isVip == true) {
             switchFailStreak = 0
@@ -412,11 +405,11 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
 
     /**
      * Grow the wait after each unsuccessful switch, capped, so a dead backend
-     * cannot be farmed for accounts by the 5s VIP poll.
+     * cannot be farmed for accounts.
      *
-     * This — not the poll interval — is what bounds identity creation, which is why
-     * the interval can be as short as it is: a healthy account never reaches here,
-     * and a broken backend is throttled to one new identity per 30 minutes at most.
+     * This — not any interval — is what bounds identity creation: a healthy account
+     * never reaches here, and a broken backend is throttled to one new identity per
+     * 30 minutes at most.
      */
     private fun backoffSwitch(nowS: Long) {
         switchFailStreak = (switchFailStreak + 1).coerceAtMost(8)

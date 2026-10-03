@@ -78,8 +78,6 @@ object BackupManager {
             put("identity", store.deviceId)
             put("token", store.userToken)
             put("hash", store.userHash)
-            // the full switch list, so the user keeps the accounts they had
-            put("history", JSONArray(store.history.map { "${it.identity}|${it.userId}|${it.name}" }))
         })
 
         root.put("settings", JSONObject().apply {
@@ -178,11 +176,8 @@ object BackupManager {
                 store.userToken = a.optString("token")
                 store.userHash = a.optString("hash")
             }
-            val hist = a.optJSONArray("history")
-            if (hist != null) {
-                val lines = (0 until hist.length()).mapNotNull { hist.optString(it).takeIf { s -> s.isNotBlank() } }
-                store.replaceHistory(lines)
-            }
+            // A backup written by an older build may still carry the account history;
+            // there is no history feature any more, so the field is simply ignored.
             counts.append("账号 ")
         }
 

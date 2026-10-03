@@ -55,7 +55,6 @@ import com.thirdparty.xhs.ui.theme.XhsTheme
 import com.thirdparty.xhs.ui.viewmodel.GuestViewModel
 import android.widget.Toast
 import androidx.compose.runtime.remember
-import com.thirdparty.xhs.ui.components.AccountHistoryDialog
 import com.thirdparty.xhs.ui.theme.isDark
 
 /**
@@ -83,9 +82,7 @@ fun HomeScreen(
     val context = LocalContext.current
     val guest by guestViewModel.accountLabel.collectAsStateWithLifecycle()
     val rotating by guestViewModel.rotating.collectAsStateWithLifecycle()
-    val history by guestViewModel.history.collectAsStateWithLifecycle()
     val autoVip by guestViewModel.autoVip.collectAsStateWithLifecycle()
-    var showAccountHistory by remember { mutableStateOf(false) }
     var tab by rememberSaveable { mutableStateOf(HomeTab.FEED) }
     var feedRefreshTick by rememberSaveable { mutableStateOf(0) }
 
@@ -180,10 +177,6 @@ fun HomeScreen(
                                     Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
                                 }
                             },
-                            onOpenAccountHistory = {
-                                guestViewModel.refreshHistory()
-                                showAccountHistory = true
-                            },
                             onOpenFollowing = onOpenFollowing,
                             onOpenFans = onOpenFans,
                             onOpenMyNotes = { uid -> onOpenMyNotes(uid) },
@@ -193,7 +186,6 @@ fun HomeScreen(
                             onSetBiometricLock = onSetBiometricLock,
                             historyLimit = App.INSTANCE.repository.historyLimit,
                             onSetHistoryLimit = onSetHistoryLimit,
-                            historyCount = history.size,
                             autoVip = autoVip,
                             onSetAutoVip = { on ->
                                 guestViewModel.setAutoVip(on) {
@@ -284,20 +276,6 @@ fun HomeScreen(
                     }
                 }
             }
-        }
-
-        if (showAccountHistory) {
-            AccountHistoryDialog(
-                history = history,
-                currentIdentity = guestViewModel.currentDeviceMac(),
-                onPick = { entry ->
-                    guestViewModel.switchToHistory(entry) {
-                        Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
-                    }
-                },
-                onForget = { guestViewModel.forget(it) },
-                onDismiss = { showAccountHistory = false }
-            )
         }
     }
 }

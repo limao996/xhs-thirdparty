@@ -54,8 +54,41 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
      */
     private fun deviceUserId(): String = credentialStore.deviceId
 
+    /**
+     * Run before a request that needs a usable account.
+     *
+     * Set by `XhsRepository`, which owns the decision (it is the layer that can read a
+     * profile and register a new identity). Doing it HERE — one choke point that every
+     * request already goes through — is what replaced the 5-second poll: the account is
+     * checked exactly when something needs it, and never while the app is idle.
+     */
+    var beforeAccountRequest: (suspend () -> Unit)? = null
+
+    /**
+     * Re-entrancy guard for [beforeAccountRequest].
+     *
+     * The gate itself asks for the profile (`v2/mine/user-info`), which is a request
+     * like any other — without this it would call itself and never return.
+     */
+    private var insideAccountGate = false
+
     /** Perform a POST to an API path with the given business params. */
     suspend fun call(path: String, params: Map<String, Any> = emptyMap()): JSONObject {
+        // Account gate first: a lapsed VIP window is dealt with BEFORE the request that
+        // needs it, so the caller never sees the failure. The login/init paths are
+        // exempt (they are what ESTABLISH an account, so there is nothing to check yet),
+        // and so are the gate's own requests.
+        if (!insideAccountGate && path != LOGIN_PATH && path != APP_INIT_PATH) {
+            beforeAccountRequest?.let { gate ->
+                insideAccountGate = true
+                try {
+                    runCatching { gate() }
+                } finally {
+                    insideAccountGate = false
+                }
+            }
+        }
+
         val first = doCall(path, params)
         if (path == LOGIN_PATH || !needsReauth(first)) return first
 
@@ -245,33 +278,10 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
     /** A brand-new randomly generated identity (the manual switch path). */
     fun freshRandomMac(): String = credentialStore.freshDevice()
 
-    /** Previously used accounts, most recent first. */
-    fun accountHistory(): List<HistoryAccount> = credentialStore.history
-
-    /** Record the account now in use. */
-    fun rememberAccount(uid: Int, name: String) = credentialStore.rememberAccount(uid, name)
-
-    /** Forget one history entry. */
-    fun forgetAccount(identity: String) = credentialStore.forgetAccount(identity)
-
     /** Whether to switch accounts once the current VIP window expires. */
     var autoSwitchOnVipExpiry: Boolean
         get() = credentialStore.autoSwitchOnVipExpiry
         set(v) { credentialStore.autoSwitchOnVipExpiry = v }
-
-    /**
-     * The account the user picked by hand from 历史账号 ("" when none). See
-     * [CredentialStore.manualPick] — it is exempt from the automatic switch only while
-     * it has no VIP window of its own.
-     */
-    var manualPick: String
-        get() = credentialStore.manualPick
-        set(v) { credentialStore.manualPick = v }
-
-    /** Remembered verdict: the hand-picked account has no VIP window at all. */
-    var manualPickNoVip: Boolean
-        get() = credentialStore.manualPickNoVip
-        set(v) { credentialStore.manualPickNoVip = v }
 
     /** How many 最近浏览 entries to keep (default 2000). */
     var historyLimit: Int

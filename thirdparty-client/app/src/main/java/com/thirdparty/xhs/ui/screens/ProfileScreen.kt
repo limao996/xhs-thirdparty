@@ -74,8 +74,6 @@ fun ProfileScreen(
     onOpenHistory: () -> Unit,
     onOpenFollowed: () -> Unit,
     onRotateGuest: (() -> Unit)? = null,
-    onOpenAccountHistory: (() -> Unit)? = null,
-    historyCount: Int = 0,
     /** stat taps on the account card */
     onOpenFollowing: (() -> Unit)? = null,
     onOpenFans: (() -> Unit)? = null,
@@ -209,15 +207,15 @@ fun ProfileScreen(
         Spacer(Modifier.height(Spacing.m))
         SectionLabel("账号")
         if (onRotateGuest != null) {
-            // confirm first: switching creates a brand-new account; the previous
-            // one is only reachable through 历史账号, so a stray tap is not
-            // trivially undone.
+            // confirm first: switching creates a brand-new account and the previous
+            // identity is gone for good (there is no account history any more), so a
+            // stray tap is not trivially undone.
             var confirmRotate by remember { mutableStateOf(false) }
             if (confirmRotate) {
                 AlertDialog(
                     onDismissRequest = { confirmRotate = false },
                     title = { Text("切换游客账号？") },
-                    text = { Text("将创建一个全新的随机账号；当前账号会进入「历史账号」以便切回。") },
+                    text = { Text("将创建一个全新的随机账号，当前账号将无法找回。") },
                     confirmButton = {
                         TextButton(onClick = {
                             confirmRotate = false
@@ -241,36 +239,10 @@ fun ProfileScreen(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
             ),
                     // confirm first: switching creates a brand-new account and the
-                    // previous one is only reachable through 历史账号, so an
-                    // accidental tap is not trivially undone.
+                    // previous identity cannot be recovered, so an accidental tap is
+                    // not trivially undone.
                     modifier = Modifier.cardRow { confirmRotate = true }
             )
-            if (onOpenAccountHistory != null) {
-                ListItem(
-                    headlineContent = { Text("历史账号") },
-                    supportingContent = {
-                        Text(
-                            if (historyCount > 0) "已用过 $historyCount 个账号，可切换回去"
-                            else "还没有切换过账号"
-                        )
-                    },
-                    leadingContent = {
-                        Icon(Icons.Filled.History, null, tint = MaterialTheme.colorScheme.primary)
-                    },
-                    trailingContent = {
-                        Icon(
-                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    },
-                    colors = ListItemDefaults.colors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
-            ),
-                    modifier = Modifier.cardRow { onOpenAccountHistory() }
-                )
-            }
-
         }
 
         Spacer(Modifier.height(Spacing.m))

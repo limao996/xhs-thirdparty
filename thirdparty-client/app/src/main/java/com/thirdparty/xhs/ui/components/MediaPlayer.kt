@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.platform.LocalConfiguration
@@ -110,16 +111,20 @@ fun MediaPlayer(
     var resumeMs by rememberSaveable(url) { androidx.compose.runtime.mutableLongStateOf(0L) }
     val player = externalPlayer ?: remember(url) { buildVideoPlayer(context, url, longForm = true) }
 
-    // 顶栏要给状态栏/摄像头挖孔让位，麻烦在于全屏时两条栏是**隐藏**的：WindowInsets 在那里
-    // 老老实实报 0，于是顶栏会顶到屏幕最上沿、正好压在挖孔下面。
+    // 顶栏要给状态栏/摄像头挖孔让位。两条 insets 一起用，因为只有它们**一起**才覆盖全：
     //
-    // 所以趁"两条栏可见"的时候把高度记下来再复用。这一步必须放在**这里**（播放器根组合，
-    // 窗口态全屏态都在），不能放在顶栏里面：顶栏只在 controls 可见时才组合，而进全屏后
-    // 它第一次组合时两条栏已经隐藏了，那时读到的就是 0 —— 第一版就是这么写错、白改了一轮。
-    val liveStatusBar = WindowInsets.statusBars
-        .asPaddingValues().calculateTopPadding()
+    //  - `displayCutout`：摄像头挖孔的安全区。这是"避开摄像头"的正牌 API，而且它是
+    //    **全屏时依然有效**的 —— 挖孔不是系统栏，隐藏状态栏不会让它变成 0。
+    //  - `statusBars`：挖孔之外那份。全屏时它是 0（栏被隐藏了），所以趁"栏可见"的时候
+    //    （窗口态播放器必然先渲染）把它记下来复用。
+    //
+    // 取两者较大值。只记 statusBars 是不够的：挖孔比状态栏高的机型上依然会压到摄像头。
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val liveCutoutTop = WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
+    val liveStatusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     var seenStatusBar by remember { mutableStateOf(0.dp) }
     SideEffect { if (liveStatusBar > seenStatusBar) seenStatusBar = liveStatusBar }
+    val topClearance = maxOf(seenStatusBar, liveCutoutTop)
 
     // pick up where the previous instance left off (a no-op on first entry).
     // Skipped for a shared player: the owner keeps the position itself, so
@@ -238,7 +243,7 @@ fun MediaPlayer(
         )
         AutoHideController(
             player, fullscreen, onToggleFullscreen, controlsHiddenInitially, title,
-            topClearance = seenStatusBar
+            topClearance = topClearance
         )
         // Buffering feedback — but never together with the error panel: the
         // player keeps retrying in BUFFERING while the panel is up, so both

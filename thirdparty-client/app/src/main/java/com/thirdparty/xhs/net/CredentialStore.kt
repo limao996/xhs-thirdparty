@@ -42,62 +42,21 @@ class CredentialStore(context: Context) {
 
     /** Switch to a specific identity. */
     fun setDevice(identity: String) {
-        // a cached VIP window belongs to the account it was read from, and so does a
-        // manual-pick exemption: both describe the account that is being left behind
+        // a cached VIP window belongs to the account it was read from
         prefs.edit()
             .putString(KEY_DEVICE, identity)
             .putLong(KEY_VIP_END, 0L)
-            .putString(KEY_MANUAL_PICK, "")
-            .putBoolean(KEY_MANUAL_PICK_NO_VIP, false)
             .apply()
     }
-
-    /**
-     * The identity the user picked BY HAND out of 历史账号, if any ("" when none).
-     *
-     * The automatic VIP switch leaves a hand-picked account alone **when that account
-     * has no VIP window of its own** — see [manualPickNoVip]. Its whole premise is that
-     * the account is anonymous and disposable, and an account the user deliberately went
-     * back to is not; without this the pick survived at most one poll tick, and since
-     * every rotation REGISTERS a fresh identity, "switching to an old account" quietly
-     * created a brand-new account seconds later.
-     *
-     * A hand-picked account that HAS a VIP window is NOT exempt: when its window lapses,
-     * the poll switches away exactly as it does for any other account. The exemption is
-     * about "there is nothing here to preserve", not about the pick itself.
-     *
-     * Cleared by [setDevice] (any identity change ends the old pick, and the history
-     * path re-marks it immediately after switching), so it can never outlive the account
-     * it refers to.
-     */
-    var manualPick: String
-        get() = prefs.getString(KEY_MANUAL_PICK, "") ?: ""
-        set(v) = prefs.edit()
-            .putString(KEY_MANUAL_PICK, v)
-            // the verdict below belongs to the previous pick
-            .putBoolean(KEY_MANUAL_PICK_NO_VIP, false)
-            .apply()
-
-    /**
-     * True once the poll has established that the hand-picked account has no VIP window
-     * at all (not even an expired one).
-     *
-     * Remembered because the answer does not move on its own, while the poll runs every
-     * five seconds: without the memory an exempt account would cost a profile request
-     * per tick, forever, purely to re-learn the same thing.
-     */
-    var manualPickNoVip: Boolean
-        get() = prefs.getBoolean(KEY_MANUAL_PICK_NO_VIP, false)
-        set(v) = prefs.edit().putBoolean(KEY_MANUAL_PICK_NO_VIP, v).apply()
 
     /**
      * The current account's VIP end, as last seen from the server (epoch seconds,
      * 0 = unknown).
      *
-     * Cached so the automatic-switch poll can decide from local data: a VIP window
-     * does not move on its own, so re-asking the server every few seconds is pure
-     * waste. The value is only ever written when the server actually reports a
-     * profile, and cleared whenever the identity changes.
+     * Cached so the automatic switch can decide from local data: a VIP window does not
+     * move on its own, so re-asking the server on every request would be pure waste.
+     * The value is only ever written when the server actually reports a profile, and
+     * cleared whenever the identity changes.
      */
     var vipEnd: Long
         get() = prefs.getLong(KEY_VIP_END, 0L)
@@ -129,49 +88,6 @@ class CredentialStore(context: Context) {
     }
 
     /**
-     * Previously used guest accounts, most recent first.
-     *
-     * Stored as `identity|uid|name` so the picker can show something meaningful
-     * without re-querying the backend for every entry. Capped so the list cannot
-     * grow without bound; entries whose identity is blank are dropped.
-     */
-    val history: List<HistoryAccount>
-        get() = prefs.getString(KEY_HISTORY, null)
-            ?.split('\n')
-            ?.mapNotNull { line ->
-                val parts = line.split('|')
-                if (parts.size < 3 || parts[0].isBlank()) null
-                else HistoryAccount(parts[0], parts[1].toIntOrNull() ?: 0, parts[2])
-            }
-            ?: emptyList()
-
-    /** Replace the whole account history (used when restoring a backup). */
-    fun replaceHistory(lines: List<String>) {
-        prefs.edit().putString(KEY_HISTORY, lines.take(HISTORY_MAX).joinToString("\n")).apply()
-    }
-    /** Record the account now in use, moving it to the front of the history. */
-    fun rememberAccount(uid: Int, name: String) {
-        val id = deviceId
-        if (id.isBlank()) return
-        val entry = HistoryAccount(id, uid, name)
-        val next = (listOf(entry) + history.filterNot { it.identity == id }).take(HISTORY_MAX)
-        prefs.edit()
-            .putString(
-                KEY_HISTORY,
-                next.joinToString("\n") { "${it.identity}|${it.userId}|${it.name}" }
-            )
-            .apply()
-    }
-
-    /** Forget one account. */
-    fun forgetAccount(identity: String) {
-        val next = history.filterNot { it.identity == identity }
-        prefs.edit()
-            .putString(KEY_HISTORY, next.joinToString("\n") { "${it.identity}|${it.userId}|${it.name}" })
-            .apply()
-    }
-
-    /**
      * How many 最近浏览 entries to keep. The DAO used to hard-code 100; the
      * default is now 2000 and the user can change it in 我的.
      */
@@ -182,19 +98,12 @@ class CredentialStore(context: Context) {
     companion object {
         const val DEFAULT_HOST = "app.xiaohuangbook.net"
         const val DEFAULT_HISTORY_LIMIT = 2000
-        private const val HISTORY_MAX = 50
         private const val KEY_TOKEN = "user_token"
         private const val KEY_HASH = "user_hash"
         private const val KEY_DEVICE = "device_identity"
-        private const val KEY_HISTORY = "account_history"
         private const val KEY_AUTO_VIP = "auto_switch_on_vip_expiry"
         private const val KEY_VIP_END = "current_vip_end"
-        private const val KEY_MANUAL_PICK = "manual_pick_identity"
-        private const val KEY_MANUAL_PICK_NO_VIP = "manual_pick_has_no_vip"
         private const val KEY_BIOMETRIC = "biometric_lock"
         private const val KEY_HISTORY_LIMIT = "history_limit"
     }
 }
-
-/** One entry of the guest-account history. */
-data class HistoryAccount(val identity: String, val userId: Int, val name: String)
