@@ -42,9 +42,32 @@ class CredentialStore(context: Context) {
 
     /** Switch to a specific identity. */
     fun setDevice(identity: String) {
-        // a cached VIP window belongs to the account it was read from
-        prefs.edit().putString(KEY_DEVICE, identity).putLong(KEY_VIP_END, 0L).apply()
+        // a cached VIP window belongs to the account it was read from, and so does a
+        // manual-pick exemption: both describe the account that is being left behind
+        prefs.edit()
+            .putString(KEY_DEVICE, identity)
+            .putLong(KEY_VIP_END, 0L)
+            .putString(KEY_MANUAL_PICK, "")
+            .apply()
     }
+
+    /**
+     * The identity the user picked BY HAND out of 历史账号, if any ("" when none).
+     *
+     * The automatic VIP switch must leave that account alone. Its whole premise is
+     * that the current account is anonymous and disposable, and a hand-picked one is
+     * not — the user went into 历史账号 specifically to go back to it. Without this the
+     * pick survived at most one poll tick on a non-VIP account, and since every
+     * rotation REGISTERS a fresh identity, "switching to an old account" quietly
+     * created a brand-new account seconds later.
+     *
+     * Cleared by [setDevice] (any identity change ends the old pick, and the history
+     * path re-marks it immediately after switching), so it can never outlive the
+     * account it refers to.
+     */
+    var manualPick: String
+        get() = prefs.getString(KEY_MANUAL_PICK, "") ?: ""
+        set(v) = prefs.edit().putString(KEY_MANUAL_PICK, v).apply()
 
     /**
      * The current account's VIP end, as last seen from the server (epoch seconds,
@@ -145,6 +168,7 @@ class CredentialStore(context: Context) {
         private const val KEY_HISTORY = "account_history"
         private const val KEY_AUTO_VIP = "auto_switch_on_vip_expiry"
         private const val KEY_VIP_END = "current_vip_end"
+        private const val KEY_MANUAL_PICK = "manual_pick_identity"
         private const val KEY_BIOMETRIC = "biometric_lock"
         private const val KEY_HISTORY_LIMIT = "history_limit"
     }

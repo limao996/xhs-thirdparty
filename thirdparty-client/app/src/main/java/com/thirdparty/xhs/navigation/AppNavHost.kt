@@ -282,8 +282,10 @@ fun AppNavHost(
                 onSetHistoryLimit = { n ->
                     App.repo.historyLimit = n
                     // trim straight away so a lower limit takes effect now rather
-                    // than only after the next viewed note
-                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                    // than only after the next viewed note. On the app scope, not an
+                    // ad-hoc one: this must survive the settings page being popped a
+                    // moment later, but it should still have a named owner.
+                    App.INSTANCE.appScope.launch {
                         App.INSTANCE.repository.trimHistory()
                     }
                 }
@@ -341,7 +343,7 @@ fun AppNavHost(
                 historyLimit = App.repo.historyLimit,
                 onSetHistoryLimit = { n ->
                     App.repo.historyLimit = n
-                    CoroutineScope(Dispatchers.IO).launch {
+                    App.INSTANCE.appScope.launch {
                         App.INSTANCE.repository.trimHistory()
                     }
                 },

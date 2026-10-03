@@ -2,6 +2,7 @@ package com.thirdparty.xhs.net
 
 import android.content.Context
 import com.thirdparty.xhs.BuildConfig
+import kotlinx.coroutines.delay
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
@@ -22,9 +23,15 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
 
     private val credentialStore = CredentialStore(context)
 
-    /** Guards against concurrent re-login storms after a stale-identity error. */
-    private val reauthLock = Any()
-    @Volatile private var reauthInFlight = false
+    /**
+     * Serialises re-login after a stale identity.
+     *
+     * Was an `Any()` monitor + a flag, which cannot be held across the (now suspending)
+     * re-login call: Kotlin rejects a suspension point inside a critical section, and
+     * rightly so. `tryLock` reproduces the "one login at a time, others do not wait"
+     * behaviour the flag had.
+     */
+    private val reauthMutex = kotlinx.coroutines.sync.Mutex()
 
     private companion object {
         const val LOGIN_PATH = "v2/user/login-with-guest"
@@ -48,29 +55,32 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
     private fun deviceUserId(): String = credentialStore.deviceId
 
     /** Perform a POST to an API path with the given business params. */
-    fun call(path: String, params: Map<String, Any> = emptyMap()): JSONObject {
+    suspend fun call(path: String, params: Map<String, Any> = emptyMap()): JSONObject {
         val first = doCall(path, params)
         if (path == LOGIN_PATH || !needsReauth(first)) return first
 
         // The guest identity went stale (e.g. the backend no longer knows our
         // device id). Re-establish a guest session once and retry, so the app
         // self-heals instead of silently returning empty data forever.
-        synchronized(reauthLock) {
-            if (!reauthInFlight) {
-                reauthInFlight = true
-                try {
-                    loginAsGuest()
-                } catch (e: Exception) {
-                    // fall through and return the original response
-                } finally {
-                    reauthInFlight = false
-                }
+        //
+        // A Mutex, not `synchronized`: the re-login is a suspending network call, and a
+        // monitor cannot be held across a suspension point. tryLock keeps the original
+        // intent — whoever gets it does the re-login, everyone else returns the original
+        // response instead of queueing up behind it and doing the login again.
+        var reestablished = false
+        if (reauthMutex.tryLock()) {
+            try {
+                runCatching { loginAsGuest() }
+                reestablished = true
+            } finally {
+                reauthMutex.unlock()
             }
         }
+        if (!reestablished) return first
         return runCatching { doCall(path, params) }.getOrDefault(first)
     }
 
-    private fun doCall(path: String, params: Map<String, Any>): JSONObject {
+    private suspend fun doCall(path: String, params: Map<String, Any>): JSONObject {
         // Transient network failures (DNS blips, dropped connections) are common
         // on mobile. Every endpoint used here is a read-only query (or a guest
         // login, which is safe to repeat), so one bounded retry is worthwhile.
@@ -81,19 +91,18 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
             } catch (e: java.io.IOException) {
                 lastError = e
                 if (attempt < NETWORK_ATTEMPTS - 1) {
-                    try {
-                        Thread.sleep(RETRY_BACKOFF_MS)
-                    } catch (ie: InterruptedException) {
-                        Thread.currentThread().interrupt()
-                        throw e
-                    }
+                    // delay(), not Thread.sleep(): this runs in a coroutine, and a
+                    // sleeping thread is neither cancellable nor a thread the app can
+                    // reclaim. (It was Thread.sleep, so a cancelled request still held
+                    // an IO thread for the full backoff.)
+                    delay(RETRY_BACKOFF_MS)
                 }
             }
         }
         throw lastError ?: java.io.IOException("request failed: $path")
     }
 
-    private fun doCallOnce(
+    private suspend fun doCallOnce(
         path: String,
         params: Map<String, Any>,
         // Overrides used by the account scanner, which must probe other identities
@@ -137,7 +146,7 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
             .header("Accept-Language", "zh-hk")
             .build()
 
-        client.newCall(request).execute().use { response ->
+        client.newCall(request).await().use { response ->
             // Check the HTTP status BEFORE touching the body. Without this an
             // error page (HTML from a CDN 502, an empty 503 body, ...) goes
             // straight into the AES decryptor and surfaces as a crypto
@@ -194,12 +203,11 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
      * `getUserId()` prefers it over the device identity, and a stale hash would
      * pin us to the previous account.
      */
-    fun loginAsGuest(advanceDevice: Boolean = false): JSONObject {
+    suspend fun loginAsGuest(advanceDevice: Boolean = false): JSONObject {
         if (advanceDevice) {
             credentialStore.freshDevice()
             credentialStore.userHash = ""
-        }
-        // CREATE the account first. `app/init` is what registers the device
+        }        // CREATE the account first. `app/init` is what registers the device
         // identity with the backend — without it every new identity answers
         // `result=-1 用戶ID錯誤` from the account endpoints and it looks like the
         // backend never issues accounts. Verified: 8/8 fresh random identities
@@ -222,7 +230,7 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
      * Log in as one specific identity (used by the manual switch), registering it
      * first so the backend creates the account.
      */
-    fun loginAsDevice(identity: String): JSONObject {
+    suspend fun loginAsDevice(identity: String): JSONObject {
         credentialStore.setDevice(identity)
         credentialStore.userHash = ""
         return loginAsGuest(advanceDevice = false)
@@ -250,6 +258,14 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
     var autoSwitchOnVipExpiry: Boolean
         get() = credentialStore.autoSwitchOnVipExpiry
         set(v) { credentialStore.autoSwitchOnVipExpiry = v }
+
+    /**
+     * The account the user picked by hand from 历史账号 ("" when none), which the
+     * automatic switch must never rotate away from. See [CredentialStore.manualPick].
+     */
+    var manualPick: String
+        get() = credentialStore.manualPick
+        set(v) { credentialStore.manualPick = v }
 
     /** How many 最近浏览 entries to keep (default 2000). */
     var historyLimit: Int

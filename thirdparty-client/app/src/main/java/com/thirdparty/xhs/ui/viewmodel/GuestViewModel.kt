@@ -2,6 +2,7 @@ package com.thirdparty.xhs.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.thirdparty.xhs.App
 import com.thirdparty.xhs.data.XhsRepository
 import com.thirdparty.xhs.net.CredentialStore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -78,12 +79,23 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
         viewModelScope.launch {
             _rotating.value = true
             val ok = runCatching { repo.switchGuestTo(entry.identity) }.getOrDefault(false)
+            if (ok) {
+                // Exempt it from the automatic VIP switch: the user came here on
+                // purpose, so this account must not be rotated away a few seconds
+                // later just because it has no VIP left. (Rotation also creates
+                // accounts, so the previous behaviour was doubly wrong.) Cleared by
+                // the next identity change, and re-set on the next history pick.
+                repo.manualPickAccount = entry.identity
+            }
             refreshLabel()
             refreshVip()
             remember()
             refreshHistory()
             _rotating.value = false
-            onToast(if (ok) "已切换回 ${entry.name}" else "切换失败，沿用当前账号")
+            onToast(
+                if (ok) "已切换回 ${entry.name}：该账号不参与 VIP 自动切换"
+                else "切换失败，沿用当前账号"
+            )
         }
     }
 
@@ -159,7 +171,19 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
                     // (Uncompensated, a tick that costs ~4s against the server
                     // drifts: the old 5s target actually ticked every ~9s.)
                     val startedAt = System.currentTimeMillis()
-                    if (repo.hasNetwork()) {
+                    // Only while the app is actually on screen.
+                    //
+                    // This loop is owned by the ViewModel, which is alive for as long as
+                    // the HOME entry sits in the back stack — i.e. also while the app is
+                    // in the background. A poll that keeps ticking there is network
+                    // activity nobody can see the result of, and on a lapsed VIP window
+                    // it is the one path that still talks to the server (and can even
+                    // register a new account) with the screen off. The first pass on
+                    // entering the app is covered separately by ensureFreshGuest(), and
+                    // the window is not a live quantity, so nothing is lost by waiting
+                    // for the next tick after the app comes back.
+                    val visible = App.INSTANCE.appForeground.value
+                    if (visible && repo.hasNetwork()) {
                         val switched = runCatching { repo.switchToVipAccount() }.getOrDefault(false)
                         if (switched) {
                             refreshLabel()
@@ -224,6 +248,9 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
         viewModelScope.launch {
             _rotating.value = true
             val ok = runCatching { repo.rotateGuest() }.getOrNull()?.optInt("result") == 1
+            // a deliberately fresh account is disposable again, so any earlier
+            // history-pick exemption must not linger
+            if (ok) repo.manualPickAccount = ""
             refreshLabel()
             refreshVip()
             // Record the account now in use. Every other switch path did this; this
@@ -247,6 +274,9 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
             _rotating.value = true
             val fresh = repo.freshRandomMac()
             val ok = runCatching { repo.switchGuestTo(fresh) }.getOrDefault(false)
+            // same reasoning as rotate(): the user asked for a new account, so no
+            // history-pick exemption applies to it
+            if (ok) repo.manualPickAccount = ""
             refreshLabel()
             refreshVip()
             remember()

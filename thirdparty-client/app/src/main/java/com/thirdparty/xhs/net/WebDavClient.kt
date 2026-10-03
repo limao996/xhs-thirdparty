@@ -63,7 +63,7 @@ class WebDavClient(
         runCatching {
             val body = content.toRequestBody("application/gzip".toMediaType())
             val req = authed(Request.Builder().url(fileUrl(name)).put(body)).build()
-            client.newCall(req).execute().use { resp ->
+            client.newCall(req).await().use { resp ->
                 if (!resp.isSuccessful) {
                     throw IOException("上传失败 HTTP ${resp.code} ${resp.message}")
                 }
@@ -88,9 +88,9 @@ class WebDavClient(
     }
 
     /** null when the server answers 404; throws on any other failure. */
-    private fun fetchBytes(url: String): ByteArray? {
+    private suspend fun fetchBytes(url: String): ByteArray? {
         val req = authed(Request.Builder().url(url).get()).build()
-        client.newCall(req).execute().use { resp ->
+        client.newCall(req).await().use { resp ->
             if (resp.code == 404) return null
             if (!resp.isSuccessful) throw IOException("下载失败 HTTP ${resp.code} ${resp.message}")
             return resp.body?.bytes() ?: throw IOException("云端返回了空内容")
@@ -102,7 +102,7 @@ class WebDavClient(
         runCatching {
             val body = content.toRequestBody("application/json; charset=utf-8".toMediaType())
             val req = authed(Request.Builder().url(fileUrl(name)).put(body)).build()
-            client.newCall(req).execute().use { resp ->
+            client.newCall(req).await().use { resp ->
                 // 201 Created / 204 No Content are the normal answers; some servers
                 // reply 200. Anything else is a real failure.
                 if (!resp.isSuccessful) {
@@ -116,7 +116,7 @@ class WebDavClient(
     suspend fun download(name: String): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
             val req = authed(Request.Builder().url(fileUrl(name)).get()).build()
-            client.newCall(req).execute().use { resp ->
+            client.newCall(req).await().use { resp ->
                 if (resp.code == 404) throw IOException("云端还没有备份文件")
                 if (!resp.isSuccessful) throw IOException("下载失败 HTTP ${resp.code} ${resp.message}")
                 resp.body?.string() ?: throw IOException("云端返回了空内容")
@@ -137,7 +137,7 @@ class WebDavClient(
             val req = authed(
                 Request.Builder().url(dirUrl()).method("MKCOL", null)
             ).build()
-            client.newCall(req).execute().use { resp ->
+            client.newCall(req).await().use { resp ->
                 when {
                     resp.isSuccessful || resp.code == 405 -> Unit
                     resp.code == 401 || resp.code == 403 ->

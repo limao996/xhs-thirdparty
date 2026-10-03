@@ -303,6 +303,17 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
         set(v) { api.autoSwitchOnVipExpiry = v }
 
     /**
+     * The account the user picked by hand out of 历史账号 ("" when none).
+     *
+     * While this is the account in use, the automatic VIP switch leaves it alone — see
+     * [switchToVipAccount]. Set by the history picker; cleared by any other identity
+     * change ([api] does that inside `setDevice`).
+     */
+    var manualPickAccount: String
+        get() = api.manualPick
+        set(v) { api.manualPick = v }
+
+    /**
      * Switch to a fresh account that HAS VIP, used when the current one's window
      * has run out and the user enabled the automatic switch.
      *
@@ -315,6 +326,18 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
      */
     suspend fun switchToVipAccount(): Boolean = withContext(Dispatchers.IO) {
         if (!api.autoSwitchOnVipExpiry) return@withContext false
+
+        // Never rotate away from the account the user picked BY HAND from 历史账号.
+        //
+        // This is checked first, before any request, because the exemption is about the
+        // account's identity rather than its VIP state: a hand-picked account without
+        // VIP is a deliberate choice, and the poll is supposed to fire only on
+        // disposable accounts. Without this, picking 历史账号 entry with no VIP got you
+        // at most one tick — and every rotation REGISTERS a new identity, so the pick
+        // looked like it was working and then quietly created a brand-new account
+        // seconds later, which is exactly what the user reported.
+        val picked = api.manualPick
+        if (picked.isNotEmpty() && picked == api.currentDeviceMac()) return@withContext false
 
         // No network -> there is nothing to decide and nothing to switch to.
         // Attempting anyway just burns a request that fails slowly on a weak

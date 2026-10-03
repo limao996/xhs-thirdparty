@@ -67,9 +67,49 @@ class App : Application() {
     @Volatile
     var systemPickerActive: Boolean = false
 
+    /**
+     * True while any of this app's activities is started (i.e. the UI is on screen).
+     *
+     * Owned here because more than one thing needs it: the VIP poll asks it so it does
+     * not do network work — or register a fresh account — with the screen off, and any
+     * future background-capable work has the same question. Tracked with a counter
+     * rather than a boolean because a configuration change or a second activity
+     * overlaps start/stop.
+     */
+    val appForeground = MutableStateFlow(false)
+
+    private var startedActivities = 0
+
+    /**
+     * Long-lived scope for work that must OUTLIVE a screen but still not be
+     * unstructured: a settings write that should land even if the settings page is
+     * popped immediately (see the 最近浏览 trim in AppNavHost). Cancelled only with the
+     * process, which is what "app scope" has to mean here.
+     */
+    val appScope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO
+    )
+
     override fun onCreate() {
         super.onCreate()
         INSTANCE = this
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            override fun onActivityStarted(activity: android.app.Activity) {
+                startedActivities++
+                appForeground.value = true
+            }
+
+            override fun onActivityStopped(activity: android.app.Activity) {
+                startedActivities = (startedActivities - 1).coerceAtLeast(0)
+                if (startedActivities == 0) appForeground.value = false
+            }
+
+            override fun onActivityCreated(a: android.app.Activity, b: android.os.Bundle?) {}
+            override fun onActivityResumed(a: android.app.Activity) {}
+            override fun onActivityPaused(a: android.app.Activity) {}
+            override fun onActivitySaveInstanceState(a: android.app.Activity, b: android.os.Bundle) {}
+            override fun onActivityDestroyed(a: android.app.Activity) {}
+        })
         // One shared client for the whole app: API calls and image loads use the
         // same connection pool. A disk cache is attached because the image CDN
         // serves `Cache-Control: max-age=31536000`, so covers and avatars are

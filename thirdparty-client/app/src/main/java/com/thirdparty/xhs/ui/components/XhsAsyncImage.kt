@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import com.thirdparty.xhs.App
 import com.thirdparty.xhs.net.XhsCrypto
+import com.thirdparty.xhs.net.await
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Request
@@ -95,9 +96,13 @@ fun XhsAvatar(
     )
 }
 
-private fun loadBitmap(url: String): Bitmap? {
+private suspend fun loadBitmap(url: String): Bitmap? {
     return try {
-        App.http.newCall(Request.Builder().url(url).build()).execute().use { resp ->
+        // await(), not execute(): a grid of covers is composed of dozens of these, and
+        // scrolling away cancels their coroutines. With a blocking execute() the
+        // cancellation only dropped the result — every one of those downloads kept
+        // running to completion, on the user's data, for a picture nobody would see.
+        App.http.newCall(Request.Builder().url(url).build()).await().use { resp ->
             if (!resp.isSuccessful) return@use null
             var bytes = resp.body?.bytes() ?: return@use null
             if (url.contains("codstatic")) {
@@ -106,6 +111,7 @@ private fun loadBitmap(url: String): Bitmap? {
             decodeDownsampled(bytes)
         }
     } catch (e: Exception) {
+        // includes CancellationException's IOException twin from a cancelled call
         null
     }
 }
