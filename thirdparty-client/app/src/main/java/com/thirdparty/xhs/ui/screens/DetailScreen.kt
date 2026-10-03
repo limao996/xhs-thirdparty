@@ -332,19 +332,26 @@ private fun DetailContent(
             val config = androidx.compose.ui.platform.LocalConfiguration.current
             val landscape = config.orientation ==
                 android.content.res.Configuration.ORIENTATION_LANDSCAPE
-            val maxVideoHeight = PlayerHeight
-            // Windowed player height.
+            // Windowed player height, bounded at both ends.
             //
-            // This used to be half the screen height, which is right for the page
-            // as a whole but wrong for the player's own chrome: the top bar and the
-            // seek bar are laid out inside the player, so a proportionally taller
-            // container just gave them more empty video to sit on. A fixed height
-            // keeps that chrome the same size everywhere and stops it looking
-            // crammed on tall screens (reported as "底栏和顶栏会非常挤").
+            // Upper bound: half the screen, so a portrait video never pushes the
+            // title / author / actions off the first screen.
             //
-            // Height still follows the video's own ratio when that is shorter, so
-            // a wide clip is never letterboxed into the fixed box.
+            // Lower bound: 16:9 against the view width. A very wide clip (21:9,
+            // or a letterboxed source) computed a natural height so short that the
+            // player's own top bar and seek bar, which are laid out inside this
+            // container, ended up crammed against each other. 16:9 is the
+            // narrowest a player can be and still show that chrome comfortably.
+            //
+            // The two bounds are ordered defensively: on a sufficiently tall,
+            // narrow window the 16:9 minimum can exceed half the screen, and
+            // coerceIn throws when min > max.
+            val halfScreen = (config.screenHeightDp * 0.5f).dp
+            val sixteenNine = (config.screenWidthDp * 9f / 16f).dp
+            val minVideoHeight = minOf(sixteenNine, halfScreen)
+            val maxVideoHeight = maxOf(halfScreen, minVideoHeight)
             val naturalHeight = (config.screenWidthDp / videoAspect).dp
+            val windowedHeight = naturalHeight.coerceIn(minVideoHeight, maxVideoHeight)
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                 MediaPlayer(
                     url = item.mediaUrl,
@@ -358,11 +365,9 @@ private fun DetailContent(
                     // windowed playback starts with the bar hidden; a tap reveals it
                     controlsHiddenInitially = true,
                     modifier = if (landscape) {
-                        Modifier.height(minOf(maxVideoHeight, PlayerHeight))
-                            .aspectRatio(videoAspect)
+                        Modifier.height(windowedHeight).aspectRatio(videoAspect)
                     } else {
-                        Modifier.fillMaxWidth()
-                            .height(if (naturalHeight > maxVideoHeight) maxVideoHeight else naturalHeight)
+                        Modifier.fillMaxWidth().height(windowedHeight)
                     }
                 )
             }
@@ -370,12 +375,13 @@ private fun DetailContent(
             val images = item.images.ifEmpty {
                 listOf(item.cover).filter { it.isNotEmpty() }.map { NoteImage(it) }
             }
-            // Same fixed player height the windowed video uses, for the same
-            // reason: the gallery controls sit inside the container, so a
-            // proportionally taller one only gives them more image to float over.
+            // Same half-screen cap the windowed video player uses. Without it a
+            // tall portrait gallery filled most of the screen and pushed the
+            // title / author / actions off the first screen.
+            val galleryConfig = androidx.compose.ui.platform.LocalConfiguration.current
             ImageGallery(
                 images = images,
-                maxHeight = PlayerHeight,
+                maxHeight = (galleryConfig.screenHeightDp * 0.5f).dp,
                 onOpen = { onOpenImage(it) }
             )
         }
@@ -625,13 +631,3 @@ private fun com.thirdparty.xhs.data.NoteItem.detailTopic(): String =
 
 private fun com.thirdparty.xhs.data.NoteItem.detail(): org.json.JSONObject =
     runCatching { org.json.JSONObject(rawJson) }.getOrElse { org.json.JSONObject() }
-
-/**
- * Fixed height for the embedded video player and the image gallery.
- *
- * Not a fraction of the screen: the player's top bar and seek bar live inside
- * this container, so a taller container does not give them more room, it only
- * gives them more video to float over and makes the bars look crammed.
- * A fixed value keeps the chrome identical on every device.
- */
-private val PlayerHeight = 280.dp
