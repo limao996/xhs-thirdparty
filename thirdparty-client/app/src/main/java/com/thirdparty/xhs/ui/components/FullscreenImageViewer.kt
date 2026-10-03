@@ -106,31 +106,21 @@ fun FullscreenImageViewer(
         onDispose { ImageViewerKeys.unregister() }
     }
 
-    Column(modifier.fillMaxSize().background(Color.Black)) {
-        Row(
-            Modifier.fillMaxWidth().background(Scrim.chrome)
-                // the root can be edge to edge (fullscreen), so the bar's own chrome
-                // must clear the status bar — the PICTURE is what belongs underneath it
-                .statusBarsPadding()
-                .padding(horizontal = Spacing.s, vertical = Spacing.xs),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                "${pagerState.currentPage + 1}/${images.size}",
-                color = Scrim.onMedia,
-                style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier.weight(1f).padding(start = Spacing.s)
-            )
-            IconButton(onClick = onDismiss) {
-                Icon(Icons.Filled.Close, contentDescription = "关闭", tint = Scrim.onMedia)
-            }
-        }
-
+    // The chrome FLOATS over the picture (Box, pager drawn first, bar second and
+    // explicitly aligned) so the picture can be centred on the SCREEN.
+    //
+    // It used to be a Column with a real top-bar slot, which cost the picture the bar's
+    // height: it was centred in the space BELOW the bar, i.e. half the bar's height too
+    // low. (That Column layout was itself a fix for the counter and close button never
+    // appearing — the failure there was drawing the bar BEFORE the full-bleed pager, so
+    // the picture covered it. Order and an explicit alignment is what keeps this one
+    // safe.)
+    Box(modifier.fillMaxSize().background(Color.Black)) {
         HorizontalPager(
             state = pagerState,
             // while zoomed the drag belongs to panning, not to paging
             userScrollEnabled = scale <= 1.01f,
-            modifier = Modifier.fillMaxWidth().weight(1f)
+            modifier = Modifier.fillMaxSize()
         ) { page ->
             val active = page == pagerState.currentPage
             Box(
@@ -184,8 +174,32 @@ fun FullscreenImageViewer(
         // were pinching out again or closing the viewer, which is not discoverable
         // when the image has been panned off-screen.
         if (scale > 1.01f) {
-            Box(Modifier.fillMaxWidth().padding(bottom = Spacing.l), contentAlignment = Alignment.Center) {
+            Box(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    .padding(bottom = Spacing.l),
+                contentAlignment = Alignment.Center
+            ) {
                 ResetZoomButton(onClick = { scale = 1f; offset = Offset.Zero })
+            }
+        }
+
+        // the bar goes LAST so it draws over the picture, and is aligned explicitly
+        Row(
+            Modifier.align(Alignment.TopStart).fillMaxWidth().background(Scrim.chrome)
+                // the root can be edge to edge (fullscreen), so the bar's own chrome
+                // must clear the status bar — the PICTURE is what belongs underneath it
+                .statusBarsPadding()
+                .padding(horizontal = Spacing.s, vertical = Spacing.xs),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "${pagerState.currentPage + 1}/${images.size}",
+                color = Scrim.onMedia,
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.weight(1f).padding(start = Spacing.s)
+            )
+            IconButton(onClick = onDismiss) {
+                Icon(Icons.Filled.Close, contentDescription = "关闭", tint = Scrim.onMedia)
             }
         }
     }

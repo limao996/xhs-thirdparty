@@ -382,9 +382,11 @@ fun DetailScreen(
                     openImage = openImage,
                     onOpenImage = { page ->
                         openImage = page
-                        // closing the viewer must also restore the app bar and the
-                        // system bars, otherwise the detail screen stays chromeless
-                        if (page == null) fullscreen = false
+                        // Tapping a picture in the embedded gallery must go FULL screen,
+                        // not open the viewer inside the page's content slot: there the
+                        // app bar is still above it and the picture is inset by the
+                        // scaffold padding, which is exactly "并没有完整全屏".
+                        fullscreen = page != null
                     },
                     sharedPlayer = sharedPlayer,
                     videoAspect = videoAspect,

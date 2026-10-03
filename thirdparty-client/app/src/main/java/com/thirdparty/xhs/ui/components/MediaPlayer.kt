@@ -39,6 +39,11 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
@@ -104,6 +109,17 @@ fun MediaPlayer(
     // rememberSaveable is what carries it across the configuration change.
     var resumeMs by rememberSaveable(url) { androidx.compose.runtime.mutableLongStateOf(0L) }
     val player = externalPlayer ?: remember(url) { buildVideoPlayer(context, url, longForm = true) }
+
+    // 顶栏要给状态栏/摄像头挖孔让位，麻烦在于全屏时两条栏是**隐藏**的：WindowInsets 在那里
+    // 老老实实报 0，于是顶栏会顶到屏幕最上沿、正好压在挖孔下面。
+    //
+    // 所以趁"两条栏可见"的时候把高度记下来再复用。这一步必须放在**这里**（播放器根组合，
+    // 窗口态全屏态都在），不能放在顶栏里面：顶栏只在 controls 可见时才组合，而进全屏后
+    // 它第一次组合时两条栏已经隐藏了，那时读到的就是 0 —— 第一版就是这么写错、白改了一轮。
+    val liveStatusBar = WindowInsets.statusBars
+        .asPaddingValues().calculateTopPadding()
+    var seenStatusBar by remember { mutableStateOf(0.dp) }
+    SideEffect { if (liveStatusBar > seenStatusBar) seenStatusBar = liveStatusBar }
 
     // pick up where the previous instance left off (a no-op on first entry).
     // Skipped for a shared player: the owner keeps the position itself, so
@@ -220,7 +236,10 @@ fun MediaPlayer(
                 translationY = offset.y
             )
         )
-        AutoHideController(player, fullscreen, onToggleFullscreen, controlsHiddenInitially, title)
+        AutoHideController(
+            player, fullscreen, onToggleFullscreen, controlsHiddenInitially, title,
+            topClearance = seenStatusBar
+        )
         // Buffering feedback — but never together with the error panel: the
         // player keeps retrying in BUFFERING while the panel is up, so both
         // used to draw on top of each other and neither was readable.
@@ -288,7 +307,9 @@ private fun AutoHideController(
     fullscreen: Boolean,
     onToggleFullscreen: () -> Unit,
     startHidden: Boolean = false,
-    title: String = ""
+    title: String = "",
+    /** status-bar height remembered while the bars were visible; see MediaPlayer */
+    topClearance: androidx.compose.ui.unit.Dp = 0.dp
 ) {
     var visible by remember(player) { mutableStateOf(!startHidden) }
     // Seeded FROM the player, not from zero/false.
@@ -486,10 +507,19 @@ private fun AutoHideController(
             // ── 顶栏: 退出全屏 + 标题 + 更多菜单 ──────────────────────────
             // Everything that is not an everyday action lives in the menu, so the
             // bars stay uncrowded instead of stacking eight controls in one row.
+            //
+            // 竖屏全屏时把顶栏压下来一条状态栏的高度，避开挖孔/摄像头（见上面的
+            // seenStatusBar）。横屏不加：挖孔在侧边，顶上多一条边距只会白占位置。
+            val portrait = LocalConfiguration.current.orientation !=
+                android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            val topInset = if (fullscreen && portrait) topClearance else 0.dp
             Row(
                 Modifier.align(Alignment.TopCenter).fillMaxWidth()
                     .background(Scrim.strong)
-                    .padding(horizontal = Spacing.xs, vertical = Spacing.xs),
+                    .padding(
+                        start = Spacing.xs, end = Spacing.xs,
+                        top = Spacing.xs + topInset, bottom = Spacing.xs
+                    ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // the page's own app bar is hidden in fullscreen, so offer a way back
