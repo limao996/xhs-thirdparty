@@ -13,20 +13,22 @@ import org.json.JSONObject
 /**
  * Export / import of everything the user would miss after a reinstall.
  *
- * Covers the guest account (identity + session + switch history), favourites,
- * recently-viewed, followed authors, search history, and every setting that is
- * not derivable (主题 / VIP 自动切换 / 最近浏览上限 / 指纹解锁), plus the WebDAV
- * transport config. Notes are stored as their **raw JSON**, which is exactly what
- * the detail page needs to re-open them offline, so a restore is lossless without
+ * Covers favourites, recently-viewed, followed authors, search history, and every
+ * setting that is not derivable (主题 / VIP 自动切换 / 最近浏览上限 / 指纹解锁), plus
+ * the WebDAV transport config. Notes are stored as their **raw JSON**, which is exactly
+ * what the detail page needs to re-open them offline, so a restore is lossless without
  * needing a per-field serializer that would drift as NoteItem grows.
  *
- * Sensitive by construction: it carries the account token and the WebDAV password,
- * so the file itself is the secret. The WebDAV credentials ARE included because
- * leaving them out added no real protection (the token is in there anyway) while
- * forcing everyone to re-type an 应用密码 after every restore.
+ * The ACCOUNT is deliberately NOT included (identity / token / hash / VIP window).
+ * It is disposable by design — the app registers a fresh one whenever the current
+ * VIP window lapses — so restoring an old one buys nothing, while the file is the one
+ * thing that leaves the device (本地文件 or WebDAV) and a session token in it is the
+ * one field that would actually be worth stealing. A restore keeps the account the app
+ * is already using and only replaces the local data.
  *
  * Restoring is tolerant of older payloads: every field is optional and a missing
- * key leaves the current value alone, so a v1 backup never zeroes a setting.
+ * key leaves the current value alone, so a v1/v2 backup (which did carry `account`)
+ * never zeroes anything — that block is simply ignored now.
  */
 object BackupManager {
 
@@ -74,11 +76,8 @@ object BackupManager {
         root.put("version", VERSION)
         root.put("exportedAt", System.currentTimeMillis() / 1000)
 
-        root.put("account", JSONObject().apply {
-            put("identity", store.deviceId)
-            put("token", store.userToken)
-            put("hash", store.userHash)
-        })
+        // No `account` block: see the class comment. An older build's backup may still
+        // contain one; restore ignores it.
 
         root.put("settings", JSONObject().apply {
             put("theme", themeKey(context))
@@ -87,9 +86,6 @@ object BackupManager {
             // user's 最近浏览上限 / 指纹解锁 silently reverted to defaults.
             put("historyLimit", store.historyLimit)
             put("biometricLock", store.biometricLock)
-            // account state — restoring it avoids an unnecessary VIP switch right
-            // after a restore (the app would otherwise think the account expired)
-            put("vipEnd", store.vipEnd)
         })
 
         // Search history lived in its own prefs file and was never exported.
@@ -165,21 +161,12 @@ object BackupManager {
         }
 
         val db = XhsDatabase.get(context)
+        // used for the settings below only — the account is deliberately left alone
         val store = CredentialStore(context)
         var counts = StringBuilder()
 
-        // ---- account ----
-        root.optJSONObject("account")?.let { a ->
-            val identity = a.optString("identity")
-            if (identity.isNotBlank()) {
-                store.setDevice(identity)
-                store.userToken = a.optString("token")
-                store.userHash = a.optString("hash")
-            }
-            // A backup written by an older build may still carry the account history;
-            // there is no history feature any more, so the field is simply ignored.
-            counts.append("账号 ")
-        }
+        // The `account` block of an older backup is ignored ON PURPOSE: a restore keeps
+        // the account the app is already using (see the class comment).
 
         // ---- settings ----
         root.optJSONObject("settings")?.let { s ->

@@ -209,7 +209,7 @@ fun BackupScreen(onBack: () -> Unit) {
             Text("本地", style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(Spacing.xs))
             Text(
-                "备份包含：游客账号与切换历史、收藏、最近浏览、关注的作者、外观与自动切换设置。",
+                "备份包含：收藏、最近浏览、关注的作者、外观与自动切换设置（不含账号）。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

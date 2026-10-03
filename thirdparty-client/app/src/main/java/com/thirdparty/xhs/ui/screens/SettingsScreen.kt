@@ -161,7 +161,7 @@ fun SettingsScreen(
             SettingsGroup("数据") {
                 ListItem(
                     headlineContent = { Text("备份与恢复") },
-                    supportingContent = { Text("本地文件或 WebDAV，含账号 / 收藏 / 浏览 / 关注") },
+                    supportingContent = { Text("本地文件或 WebDAV，含收藏 / 浏览 / 关注（不含账号）") },
                     leadingContent = { Icon(Icons.Filled.CloudUpload, null, tint = MaterialTheme.colorScheme.primary) },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     modifier = Modifier.clickable { onOpenBackup() }
