@@ -176,7 +176,7 @@ fun WaterfallCard(
 ) {
     val ratio = item.coverRatio.coerceIn(0.55f, 1.6f)
     Surface(
-        shape = MaterialTheme.shapes.medium,
+        shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = Modifier.fillMaxWidth().combinedClickable(
             onClick = onClick,

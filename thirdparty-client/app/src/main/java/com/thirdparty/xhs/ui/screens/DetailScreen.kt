@@ -26,6 +26,8 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.ModeComment
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -439,10 +441,14 @@ private fun DetailContent(
             )
             Spacer(Modifier.height(2.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                FeeBadge(item, modifier = Modifier.padding(end = 8.dp))
-                Text("♥${item.likeCount}  收藏 ${item.collectCount}  评论 ${item.commentCount}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                FeeBadge(item, modifier = Modifier.padding(end = Spacing.s))
+                // One label per figure rather than a single run-together string:
+                // with icons the eye can find the number it wants instead of
+                // reading "♥105  收藏 98  评论 0" as one blob, and each figure keeps
+                // its own weight when a value is missing.
+                StatItem(Icons.Filled.Favorite, item.likeCount)
+                StatItem(Icons.Filled.Star, item.collectCount)
+                StatItem(Icons.Filled.ModeComment, item.commentCount)
             }
             Spacer(Modifier.height(Spacing.s))
             HorizontalDivider()
@@ -677,3 +683,26 @@ private fun com.thirdparty.xhs.data.NoteItem.detail(): org.json.JSONObject =
  * would rather see it play from the beginning.
  */
 private const val END_OF_MEDIA_MARGIN_MS = 1_500L
+
+/**
+ * One engagement figure: a small icon plus its count.
+ *
+ * Replaces a single string that read "♥105  收藏 98  评论 0" — three measurements
+ * of different things welded into one run of text, where the labels carry the same
+ * weight as the numbers.
+ */
+@Composable
+private fun StatItem(icon: androidx.compose.ui.graphics.vector.ImageVector, count: Int) {
+    Icon(
+        icon,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.size(14.dp)
+    )
+    Text(
+        "$count",
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 3.dp, end = Spacing.m)
+    )
+}

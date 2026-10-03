@@ -29,6 +29,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SearchBar
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
@@ -93,21 +96,35 @@ fun SearchScreen(
         }
     ) { pad ->
         Column(Modifier.fillMaxSize().padding(pad)) {
-            // mode tabs (内容 / 作者) — clean underline style
-            PrimaryTabRow(
-                selectedTabIndex = if (state.mode == SearchResultMode.CONTENT) 0 else 1,
-                modifier = Modifier.padding(horizontal = 12.dp)
+            // mode switch (内容 / 作者)
+            //
+            // Was PrimaryTabRow. Tabs express page-level navigation, and their
+            // underline reads as a bigger commitment than a two-way filter on the
+            // same result set. Material's component for 2–5 mutually exclusive
+            // options is the segmented button — one control, both states visible,
+            // and it sits on the same row rather than implying a second screen.
+            //
+            // (M3 Expressive's ButtonGroup would also fit visually, but its API
+            // requires an overflowIndicator because it is built for connected
+            // groups that can overflow a toolbar; forcing one in for a fixed pair
+            // would be more machinery than the control needs.)
+            SingleChoiceSegmentedButtonRow(
+                // fillMaxWidth: the row wraps its contents by default, which left a
+                // small control stranded at the left of a wide empty area. The two
+                // options are equally important, so they get equal halves.
+                modifier = Modifier.fillMaxWidth()
+                    .padding(horizontal = Spacing.m, vertical = Spacing.xs)
             ) {
-                Tab(
-                    selected = state.mode == SearchResultMode.CONTENT,
-                    onClick = { viewModel.setMode(SearchResultMode.CONTENT) },
-                    text = { Text("内容") }
-                )
-                Tab(
-                    selected = state.mode == SearchResultMode.USER,
-                    onClick = { viewModel.setMode(SearchResultMode.USER) },
-                    text = { Text("作者") }
-                )
+                val modes = listOf(SearchResultMode.CONTENT to "内容", SearchResultMode.USER to "作者")
+                modes.forEachIndexed { index, (mode, label) ->
+                    SegmentedButton(
+                        selected = state.mode == mode,
+                        onClick = { viewModel.setMode(mode) },
+                        shape = SegmentedButtonDefaults.itemShape(index = index, count = modes.size)
+                    ) {
+                        Text(label)
+                    }
+                }
             }
 
             if (state.results.isEmpty() && state.users.isEmpty() && state.history.isNotEmpty()) {
