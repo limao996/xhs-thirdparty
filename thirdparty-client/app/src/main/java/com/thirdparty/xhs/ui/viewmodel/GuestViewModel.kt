@@ -128,29 +128,36 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
 
     /**
      * While 自动切换 is on, re-check the account's VIP validity every
-     * [VIP_POLL_MS] (30s) and swap as soon as it lapses (or is about to — see
+     * [VIP_POLL_MS] (5s) and swap as soon as it lapses (or is about to — see
      * VIP_MIN_REMAINING_S).
      *
      * Driving this off the [autoVip] flow means the first pass starts immediately
      * when the app opens with the toggle already on (satisfying "进入软件先判断一次"),
      * and `collectLatest` cancels the loop the moment the user turns it off.
      *
+     * A 5s tick does NOT mean a request every 5s. The decision is made from the
+     * CACHED VIP end first (see XhsRepository.switchToVipAccount): a window that is
+     * still good returns immediately, so a normal session sends nothing at all and
+     * only the expiry moment costs a round-trip. What the shorter tick buys is that
+     * the switch happens within seconds of lapsing rather than up to half a minute
+     * later. The safety rails for the case where the window HAS run out are the
+     * repository's own escalating cooldown and its one-identity-per-attempt rule.
+     *
      * Offline / weak-network behaviour: a VIP window is not a live quantity, so
      * there is nothing to gain from asking while there is no usable connection.
      * The loop skips the round entirely when the network is down (no request, no
      * wakeup beyond the tick) and, when a round does fail, waits for the next tick
-     * rather than retrying tighter — the repository additionally applies its own
-     * cooldown before spending another account identity.
+     * rather than retrying tighter.
      */
     init {
         viewModelScope.launch {
             _autoVip.collectLatest { on ->
                 if (!on) return@collectLatest
                 while (true) {
-                    // Time the work and subtract it, so the cadence is a real
-                    // 30s rather than 30s of sleep ON TOP of a network round-trip.
-                    // (With the old 5s target an uncompensated loop ticked every
-                    // ~9s, because each check costs ~4s against the server.)
+                    // Time the work and subtract it, so the cadence is a real 5s
+                    // rather than 5s of sleep ON TOP of a network round-trip.
+                    // (Uncompensated, a tick that costs ~4s against the server
+                    // drifts: the old 5s target actually ticked every ~9s.)
                     val startedAt = System.currentTimeMillis()
                     if (repo.hasNetwork()) {
                         val switched = runCatching { repo.switchToVipAccount() }.getOrDefault(false)

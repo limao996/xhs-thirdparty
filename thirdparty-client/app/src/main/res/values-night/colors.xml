@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Dark counterparts so the launch window matches the dark ColorScheme
-         instead of flashing a light background before Compose draws. -->
-    <color name="activity_bg">#1B1114</color>
+    <!--
+        No night-specific colour here on purpose.
+
+        The launch window is black in the dark theme as well, so `window_bg` needs
+        no values-night counterpart (see values/colors.xml). The launch theme's
+        windowBackground/navigationBarColor used to point at `activity_bg`, which is
+        what made every cold start flash a light surface before the black feed drew.
+    -->
+    <color name="icon_bg">#3A2C52</color>
 </resources>

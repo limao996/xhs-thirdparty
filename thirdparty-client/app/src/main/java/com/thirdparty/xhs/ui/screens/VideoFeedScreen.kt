@@ -87,6 +87,17 @@ import androidx.compose.foundation.layout.navigationBars
 fun VideoFeedScreen(
     onOpenDetail: (Long) -> Unit,
     refreshTick: Int = 0,
+    /**
+     * Whether this page's chrome (info bar, fee tag) is showing.
+     *
+     * Owned by the host shell: the header and the bottom navigation belong to it,
+     * not to this screen, so a tap that only retires the caption leaves them sitting
+     * over the video. The shell holds the single flag, hands it down, and renders
+     * its own chrome from it.
+     */
+    infoVisible: Boolean = true,
+    /** A tap flipped [infoVisible]; the shell owns the value. */
+    onInfoVisibleChange: (Boolean) -> Unit = {},
     viewModel: VideoFeedViewModel = viewModel(factory = RepoViewModelFactory())
 ) {
     val state by viewModel.ui.collectAsStateWithLifecycle()
@@ -153,10 +164,17 @@ fun VideoFeedScreen(
             item = item,
             active = isCurrent,
             nearby = nearby,
+            infoVisible = infoVisible,
+            onToggleInfo = { onInfoVisibleChange(!infoVisible) },
             onWatched = { viewModel.recordView(item) },
             onClickDetail = { onOpenDetail(item.noteId) }
         )
     }
+
+    // Every video starts with its chrome showing, the way the first one does.
+    // Without this, retiring the overlays on one clip left every following clip
+    // bare as well, and the only way back was to tap blind.
+    LaunchedEffect(pagerState.settledPage) { onInfoVisibleChange(true) }
 
     // pagination driven by the settled page (side-effect free, runs off composition)
     LaunchedEffect(pagerState.settledPage, state.items.size) {
@@ -172,10 +190,12 @@ private fun VideoPage(
     item: NoteItem,
     active: Boolean,
     nearby: Boolean,
+    /** owned by the host shell — see [VideoFeedScreen.infoVisible] */
+    infoVisible: Boolean,
+    onToggleInfo: () -> Unit,
     onWatched: () -> Unit,
     onClickDetail: () -> Unit
 ) {
-    var infoVisible by remember { mutableStateOf(true) }
     // the video's real width/height ratio; used to size the surface so the
     // picture is never stretched (FILL would distort, ZOOM would crop).
     var videoAspect by remember(item.noteId) { mutableFloatStateOf(9f / 16f) }
@@ -204,21 +224,18 @@ private fun VideoPage(
     // recording the view is a separate effect so a player rebuild does not
     // re-stamp viewedAt and reshuffle 最近浏览
     LaunchedEffect(active) { if (active) onWatched() }
-    // Gesture modifiers are REMEMBERED, not rebuilt per composition.
+    // Do NOT use `pointerInput { detectTapGestures }` here.
     //
-    // `Modifier.pointerInput(key) { ... }` compares the block by identity, and the
-    // block object is new on every recomposition — so any state change restarts
-    // the tap detector, and a tap landing during that restart is swallowed. That is
-    // exactly what broke double-tap pause: the first single tap flips infoVisible
-    // -> recomposition -> detector restart -> the second tap of the double-tap was
-    // dropped, so onDoubleTap never fired. (Verified with logs: after one single
-    // tap, a double tap produced only a single onTap, and "detector STARTED"
-    // appeared precisely on the info-bar toggle.)
+    // pointerInput compares its block by identity and rebuilds it on every
+    // recomposition, which cancels the in-flight gesture. The first single tap
+    // flips infoVisible -> recomposition -> the second tap of a double-tap was
+    // swallowed, so onDoubleTap never fired (verified with logs: after one single
+    // tap, a double tap produced only a single onTap). combinedClickable's node
+    // instead UPDATES its callbacks in place, so recomposition never interrupts a
+    // gesture in progress.
     //
-    // Remembering the modifier keeps one instance across recompositions. The values
-    // it needs come from stable state objects — `infoVisible` is a MutableState
-    // captured by reference, and `player` is wrapped in rememberUpdatedState — so
-    // neither the detector nor the data goes stale.
+    // `player` is wrapped in rememberUpdatedState so the callback the node holds
+    // never points at a released player.
     val currentPlayer = androidx.compose.runtime.rememberUpdatedState(player)
     val noRipple = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     Box(
@@ -235,7 +252,7 @@ private fun VideoPage(
             .combinedClickable(
                 interactionSource = noRipple,
                 indication = null,
-                onClick = { infoVisible = !infoVisible },
+                onClick = onToggleInfo,
                 onDoubleClick = { togglePlayback(currentPlayer.value) }
             )
     ) {

@@ -1,9 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!--
+        Dark counterpart of the launch theme. Identical to values/themes.xml on
+        purpose: the app opens on the black 推荐 feed either way, so the starting
+        window must be black and the system bars transparent in BOTH themes (see
+        the comment on window_bg in values/colors.xml). Only the parent differs.
+    -->
     <style name="Theme.XHS" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">@color/activity_bg</item>
+        <item name="android:windowBackground">@color/window_bg</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:navigationBarColor">@color/activity_bg</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
     </style>

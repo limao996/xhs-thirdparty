@@ -1,6 +1,9 @@
 # ---- Android / Gradle build outputs ----
 build/
 .gradle/
+# Kotlin's own error/scratch dir. A build failure writes errors-*.log there, and
+# one of those was committed by accident; it is per-run state, not source.
+.kotlin/
 *.apk
 *.aab
 *.ap_

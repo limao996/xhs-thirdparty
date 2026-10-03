@@ -2,6 +2,9 @@
 
 package com.thirdparty.xhs.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -137,11 +140,25 @@ fun HomeScreen(
             // to the first video (and likewise for every other tab's scroll
             // position). Keying the holder by tab keeps each tab's state alive.
             val tabStateHolder = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
+            // Single owner of the feed's chrome visibility.
+            //
+            // A tap on the 推荐 video is meant to clear the clip of chrome so it can
+            // be watched unobstructed. The header and the bottom navigation belong to
+            // this shell, not to the feed, so the flag lives HERE and is handed down:
+            // the feed flips it, both the shell and the feed read it.
+            //
+            // It used to be the other way round — the feed held the flag and reported
+            // it up through a callback + LaunchedEffect. The shell never saw the
+            // change, so a tap removed the caption and left the header and the bottom
+            // bar sitting over the video. One owner at the top cannot drift.
+            var feedInfoVisible by remember { mutableStateOf(true) }
             tabStateHolder.SaveableStateProvider(tab.name) {
             when (tab) {
                 HomeTab.FEED -> VideoFeedScreen(
                     onOpenDetail = onOpenDetail,
-                    refreshTick = feedRefreshTick
+                    refreshTick = feedRefreshTick,
+                    infoVisible = feedInfoVisible,
+                    onInfoVisibleChange = { feedInfoVisible = it }
                 )
                 HomeTab.DISCOVER -> Column(Modifier.fillMaxSize().statusBarsPadding()) {
                     HomeHeader(guest, rotating, onOpenSearch)
@@ -199,7 +216,22 @@ fun HomeScreen(
             // clock and the title bar. Painting first makes the same translucent
             // colour run behind the status bar, so the bar reads as part of the
             // header and the seam is gone.
-            if (immersive) {
+            //
+            // Faded with the bottom bar rather than removed with a plain `if`: the
+            // two are one piece of chrome as far as the viewer is concerned, so a
+            // tap must retire them together and with the same motion.
+            //
+            // `immersive &&` is load-bearing: this header belongs to the 推荐 feed
+            // only. Every other tab draws its own opaque HomeHeader, so painting
+            // this translucent one over them duplicated the account line and laid a
+            // scrim across 发现's category chips (~278dp tall, they sit right under
+            // it). The bottom navigation, by contrast, really is on every tab.
+            AnimatedVisibility(
+                visible = immersive && feedInfoVisible,
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier = Modifier.align(Alignment.TopCenter)
+            ) {
                 Row(
                     Modifier.fillMaxWidth()
                         .background(Scrim.header)
@@ -217,31 +249,39 @@ fun HomeScreen(
                 }
             }
 
-            // bottom nav — translucent scrim over the video on the 推荐 tab
-            NavigationBar(
+            // bottom nav — translucent scrim over the video on the 推荐 tab.
+            // Hidden together with the header when the feed's chrome is retired:
+            // leaving it up meant a tap only cleared part of the overlay.
+            AnimatedVisibility(
+                visible = !immersive || feedInfoVisible,
+                enter = fadeIn(),
+                exit = fadeOut(),
                 modifier = Modifier.align(Alignment.BottomCenter)
-                    .then(if (immersive) Modifier.background(Scrim.chrome) else Modifier),
-                containerColor = if (immersive) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer,
-                tonalElevation = 0.dp
             ) {
-                HomeTab.entries.forEach { entry ->
-                    val selected = tab == entry
-                    NavigationBarItem(
-                        selected = selected,
-                        onClick = {
-                            if (entry == HomeTab.FEED && tab == HomeTab.FEED) feedRefreshTick++
-                            else tab = entry
-                        },
-                        colors = if (immersive) NavigationBarItemDefaults.colors(
-                            selectedIconColor = Scrim.onMedia,
-                            selectedTextColor = Scrim.onMedia,
-                            indicatorColor = Scrim.chrome,
-                            unselectedIconColor = Scrim.onMediaVariant,
-                            unselectedTextColor = Scrim.onMediaVariant
-                        ) else NavigationBarItemDefaults.colors(),
-                        icon = { Icon(iconFor(entry), contentDescription = entry.label) },
-                        label = { Text(entry.label) }
-                    )
+                NavigationBar(
+                    modifier = if (immersive) Modifier.background(Scrim.chrome) else Modifier,
+                    containerColor = if (immersive) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer,
+                    tonalElevation = 0.dp
+                ) {
+                    HomeTab.entries.forEach { entry ->
+                        val selected = tab == entry
+                        NavigationBarItem(
+                            selected = selected,
+                            onClick = {
+                                if (entry == HomeTab.FEED && tab == HomeTab.FEED) feedRefreshTick++
+                                else tab = entry
+                            },
+                            colors = if (immersive) NavigationBarItemDefaults.colors(
+                                selectedIconColor = Scrim.onMedia,
+                                selectedTextColor = Scrim.onMedia,
+                                indicatorColor = Scrim.chrome,
+                                unselectedIconColor = Scrim.onMediaVariant,
+                                unselectedTextColor = Scrim.onMediaVariant
+                            ) else NavigationBarItemDefaults.colors(),
+                            icon = { Icon(iconFor(entry), contentDescription = entry.label) },
+                            label = { Text(entry.label) }
+                        )
+                    }
                 }
             }
         }

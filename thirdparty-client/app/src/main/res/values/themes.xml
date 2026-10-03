@@ -1,10 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!--
+        Theme of the Activity AND of the system's starting window.
+
+        windowBackground is black and both system bars are transparent, because the
+        first screen is the immersive 推荐 feed: a black, full-bleed video surface
+        with a translucent header and bottom bar. Matching that here removes the
+        flash between the launcher's return and Compose's first frame.
+
+        The light-status/nav-bar flags are false as well: over the black feed the
+        icons must be light. Compose re-applies both flags per destination as soon
+        as the first frame is up (see AppNavHost), so other screens still get dark
+        icons on their light surfaces.
+    -->
     <style name="Theme.XHS" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:windowBackground">@color/activity_bg</item>
+        <item name="android:windowBackground">@color/window_bg</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:navigationBarColor">@color/activity_bg</item>
-        <item name="android:windowLightStatusBar">true</item>
-        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
     </style>
 </resources>

@@ -55,15 +55,18 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.thirdparty.xhs.App
 import com.thirdparty.xhs.common.RepoViewModelFactory
 import com.thirdparty.xhs.data.AuthorInfo
 import com.thirdparty.xhs.data.FanGroupAuthor
 import com.thirdparty.xhs.data.NoteItem
 import com.thirdparty.xhs.ui.components.EmptyState
 import com.thirdparty.xhs.ui.components.FeeBadge
+import com.thirdparty.xhs.ui.components.FollowedAuthorRow
 import com.thirdparty.xhs.ui.components.XhsAsyncImage
 import com.thirdparty.xhs.ui.components.XhsAvatar
 import com.thirdparty.xhs.ui.components.XhsWaterfallGrid
@@ -172,12 +175,19 @@ private fun FeedTab(
     }
     Column(Modifier.fillMaxSize()) {
         // category chips (horizontal)
+        //
+        // Fixed height, with the chips centred in it. The categories arrive in a
+        // request of their own, so for the first moment this row has no items and
+        // collapses to zero — the grid below then jumps down by the row's height
+        // when they land, and the row the user is about to tap was not there a
+        // frame earlier. Reserving the height costs nothing (a chip plus its
+        // 4dp padding is exactly this tall) and removes the shift.
         LazyRow(
             state = categoryRowState,
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                horizontal = Spacing.m, vertical = Spacing.xs
-            ),
-            horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+            modifier = Modifier.fillMaxWidth().height(CategoryRowHeight),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = Spacing.m),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             items(state.categories, key = { it.id }) { cat ->
                 FilterChip(
@@ -235,7 +245,15 @@ private fun FeedTab(
             ),
             hasMore = state.feed.hasMore,
             loadingMore = state.feed.loadingMore,
-            resetKey = state.refreshTick,
+            // Reset on a category change too, not only on a refresh.
+            //
+            // The grid scrolls back to the top only when this key changes, and
+            // switching category does NOT bump refreshTick — it just swaps in an
+            // empty FeedSection — so the OLD scroll offset survived into the new
+            // category: picking a chip while scrolled down dropped the viewer into
+            // the middle of a list whose top they had never seen. Keyed on the
+            // pair, both cases reset.
+            resetKey = state.refreshTick to state.selectedCategory,
             onLoadMore = { viewModel.loadMore() }
         )
     }
@@ -393,9 +411,17 @@ private fun FanGroupNoteCard(
                 XhsAsyncImage(
                     url = item.cover,
                     contentDescription = item.title,
+                    // A FIXED 3:4 crop, not the note's own ratio.
+                    //
+                    // Three of these sit side by side under one author, and sizing
+                    // each by its own ratio gave three different heights — a ragged
+                    // edge the eye reads as broken layout. Front covers of one
+                    // author are the one place a uniform thumb grid is right; the
+                    // actual ratio is still what the note's own page uses.
                     modifier = Modifier
                         .fillMaxWidth()
-                        .aspectRatio(item.coverRatio.coerceIn(0.55f, 1.6f))
+                        .aspectRatio(3f / 4f),
+                    contentScale = ContentScale.Crop
                 )
                 FeeBadge(item, compact = true, modifier = Modifier.align(Alignment.TopEnd).padding(Spacing.xs))
             }
@@ -403,6 +429,9 @@ private fun FanGroupNoteCard(
                 item.title,
                 style = MaterialTheme.typography.labelMedium,
                 maxLines = 2,
+                // two lines ALWAYS reserved, so a one-line title does not make its
+                // card shorter than its neighbours either
+                minLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(Spacing.s)
             )
@@ -416,6 +445,7 @@ private fun FollowedMineTab(
     onOpenAuthor: (Int) -> Unit
 ) {
     val clear = com.thirdparty.xhs.ui.theme.bottomNavClearance()
+    val scope = rememberCoroutineScope()
     if (followed.isEmpty()) {
         EmptyState(
             title = "还没有关注任何作者",
@@ -431,22 +461,28 @@ private fun FollowedMineTab(
         contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = clear)
     ) {
         items(followed, key = { it.userId }) { f ->
-            Surface(onClick = { onOpenAuthor(f.userId) }, modifier = Modifier.fillMaxWidth()) {
-                Row(Modifier.padding(horizontal = Spacing.l, vertical = Spacing.s), verticalAlignment = Alignment.CenterVertically) {
-                    XhsAvatar(url = f.headImg, contentDescription = f.userName,
-                        modifier = Modifier.size(AvatarSize.list))
-                    Spacer(Modifier.width(Spacing.m))
-                    Column {
-                        Text(f.userName, style = MaterialTheme.typography.bodyLarge)
-                        if (f.signature.isNotBlank())
-                            Text(f.signature, maxLines = 1, style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // the same row the standalone 我关注的作者 page uses — this tab used to
+            // be a read-only copy of it, so the only way to unfollow an author was
+            // to leave 发现 and open that page
+            FollowedAuthorRow(
+                name = f.userName,
+                signature = f.signature,
+                avatarUrl = f.headImg,
+                onClick = { onOpenAuthor(f.userId) },
+                onUnfollow = {
+                    // The ViewModel collects repo.followVersion, so this both
+                    // unfollows and refreshes the list it is rendering.
+                    scope.launch {
+                        App.repo.toggleFollowLocal(f.userId, f.userName, f.headImg, f.signature)
                     }
                 }
-            }
+            )
         }
     }
 }
+
+/** Height reserved for the category chip row (a FilterChip plus its padding). */
+private val CategoryRowHeight = 48.dp
 
 /**
  * Scrolls [index] to the middle of the viewport.

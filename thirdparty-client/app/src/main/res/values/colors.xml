@@ -1,6 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="activity_bg">#FFF8F8</color>
     <color name="icon_bg">#3A2C52</color>
+    <!--
+        Launch-window background.
+
+        BLACK, and the same value in values-night: the app always opens on the 推荐
+        feed, which is a black full-bleed video surface, so the system's starting
+        window and the app's first frame must agree on black. Anything else (the
+        light #FFF8F8 above, or the themed dark background) shows for the frames
+        between "launcher returned" and "Compose drew the feed" — the
+        "进入软件闪那么几下" the window background is supposed to prevent.
+
+        Setting this on the Activity (MainActivity.onCreate -> setBackgroundDrawable)
+        is NOT enough: that runs after the process starts, whereas the starting
+        window is painted by the system from this theme before the app exists.
+        (XhsWindowBackground mirrors this constant for the in-app window.)
+    -->
+    <color name="window_bg">#FF000000</color>
 </resources>
 

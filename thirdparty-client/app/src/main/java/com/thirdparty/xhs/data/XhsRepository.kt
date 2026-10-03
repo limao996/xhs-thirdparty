@@ -372,8 +372,14 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
         false
     }
 
-    /** Grow the wait after each unsuccessful switch, capped, so a dead backend
-     *  cannot be farmed for accounts by the 30s poll. */
+    /**
+     * Grow the wait after each unsuccessful switch, capped, so a dead backend
+     * cannot be farmed for accounts by the 5s VIP poll.
+     *
+     * This — not the poll interval — is what bounds identity creation, which is why
+     * the interval can be as short as it is: a healthy account never reaches here,
+     * and a broken backend is throttled to one new identity per 30 minutes at most.
+     */
     private fun backoffSwitch(nowS: Long) {
         switchFailStreak = (switchFailStreak + 1).coerceAtMost(8)
         val wait = (VIP_SWITCH_BACKOFF_BASE_S shl (switchFailStreak - 1))

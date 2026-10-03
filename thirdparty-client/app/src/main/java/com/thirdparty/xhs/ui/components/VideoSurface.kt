@@ -69,7 +69,20 @@ fun VideoSurface(
                 runCatching { currentPlayer?.setVideoTextureView(view) }
             },
             modifier = if (videoAspect != null && videoAspect > 0f) {
-                Modifier.fillMaxSize().aspectRatio(videoAspect)
+                // NOT `.fillMaxSize().aspectRatio(...)`.
+                //
+                // fillMaxSize pins BOTH constraints to the maximum it is given, and
+                // aspectRatio cannot shrink a view below a fixed constraint — so the
+                // ratio was ignored and the picture was stretched to fill the box.
+                // That is visible the moment the box is not the video's shape: a
+                // portrait clip in a container clamped to half the screen height came
+                // out stretched edge to edge instead of pillarboxed. Reported as
+                // "显示异常" on a portrait work.
+                //
+                // On its own, aspectRatio fits the ratio inside the constraints and
+                // centres it, which is the letterboxing PlayerView's RESIZE_MODE_FIT
+                // used to do.
+                Modifier.aspectRatio(videoAspect)
             } else {
                 Modifier.fillMaxSize()
             }
