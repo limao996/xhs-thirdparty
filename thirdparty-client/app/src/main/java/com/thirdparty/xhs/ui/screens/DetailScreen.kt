@@ -59,10 +59,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.thirdparty.xhs.App
@@ -116,7 +113,6 @@ fun DetailScreen(
     // viewer for image posts — see the 全屏 action below.
     var openImage by rememberSaveable { mutableStateOf<Int?>(null) }
     val context = LocalContext.current
-    val view = LocalView.current
 
     // In fullscreen the app bar is hidden, so the system back gesture must leave
     // fullscreen first instead of popping the whole detail screen — and while the
@@ -129,22 +125,12 @@ fun DetailScreen(
             fullscreen = false
         }
     }
-    // 真全屏：隐藏状态/导航栏（不强制方向，横竖都行）
-    val window = (LocalContext.current as? android.app.Activity)?.window
-    DisposableEffect(fullscreen, window) {
-        if (window != null) {
-            val controller = WindowCompat.getInsetsController(window, view)
-            if (fullscreen) {
-                controller.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-                controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            } else {
-                controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-            }
-        }
-        onDispose {
-            window?.let { WindowCompat.getInsetsController(it, view).show(androidx.core.view.WindowInsetsCompat.Type.systemBars()) }
-        }
-    }
+    // 真全屏：状态栏/导航栏的处置权在 AppNavHost（它是这两条栏唯一的 owner），
+    // 这里只声明意图：
+    //  - 视频全屏 → 隐藏两条栏（沉浸观看）
+    //  - 图文全屏（图片查看器占满屏幕）→ **不隐藏**，两条栏保持显示、做成透明、
+    //    图标白色，让图片从其下方穿过
+    val viewerFullscreen = fullscreen && openImage != null
 
     // ---- media plumbing, hoisted OUT of the metadata branch -------------------
     //
@@ -187,6 +173,18 @@ fun DetailScreen(
         // Resume exactly the intent the feed handed over: playing (even if it was mid
         // buffer when the user tapped) stays playing, a deliberate pause stays paused.
         if (a.playIntent) runCatching { a.player.play() } else runCatching { a.player.pause() }
+    }
+    // 状态栏/导航栏的处置权在 AppNavHost（它是这两条栏唯一的 owner），这里只声明意图：
+    //  - 视频全屏 → 隐藏两条栏（沉浸观看）
+    //  - 图文全屏（图片查看器占满屏幕）→ **不隐藏**：两条栏保持显示、做成透明、
+    //    图标白色，图片从其下方穿过
+    DisposableEffect(fullscreen, isVideoNote, viewerFullscreen) {
+        App.INSTANCE.detailImmersive.value = fullscreen && isVideoNote && !viewerFullscreen
+        App.INSTANCE.imageViewerShown.value = viewerFullscreen
+        onDispose {
+            App.INSTANCE.detailImmersive.value = false
+            App.INSTANCE.imageViewerShown.value = false
+        }
     }
     // Fullscreen orientation follows the VIDEO's shape: a landscape clip should fill a
     // landscape screen, a portrait clip should stay portrait. Restored to unspecified
@@ -408,9 +406,9 @@ private fun DetailContent(
     pad: androidx.compose.foundation.layout.PaddingValues,
     isVideo: Boolean,
     /**
-     * Index of the image open in the full-screen viewer, hoisted to DetailScreen:
-     * the app bar's 全屏 button drives it for image notes (which have no video to
-     * go full screen), and the app bar lives outside this composable.
+     * Index of the image open in the full-screen viewer (null = closed), hoisted to
+     * DetailScreen: the app bar's 全屏 button drives it for image notes (which have no
+     * video to go full screen), and the app bar lives outside this composable.
      */
     openImage: Int?,
     onOpenImage: (Int?) -> Unit,
@@ -695,7 +693,11 @@ private fun DetailContent(
                     listOf(note.cover).filter { it.isNotEmpty() }.map { com.thirdparty.xhs.data.NoteImage(it) }
                 },
                 initialPage = page,
-                modifier = Modifier.padding(pad),
+                // FULLSCREEN: edge to edge (no content padding) so the picture runs
+                // under the transparent status/navigation bars — the whole point of
+                // asking for transparent bars instead of hidden ones. The viewer's own
+                // chrome insets itself.
+                modifier = if (fullscreen) Modifier else Modifier.padding(pad),
                 onDismiss = { onOpenImage(null) }
             )
         }

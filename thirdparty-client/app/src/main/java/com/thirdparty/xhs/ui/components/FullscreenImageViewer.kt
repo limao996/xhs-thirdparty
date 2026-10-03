@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
@@ -64,10 +65,14 @@ fun FullscreenImageViewer(
     initialPage: Int,
     onDismiss: () -> Unit,
     /**
-     * Applied to the root. Callers rendering this inside a Scaffold must pass the
-     * content padding: without it the viewer starts at y=0 and its top bar ends up
-     * BEHIND the page's own app bar — which is exactly why the counter and close
+     * Applied to the root. Callers rendering this INSIDE a padded Scaffold content slot
+     * must pass that padding: without it the viewer starts at y=0 and its top bar ends
+     * up BEHIND the page's own app bar — which is exactly why the counter and close
      * button were invisible even though the viewer itself rendered fine.
+     *
+     * A caller that renders it in TRUE fullscreen passes nothing (edge to edge), so that
+     * the picture runs under the transparent system bars; the chrome below insets
+     * itself for that case.
      */
     modifier: Modifier = Modifier
 ) {
@@ -104,6 +109,9 @@ fun FullscreenImageViewer(
     Column(modifier.fillMaxSize().background(Color.Black)) {
         Row(
             Modifier.fillMaxWidth().background(Scrim.chrome)
+                // the root can be edge to edge (fullscreen), so the bar's own chrome
+                // must clear the status bar — the PICTURE is what belongs underneath it
+                .statusBarsPadding()
                 .padding(horizontal = Spacing.s, vertical = Spacing.xs),
             verticalAlignment = Alignment.CenterVertically
         ) {

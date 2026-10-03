@@ -51,6 +51,25 @@ class App : Application() {
     val feedImmersive = MutableStateFlow(false)
 
     /**
+     * True while the 详情 page is in TRUE fullscreen — i.e. a VIDEO filling the screen.
+     * The system bars are hidden for it.
+     *
+     * Set by DetailScreen, consumed by AppNavHost, like [feedImmersive]: the bars have
+     * exactly one owner, and screens only declare what they want.
+     */
+    val detailImmersive = MutableStateFlow(false)
+
+    /**
+     * True while the 图文 fullscreen viewer is up.
+     *
+     * A still image is not a video: the user asked for the bars to STAY there, made
+     * transparent, with light icons, so the picture runs underneath them. That is a
+     * different treatment from [detailImmersive] (which hides them), so the shell needs
+     * to know which one is in force.
+     */
+    val imageViewerShown = MutableStateFlow(false)
+
+    /**
      * Bridge for the settings screen to toggle VIP auto-switch on the SAME
      * GuestViewModel instance HomeScreen owns — that instance drives the 5s poll,
      * so writing the pref directly would leave the running loop out of step.

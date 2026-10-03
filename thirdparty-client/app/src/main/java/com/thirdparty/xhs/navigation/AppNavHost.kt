@@ -205,6 +205,11 @@ private fun SelectionTopBar(
 }
 
 /** Top-level Navigation Compose graph with polished enter/exit transitions. */
+// window.statusBarColor / navigationBarColor are deprecated on API 35+, where
+// edge-to-edge makes the bars transparent whether we ask or not. Setting them is still
+// what makes a pre-35 device behave the same way, so the call stays and the warning is
+// suppressed here rather than left to drown out real ones.
+@Suppress("DEPRECATION")
 @Composable
 fun AppNavHost(
     nav: NavHostController,
@@ -221,17 +226,37 @@ fun AppNavHost(
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route
     val feedImmersive by App.INSTANCE.feedImmersive.collectAsStateWithLifecycle()
+    val detailImmersive by App.INSTANCE.detailImmersive.collectAsStateWithLifecycle()
+    val imageViewerShown by App.INSTANCE.imageViewerShown.collectAsStateWithLifecycle()
     val barView = androidx.compose.ui.platform.LocalView.current
     val barActivity = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity
     val barDark = App.INSTANCE.themeState.collectAsStateWithLifecycle().value
         .isDark(androidx.compose.foundation.isSystemInDarkTheme())
-    androidx.compose.runtime.DisposableEffect(route, feedImmersive, barDark, barActivity) {
+    androidx.compose.runtime.DisposableEffect(
+        route, feedImmersive, detailImmersive, imageViewerShown, barDark, barActivity
+    ) {
         barActivity?.window?.let { w ->
             val c = androidx.core.view.WindowCompat.getInsetsController(w, barView)
-            c.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-            // White icons only over the feed's full-bleed video; everywhere else
-            // the surface is opaque and themed.
-            val overMedia = route == com.thirdparty.xhs.navigation.Routes.HOME && feedImmersive
+            if (detailImmersive) {
+                // 真全屏 (video only): hide the bars outright, swipe to bring them back
+                c.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                c.systemBarsBehavior =
+                    androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            } else {
+                c.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                if (imageViewerShown) {
+                    // 图文 fullscreen: the picture runs edge to edge underneath, so the
+                    // bars must be transparent (a themed, opaque bar would cut the
+                    // picture in two) while staying visible.
+                    w.statusBarColor = android.graphics.Color.TRANSPARENT
+                    w.navigationBarColor = android.graphics.Color.TRANSPARENT
+                }
+            }
+            // Light icons over media (the feed's full-bleed video, or a picture the bars
+            // are floating on); dark icons over every themed, opaque surface.
+            val overMedia =
+                (route == com.thirdparty.xhs.navigation.Routes.HOME && feedImmersive) ||
+                    imageViewerShown
             c.isAppearanceLightStatusBars = !overMedia && !barDark
             c.isAppearanceLightNavigationBars = !overMedia && !barDark
         }
