@@ -253,10 +253,49 @@ fun DetailScreen(
                 }
                 LaunchedEffect(sharedPlayer) {
                     if (sharedPlayer == null) return@LaunchedEffect
+                    // Save the position so a recreate (orientation change) does not
+                    // restart a long work from zero.
+                    //
+                    // Two rules, both fixing the same report — "播放完毕后回到 5~7 秒
+                    // 而不是重新播放":
+                    //  1. save while PAUSED too. Only recording while playing meant
+                    //     the stored value was always some earlier playing position,
+                    //     so a restore could jump to a spot the user had already left.
+                    //  2. clear it once the playhead reaches the end. A finished (or
+                    //     looping) item otherwise leaves a mid-video value behind, and
+                    //     the next recreate resumes from it instead of starting over.
                     while (true) {
-                        if (sharedPlayer.isPlaying) resumeMs = sharedPlayer.currentPosition
+                        val p = sharedPlayer
+                        val duration = p.duration
+                        val position = p.currentPosition
+                        resumeMs = when {
+                            p.playbackState == androidx.media3.common.Player.STATE_ENDED -> 0L
+                            duration > 0L && position >= duration - END_OF_MEDIA_MARGIN_MS -> 0L
+                            else -> position
+                        }
                         delay(500)
                     }
+                }
+                // A looping item must not leave a resume position behind: the loop
+                // is the video restarting, and if the player is recreated while it
+                // plays round again, restoring the pre-loop position looks like the
+                // player jumping to the middle of the clip instead of replaying.
+                DisposableEffect(sharedPlayer) {
+                    val p = sharedPlayer
+                    val listener = if (p == null) null else object :
+                        androidx.media3.common.Player.Listener {
+                        override fun onPositionDiscontinuity(
+                            oldPosition: androidx.media3.common.Player.PositionInfo,
+                            newPosition: androidx.media3.common.Player.PositionInfo,
+                            reason: Int
+                        ) {
+                            if (reason == androidx.media3.common.Player.DISCONTINUITY_REASON_AUTO_TRANSITION) {
+                                resumeMs = 0L
+                            }
+                        }
+                    }
+                    if (p != null && listener != null) p.addListener(listener)
+                    onDispose { if (p != null && listener != null) p.removeListener(listener) }
                 }
                 DisposableEffect(sharedPlayer) {
                     onDispose {
@@ -337,18 +376,18 @@ private fun DetailContent(
             // Upper bound: half the screen, so a portrait video never pushes the
             // title / author / actions off the first screen.
             //
-            // Lower bound: 16:9 against the view width. A very wide clip (21:9,
+            // Lower bound: 16:10 against the view width. A very wide clip (21:9,
             // or a letterboxed source) computed a natural height so short that the
             // player's own top bar and seek bar, which are laid out inside this
-            // container, ended up crammed against each other. 16:9 is the
+            // container, ended up crammed against each other. 16:10 is the
             // narrowest a player can be and still show that chrome comfortably.
             //
             // The two bounds are ordered defensively: on a sufficiently tall,
-            // narrow window the 16:9 minimum can exceed half the screen, and
+            // narrow window the minimum can exceed half the screen, and
             // coerceIn throws when min > max.
             val halfScreen = (config.screenHeightDp * 0.5f).dp
-            val sixteenNine = (config.screenWidthDp * 9f / 16f).dp
-            val minVideoHeight = minOf(sixteenNine, halfScreen)
+            val minRatioHeight = (config.screenWidthDp * 10f / 16f).dp
+            val minVideoHeight = minOf(minRatioHeight, halfScreen)
             val maxVideoHeight = maxOf(halfScreen, minVideoHeight)
             val naturalHeight = (config.screenWidthDp / videoAspect).dp
             val windowedHeight = naturalHeight.coerceIn(minVideoHeight, maxVideoHeight)
@@ -629,3 +668,12 @@ private fun com.thirdparty.xhs.data.NoteItem.detailTopic(): String =
 
 private fun com.thirdparty.xhs.data.NoteItem.detail(): org.json.JSONObject =
     runCatching { org.json.JSONObject(rawJson) }.getOrElse { org.json.JSONObject() }
+
+/**
+ * How close to the end counts as "finished" for the resume position.
+ *
+ * A looping item parks its position at the very end just before it restarts, and
+ * a position that close to the end is not somewhere worth resuming to — the user
+ * would rather see it play from the beginning.
+ */
+private const val END_OF_MEDIA_MARGIN_MS = 1_500L
