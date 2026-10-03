@@ -257,8 +257,11 @@ private fun VideoPage(
                     modifier = Modifier.fillMaxWidth().aspectRatio(videoAspect)
                 )
             }
-            // feedback while the stream buffers / starts up
-            BufferingIndicator(player, modifier = Modifier.fillMaxSize())
+            // feedback while the stream buffers / starts up — hidden once the
+            // error panel is up, otherwise the two draw on top of each other
+            if (playbackError == null) {
+                BufferingIndicator(player, modifier = Modifier.fillMaxSize(), active = active)
+            }
             // a dead stream must not fail silently
             PlaybackErrorOverlay(
                 error = playbackError,

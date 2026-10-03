@@ -9,6 +9,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import com.thirdparty.xhs.ui.theme.Corners
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudOff
@@ -73,7 +77,21 @@ import kotlinx.coroutines.delay
  * slider in `MediaPlayer`), so dragging cannot spam the network; seeks within the
  * back buffer are then instant.
  */
-fun buildVideoPlayer(context: Context, url: String, autoPlay: Boolean = true): ExoPlayer =
+fun buildVideoPlayer(
+    context: Context,
+    url: String,
+    autoPlay: Boolean = true,
+    /**
+     * true for the detail page (a work can be hours long), false for the feed.
+     *
+     * The two need different buffers, and using one setting for both is wrong in
+     * both directions: the feed keeps several players alive at once (current page
+     * plus neighbours), so a 90s buffer each is a lot of wasted memory and
+     * bandwidth for clips that are seconds long — while a long work needs the
+     * deep buffer or it rebuffers constantly on a slow link.
+     */
+    longForm: Boolean = false
+): ExoPlayer =
     ExoPlayer.Builder(context.applicationContext)
         .setWakeMode(C.WAKE_MODE_LOCAL)
         .setAudioAttributes(
@@ -84,18 +102,7 @@ fun buildVideoPlayer(context: Context, url: String, autoPlay: Boolean = true): E
             /* handleAudioFocus = */ true
         )
         .setHandleAudioBecomingNoisy(true)   // pause when headphones are unplugged
-        .setLoadControl(
-            androidx.media3.exoplayer.DefaultLoadControl.Builder()
-                .setBufferDurationsMs(
-                    MIN_BUFFER_MS,
-                    MAX_BUFFER_MS,
-                    BUFFER_FOR_PLAYBACK_MS,
-                    BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS
-                )
-                .setBackBuffer(BACK_BUFFER_MS, /* retainBackBufferFromKeyframe = */ true)
-                .setPrioritizeTimeOverSizeThresholds(true)
-                .build()
-        )
+        .setLoadControl(if (longForm) longFormLoadControl() else feedLoadControl())
         .setSeekBackIncrementMs(SEEK_INCREMENT_MS)
         .setSeekForwardIncrementMs(SEEK_INCREMENT_MS)
         .build()
@@ -105,6 +112,45 @@ fun buildVideoPlayer(context: Context, url: String, autoPlay: Boolean = true): E
             prepare()
             playWhenReady = autoPlay
         }
+
+/**
+ * Deep buffer, for a work the user may watch end to end.
+ *
+ * `prioritizeTimeOverSizeThresholds` keeps the buffer filling past the size
+ * limit: on a weak link those bytes will be needed anyway, so dropping them
+ * early only buys another rebuffer.
+ */
+private fun longFormLoadControl() =
+    androidx.media3.exoplayer.DefaultLoadControl.Builder()
+        .setBufferDurationsMs(
+            MIN_BUFFER_MS,
+            MAX_BUFFER_MS,
+            BUFFER_FOR_PLAYBACK_MS,
+            BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS
+        )
+        .setBackBuffer(BACK_BUFFER_MS, /* retainBackBufferFromKeyframe = */ true)
+        .setPrioritizeTimeOverSizeThresholds(true)
+        .build()
+
+/**
+ * Shallow but quick buffer for the feed.
+ *
+ * Enough to survive a short stall, small enough that the neighbours which are
+ * being pre-buffered do not each hold a large chunk. Starting sooner matters
+ * more than buffering far ahead: the user swipes long before the deep buffer
+ * would ever be used.
+ */
+private fun feedLoadControl() =
+    androidx.media3.exoplayer.DefaultLoadControl.Builder()
+        .setBufferDurationsMs(
+            FEED_MIN_BUFFER_MS,
+            FEED_MAX_BUFFER_MS,
+            FEED_BUFFER_FOR_PLAYBACK_MS,
+            FEED_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS
+        )
+        .setBackBuffer(0, false)
+        .setPrioritizeTimeOverSizeThresholds(true)
+        .build()
 
 /** 15s minimum before playback starts — long enough to survive a slow start. */
 private const val MIN_BUFFER_MS = 15_000
@@ -117,6 +163,12 @@ private const val BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS = 15_000
 /** 2 minutes of rewindable history, served from memory. */
 private const val BACK_BUFFER_MS = 120_000
 private const val SEEK_INCREMENT_MS = 10_000L
+
+// ---- feed profile: start fast, do not hoard ----
+private const val FEED_MIN_BUFFER_MS = 8_000
+private const val FEED_MAX_BUFFER_MS = 25_000
+private const val FEED_BUFFER_FOR_PLAYBACK_MS = 1_500
+private const val FEED_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS = 4_000
 
 /**
  * Pause playback while the host lifecycle is not at least STARTED and resume
@@ -184,43 +236,101 @@ fun rememberExoPlayer(
 }
 
 /**
- * Centered spinner shown while the player is buffering, so switching to the
- * next video never looks like a frozen black screen.
+ * Centered buffering feedback, shown over the video.
+ *
+ * Shows **how much is buffered**, not just a spinner: on a weak link the useful
+ * question is "is it making progress or stuck?", and an indeterminate spinner
+ * cannot answer that. The percentage comes from [Player.getBufferedPercentage]
+ * (a whole-stream figure for progressive files, and per-window for HLS) and is
+ * paired with a thin progress line so the state is readable at a glance.
+ *
+ * [active] gates the IDLE case. Every page in the feed keeps a prepared player
+ * alive, and an unprepared neighbour sits in STATE_IDLE — treating that as
+ * buffering would put a spinner on pages the user has not reached yet.
  */
 @Composable
 fun BufferingIndicator(
     player: Player?,
     modifier: Modifier = Modifier,
+    /** true only for the page actually on screen */
+    active: Boolean = true,
     tint: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.White
 ) {
-    var buffering by remember(player) {
-        androidx.compose.runtime.mutableStateOf(
-            // IDLE counts too: before prepare() (and while the first frame loads)
-            // there is otherwise no spinner at all, which looked like a frozen video.
-            player == null || player.playbackState == Player.STATE_IDLE ||
-                player.playbackState == Player.STATE_BUFFERING
-        )
+    var state by remember(player) {
+        androidx.compose.runtime.mutableIntStateOf(player?.playbackState ?: Player.STATE_IDLE)
     }
+    var percent by remember(player) { androidx.compose.runtime.mutableIntStateOf(0) }
     DisposableEffect(player) {
         val p = player
         val listener = if (p == null) null else object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
-                buffering = playbackState == Player.STATE_IDLE ||
-                    playbackState == Player.STATE_BUFFERING
+                state = playbackState
+                percent = p.bufferedPercentage
+            }
+
+            override fun onIsLoadingChanged(isLoading: Boolean) {
+                percent = p.bufferedPercentage
             }
         }
         if (p != null && listener != null) p.addListener(listener)
         onDispose { if (p != null && listener != null) p.removeListener(listener) }
     }
-    if (buffering) {
-        androidx.compose.foundation.layout.Box(
-            modifier,
-            contentAlignment = androidx.compose.ui.Alignment.Center
+    // keep the figure moving while it is visible: bufferedPercentage only changes
+    // on load events, which are coarse and irregular
+    LaunchedEffect(player, state, active) {
+        if (!active) return@LaunchedEffect
+        if (state != Player.STATE_IDLE && state != Player.STATE_BUFFERING) return@LaunchedEffect
+        while (true) {
+            player?.let { percent = it.bufferedPercentage }
+            delay(400)
+        }
+    }
+
+    val show = when {
+        !active -> false
+        player == null -> true
+        // IDLE before prepare(): a spinner, but only for the page on screen
+        state == Player.STATE_IDLE -> true
+        state == Player.STATE_BUFFERING -> true
+        else -> false
+    }
+    if (!show) return
+
+    androidx.compose.foundation.layout.Box(
+        modifier.background(Scrim.chrome),
+        contentAlignment = androidx.compose.ui.Alignment.Center
+    ) {
+        androidx.compose.foundation.layout.Column(
+            horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
         ) {
             androidx.compose.material3.LoadingIndicator(
                 modifier = Modifier.size(40.dp),
                 color = tint,
             )
+            androidx.compose.foundation.layout.Spacer(Modifier.height(Spacing.s))
+            androidx.compose.material3.Text(
+                if (percent > 0) "缓冲中 $percent%" else "缓冲中",
+                color = Scrim.onMedia,
+                style = MaterialTheme.typography.labelMedium
+            )
+            if (percent > 0) {
+                androidx.compose.foundation.layout.Spacer(Modifier.height(Spacing.xs))
+                androidx.compose.foundation.layout.Box(
+                    Modifier
+                        .width(120.dp)
+                        .height(3.dp)
+                        .clip(Corners.full)
+                        .background(Scrim.onMediaVariant)
+                ) {
+                    androidx.compose.foundation.layout.Box(
+                        Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(percent / 100f)
+                            .clip(Corners.full)
+                            .background(tint)
+                    )
+                }
+            }
         }
     }
 }

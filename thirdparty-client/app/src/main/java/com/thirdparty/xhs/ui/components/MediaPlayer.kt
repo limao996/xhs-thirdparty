@@ -97,7 +97,7 @@ fun MediaPlayer(
     // playback position must survive that or the video jumps back to the start.
     // rememberSaveable is what carries it across the configuration change.
     var resumeMs by rememberSaveable(url) { androidx.compose.runtime.mutableLongStateOf(0L) }
-    val player = externalPlayer ?: remember(url) { buildVideoPlayer(context, url) }
+    val player = externalPlayer ?: remember(url) { buildVideoPlayer(context, url, longForm = true) }
 
     // pick up where the previous instance left off (a no-op on first entry).
     // Skipped for a shared player: the owner keeps the position itself, so
@@ -149,11 +149,16 @@ fun MediaPlayer(
             modifier = Modifier.fillMaxSize()
         )
         AutoHideController(player, fullscreen, onToggleFullscreen, controlsHiddenInitially, title)
-        // buffering feedback
-        BufferingIndicator(player, modifier = Modifier.fillMaxSize())
+        // Buffering feedback — but never together with the error panel: the
+        // player keeps retrying in BUFFERING while the panel is up, so both
+        // used to draw on top of each other and neither was readable.
+        val playbackError = rememberPlaybackError(player)
+        if (playbackError == null) {
+            BufferingIndicator(player, modifier = Modifier.fillMaxSize())
+        }
         // a dead stream must not fail silently
         PlaybackErrorOverlay(
-            error = rememberPlaybackError(player),
+            error = playbackError,
             onRetry = { retryPlayback(player) },
             modifier = Modifier.fillMaxSize()
         )

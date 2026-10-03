@@ -227,7 +227,8 @@ fun DetailScreen(
                     remember(item.mediaUrl) {
                         buildVideoPlayer(
                             context = context.applicationContext,
-                            url = item.mediaUrl
+                            url = item.mediaUrl,
+        longForm = true
                         )
                     }
                 } else null
