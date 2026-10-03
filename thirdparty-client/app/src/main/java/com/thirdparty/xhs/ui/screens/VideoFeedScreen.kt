@@ -55,6 +55,7 @@ import com.thirdparty.xhs.ui.components.BufferingIndicator
 import com.thirdparty.xhs.ui.components.EmptyState
 import com.thirdparty.xhs.ui.components.FeeBadge
 import com.thirdparty.xhs.ui.components.PauseWhenNotStarted
+import com.thirdparty.xhs.ui.components.VideoSurface
 import com.thirdparty.xhs.ui.components.PlaybackErrorOverlay
 import com.thirdparty.xhs.ui.components.RecoverStuckPlayback
 import com.thirdparty.xhs.ui.components.STUCK_PLAYBACK_EXCEPTION
@@ -252,15 +253,16 @@ private fun VideoPage(
 
         // video surface: container matches the video's own ratio, fills the
         // width and is vertically centred — original proportions, no crop.
+        //
+        // VideoSurface (TextureView), not PlayerView: when a feed item opens the
+        // detail page, a SurfaceView-backed player would keep painting its last
+        // frame over the outgoing screen for the whole transition.
         if (player != null) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                PlayerView(
-                    player = player,
-                    useController = false,
-                    resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT,
-                    modifier = Modifier.fillMaxWidth().aspectRatio(videoAspect)
-                )
-            }
+            VideoSurface(
+                player = player,
+                videoAspect = videoAspect,
+                modifier = Modifier.fillMaxWidth().align(Alignment.Center)
+            )
             // feedback while the stream buffers / starts up — hidden once the
             // error panel is up, otherwise the two draw on top of each other
             RecoverStuckPlayback(player) { decoderStuck = true }

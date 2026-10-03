@@ -124,17 +124,21 @@ fun MediaPlayer(
     // dispose when we own the player — a shared one is paused by its owner, and
     // pausing here would stop the video every time the layout switches.
     PauseWhenNotStarted(player, pauseOnDispose = ownsPlayer)
+    // mirrored locally: the surface needs it to letterbox inside a clamped box
+    var videoAspect by remember(player) { mutableStateOf(0f) }
     // report the natural aspect ratio so callers can size the container
     DisposableEffect(player, onAspect) {
-        val listener = if (onAspect == null) null else object : Player.Listener {
+        val listener = object : Player.Listener {
             override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
                 if (videoSize.width > 0 && videoSize.height > 0) {
-                    onAspect(videoSize.width.toFloat() / videoSize.height.toFloat())
+                    val a = videoSize.width.toFloat() / videoSize.height.toFloat()
+                    videoAspect = a
+                    onAspect?.invoke(a)
                 }
             }
         }
-        listener?.let { player.addListener(it) }
-        onDispose { listener?.let { player.removeListener(it) } }
+        player.addListener(listener)
+        onDispose { player.removeListener(listener) }
     }
     DisposableEffect(player) {
         onDispose {
@@ -181,12 +185,12 @@ fun MediaPlayer(
                     }
             )
     ) {
-        PlayerView(
+        // TextureView-backed, not PlayerView: a SurfaceView would not fade with the
+        // screen during a navigation transition and the last frame would stay
+        // painted over the screen being returned to. See [VideoSurface].
+        VideoSurface(
             player = player,
-            useController = false,
-            // never stretch: FIT letterboxes; the caller sizes the container to
-            // the video's own ratio so no bars appear in windowed mode
-            resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT,
+            videoAspect = videoAspect,
             modifier = Modifier.fillMaxSize().graphicsLayer(
                 scaleX = scale,
                 scaleY = scale,

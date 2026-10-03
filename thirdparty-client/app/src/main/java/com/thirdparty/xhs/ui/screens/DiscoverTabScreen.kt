@@ -176,7 +176,15 @@ private fun FeedTab(
         }
 
         if (state.feed.items.isEmpty() && state.feed.firstLoading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingIndicator() }
+            // Reserve the floating NavigationBar's height before centring, or the
+            // indicator is centred on the full screen and reads as sitting low —
+            // the bar covers the bottom ~96dp, so the visible gap above is smaller
+            // than the gap below.
+            Box(
+                Modifier.fillMaxSize()
+                    .padding(bottom = com.thirdparty.xhs.ui.theme.bottomNavClearance()),
+                contentAlignment = Alignment.Center
+            ) { LoadingIndicator() }
             return
         }
 
@@ -232,7 +240,12 @@ private fun FanGroupTab(
 ) {
     val clear = com.thirdparty.xhs.ui.theme.bottomNavClearance()
     if (loading && recommended.isEmpty()) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingIndicator() }
+        // same clearance rule as the feed branch: centre in the space the floating
+        // NavigationBar leaves, not in the whole screen
+        Box(
+            Modifier.fillMaxSize().padding(bottom = clear),
+            contentAlignment = Alignment.Center
+        ) { LoadingIndicator() }
         return
     }
     if (recommended.isEmpty()) {
