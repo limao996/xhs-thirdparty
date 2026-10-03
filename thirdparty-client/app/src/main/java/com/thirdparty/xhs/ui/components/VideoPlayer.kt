@@ -23,6 +23,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,11 +45,33 @@ import com.thirdparty.xhs.ui.theme.Spacing
 import kotlinx.coroutines.delay
 
 /**
- * Build an ExoPlayer configured for short-video playback.
+ * Build an ExoPlayer configured for short- and long-form playback over an
+ * unreliable connection.
  *
  * Uses movie/media audio attributes with audio-focus handling so the app
  * pauses itself when another app takes over audio (a call, a music player),
  * and holds a local wake lock while playing.
+ *
+ * ## Tuning, and why
+ *
+ * **Weak network.** Default ExoPlayer buffer targets are tuned for reliable
+ * connections: playout starts after 2.5s of media and the buffer tops out at 50s.
+ * On a slow link that produces a stutter/rebuffer loop, because the buffer never
+ * outruns the playhead. Playback now waits for [BUFFER_FOR_PLAYBACK_MS] before
+ * starting and fills up to [MAX_BUFFER_MS], which trades a slightly longer
+ * initial wait for continuous playback. `prioritizeTimeOverSizeThresholds` keeps
+ * the buffer filling even when that overruns the size limit — on a weak link the
+ * bytes will be needed regardless, so dropping them early only causes a rebuffer.
+ *
+ * **Very long videos.** A back buffer of [BACK_BUFFER_MS] means a rewind of up to
+ * that much is served from memory instead of re-fetching, so scrubbing backwards
+ * through a long video does not re-download it. `setSeekBack/ForwardIncrementMs`
+ * keep the ±10s step meaningful for long content when the player itself is asked
+ * to seek.
+ *
+ * **Arbitrary seeking.** The scrub bar commits its seek only on release (see the
+ * slider in `MediaPlayer`), so dragging cannot spam the network; seeks within the
+ * back buffer are then instant.
  */
 fun buildVideoPlayer(context: Context, url: String, autoPlay: Boolean = true): ExoPlayer =
     ExoPlayer.Builder(context.applicationContext)
@@ -60,6 +84,20 @@ fun buildVideoPlayer(context: Context, url: String, autoPlay: Boolean = true): E
             /* handleAudioFocus = */ true
         )
         .setHandleAudioBecomingNoisy(true)   // pause when headphones are unplugged
+        .setLoadControl(
+            androidx.media3.exoplayer.DefaultLoadControl.Builder()
+                .setBufferDurationsMs(
+                    MIN_BUFFER_MS,
+                    MAX_BUFFER_MS,
+                    BUFFER_FOR_PLAYBACK_MS,
+                    BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS
+                )
+                .setBackBuffer(BACK_BUFFER_MS, /* retainBackBufferFromKeyframe = */ true)
+                .setPrioritizeTimeOverSizeThresholds(true)
+                .build()
+        )
+        .setSeekBackIncrementMs(SEEK_INCREMENT_MS)
+        .setSeekForwardIncrementMs(SEEK_INCREMENT_MS)
         .build()
         .apply {
             repeatMode = Player.REPEAT_MODE_ONE
@@ -67,6 +105,18 @@ fun buildVideoPlayer(context: Context, url: String, autoPlay: Boolean = true): E
             prepare()
             playWhenReady = autoPlay
         }
+
+/** 15s minimum before playback starts — long enough to survive a slow start. */
+private const val MIN_BUFFER_MS = 15_000
+/** 90s ceiling so a fast link still starts quickly. */
+private const val MAX_BUFFER_MS = 90_000
+/** don't begin until this much is buffered (default is 2.5s — too eager for 弱网). */
+private const val BUFFER_FOR_PLAYBACK_MS = 5_000
+/** after a rebuffer, wait for more before resuming, so it does not stutter again. */
+private const val BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS = 15_000
+/** 2 minutes of rewindable history, served from memory. */
+private const val BACK_BUFFER_MS = 120_000
+private const val SEEK_INCREMENT_MS = 10_000L
 
 /**
  * Pause playback while the host lifecycle is not at least STARTED and resume
@@ -243,28 +293,40 @@ fun rememberIsPlaying(player: Player?): Boolean {
 @Composable
 fun rememberPlaybackError(player: Player?): PlaybackException? {
     var error by remember(player) { mutableStateOf<PlaybackException?>(null) }
-    var autoRetried by remember(player) { mutableStateOf(false) }
+    // Attempts spent on the CURRENT run of failures.
+    //
+    // This used to be a single immediate retry. On a weak link that is not enough:
+    // the player gives up again the instant the same stall recurs, so the user saw
+    // the error panel after one blip. It now retries up to [MAX_AUTO_RETRIES] times
+    // with an exponential backoff, which gives the network a chance to recover
+    // before anything is shown.
+    var attempts by remember(player) { androidx.compose.runtime.mutableIntStateOf(0) }
+    val retryScope = rememberCoroutineScope()
     DisposableEffect(player) {
         val p = player
         val listener = if (p == null) null else object : Player.Listener {
             override fun onPlayerError(e: PlaybackException) {
-                // Transient failures (a DNS blip, a 5xx from the CDN) are worth
-                // one silent retry; only surface the error if that also fails.
-                if (!autoRetried) {
-                    autoRetried = true
-                    retryPlayback(p)
+                if (attempts < MAX_AUTO_RETRIES) {
+                    attempts++
+                    // 1s, 2s, 4s … — still fast enough that a recovered link resumes
+                    // without the user noticing a stall.
+                    val waitMs = RETRY_BASE_MS shl (attempts - 1)
+                    retryScope.launch {
+                        delay(waitMs)
+                        retryPlayback(p)
+                    }
                 } else {
                     error = e
                 }
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
-                // a retry moves us back through BUFFERING -> clear the error
-                if (playbackState == Player.STATE_BUFFERING ||
-                    playbackState == Player.STATE_READY
-                ) {
+                // back to buffering/ready means the retry took: clear the panel and
+                // let the next failure start from a fresh budget
+                if (playbackState == Player.STATE_BUFFERING || playbackState == Player.STATE_READY) {
                     error = null
                 }
+                if (playbackState == Player.STATE_READY) attempts = 0
             }
         }
         if (p != null && listener != null) p.addListener(listener)
@@ -272,6 +334,10 @@ fun rememberPlaybackError(player: Player?): PlaybackException? {
     }
     return error
 }
+
+/** how many silent retries a failing stream gets before the error panel appears */
+private const val MAX_AUTO_RETRIES = 3
+private const val RETRY_BASE_MS = 1_000L
 
 /** Restart playback after a failure. */
 fun retryPlayback(player: Player?) {

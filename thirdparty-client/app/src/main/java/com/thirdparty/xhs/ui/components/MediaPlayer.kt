@@ -46,8 +46,6 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.filled.Forward5
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Replay5
 import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
@@ -185,19 +183,15 @@ private fun AutoHideController(
     // this the controls vanish immediately after a seek and the user never sees
     // where the video landed.
     var interaction by remember(player) { androidx.compose.runtime.mutableIntStateOf(0) }
-    // touch lock: while on, every gesture except the unlock button is ignored, so
-    // a stray palm cannot seek or pause the video
-    var locked by remember(player) { mutableStateOf(false) }
     // playback speed, cycled through SPEEDS by the speed button
     var speedIdx by remember(player) { androidx.compose.runtime.mutableIntStateOf(DEFAULT_SPEED_IDX) }
     // fine-seek step: ±5s by default, toggled to ±1s for frame-ish nudging
     var fineStep by remember(player) { mutableStateOf(false) }
-    // 更多菜单：微调步长、倍速、锁定都收在这里
+    // 更多菜单：微调步长、倍速都收在这里
     var menuOpen by remember(player) { mutableStateOf(false) }
 
-    // show everything the moment the user unlocks, and keep the speed applied
+    // keep the speed applied
     LaunchedEffect(speedIdx) { player.setPlaybackSpeed(SPEEDS[speedIdx]) }
-    LaunchedEffect(locked) { if (locked) visible = true }
 
     fun seekBy(deltaMs: Long) {
         val d = player.duration
@@ -229,8 +223,8 @@ private fun AutoHideController(
     // gesture) and NEVER while the overflow menu is open: hiding `visible`
     // removes the whole control block, DropdownMenu included, so the menu would
     // close itself out from under the user mid-choice.
-    LaunchedEffect(visible, playing, interaction, dragging, menuOpen, locked) {
-        if (visible && playing && !dragging && !menuOpen && !locked) {
+    LaunchedEffect(visible, playing, interaction, dragging, menuOpen) {
+        if (visible && playing && !dragging && !menuOpen) {
             delay(3000)
             visible = false
         }
@@ -250,17 +244,15 @@ private fun AutoHideController(
     }
 
     Box(
-        Modifier.fillMaxSize().pointerInput(locked) {
+        Modifier.fillMaxSize().pointerInput(Unit) {
             // pointerInput (not clickable) on purpose: no ripple, and it gives us
             // a double-tap for free. Ripples over video look like artifacts.
             detectTapGestures(
                 onTap = {
-                    if (locked) return@detectTapGestures
                     visible = !visible
                     if (visible) { scope.launch { delay(3000); visible = false } }
                 },
                 onDoubleTap = {
-                    if (locked) return@detectTapGestures
                     if (player.isPlaying) player.pause() else player.play()
                     visible = true
                     interaction++
@@ -269,26 +261,17 @@ private fun AutoHideController(
         }
     ) {
         // replay button when ended
-        if (ended && !locked) {
+        if (ended) {
             IconButton(onClick = { player.seekTo(0); player.play() },
                 modifier = Modifier.align(Alignment.Center)) {
                 Icon(Icons.Filled.Replay, "重播", tint = Scrim.onMedia)
             }
         }
-        // The lock button stays reachable whenever the lock is on — it is the only
-        // way out, so it must never auto-hide.
-        if (locked) {
-            Surface(
-                shape = CircleShape,
-                color = Scrim.strong,
-                modifier = Modifier.align(Alignment.CenterEnd).padding(Spacing.s)
-            ) {
-                IconButton(onClick = { locked = false; visible = true; interaction++ }) {
-                    Icon(Icons.Filled.LockOpen, "解除锁定", tint = Scrim.onMedia)
-                }
-            }
-        }
-        if (visible && !locked) {
+        // The touch-lock button used to live here (and in the overflow menu). It
+        // was removed: it sat in the middle of the left edge where it was easy to
+        // hit by accident, and a locked player with no visible way out reads as a
+        // frozen app.
+        if (visible) {
             // ── 顶栏: 退出全屏 + 标题 + 更多菜单 ──────────────────────────
             // Everything that is not an everyday action lives in the menu, so the
             // bars stay uncrowded instead of stacking eight controls in one row.
@@ -340,23 +323,7 @@ private fun AutoHideController(
                                 onClick = { speedIdx = i; menuOpen = false; interaction++ }
                             )
                         }
-                        HorizontalDivider()
-                        DropdownMenuItem(
-                            text = { Text("锁定屏幕") },
-                            onClick = { menuOpen = false; locked = true }
-                        )
                     }
-                }
-            }
-
-            // ── 侧边按钮: 锁定（左缘中部，拇指够得到）────────────────────
-            Surface(
-                shape = CircleShape,
-                color = Scrim.strong,
-                modifier = Modifier.align(Alignment.CenterStart).padding(Spacing.xs)
-            ) {
-                IconButton(onClick = { locked = true; interaction++ }) {
-                    Icon(Icons.Filled.Lock, "锁定", tint = Scrim.onMedia)
                 }
             }
 

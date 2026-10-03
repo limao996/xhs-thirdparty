@@ -120,8 +120,18 @@ fun ProfileScreen(
             .verticalScroll(rememberScrollState())
             .padding(bottom = bottomNavClearance())
     ) {
-        // account header
-        Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
+        // Account header, as its own contained card.
+        //
+        // It used to be a full-bleed colour band while every row below it was a
+        // rounded card on that band, so the most important block on the page was
+        // the one that did not follow the page's own pattern.
+        Surface(
+            shape = Corners.extraLarge,
+            color = MaterialTheme.colorScheme.surfaceContainerLowest,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.m, vertical = Spacing.m)
+        ) {
             Column(Modifier.fillMaxWidth().padding(Spacing.l)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     XhsAvatar(
