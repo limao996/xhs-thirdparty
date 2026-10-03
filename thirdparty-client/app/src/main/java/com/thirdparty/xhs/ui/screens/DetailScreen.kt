@@ -244,13 +244,27 @@ fun DetailScreen(
                     // by tapping that same video there. Consumed once — a later open
                     // of this note (deep link, saved list) must start at the start.
                     val handoff = com.thirdparty.xhs.ui.components.PlaybackHandoff.take(item.noteId)
-                    if (handoff != null) {
-                        if (handoff.positionMs > 0L) sharedPlayer.seekTo(handoff.positionMs)
-                        // only resume if it was actually playing; a paused feed must
-                        // not start talking on its own
-                        if (handoff.playing) sharedPlayer.play()
-                    } else if (resumeMs > 0L) {
-                        sharedPlayer.seekTo(resumeMs)
+                    val target = handoff?.positionMs?.takeIf { it > 0L } ?: resumeMs
+                    if (handoff?.playing == true) sharedPlayer.play()
+
+                    if (target > 0L) {
+                        // Seek immediately, so a player that is already prepared moves
+                        // at once with no extra frame of the opening seconds...
+                        runCatching { sharedPlayer.seekTo(target) }
+                        // ...and again once the media is ready. This is a second
+                        // player built from scratch, and on an HLS stream a seek
+                        // issued before the playlist has settled can be clamped or
+                        // dropped — which showed up as the detail page starting from
+                        // zero even though the position had been handed over.
+                        var applied = false
+                        sharedPlayer.addListener(object : androidx.media3.common.Player.Listener {
+                            override fun onPlaybackStateChanged(state: Int) {
+                                if (state == androidx.media3.common.Player.STATE_READY && !applied) {
+                                    applied = true
+                                    runCatching { sharedPlayer.seekTo(target) }
+                                }
+                            }
+                        })
                     }
                 }
                 LaunchedEffect(sharedPlayer) {

@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -89,6 +90,17 @@ fun SearchScreen(
                         onActiveChange = {},
                         placeholder = { Text("搜索短视频 / 笔记 / 作者") },
                         leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "搜索") },
+                        // Clear action, only while there is something to clear. The
+                        // bar has no other way to empty the field — the keyboard's
+                        // backspace is the only alternative, and that means deleting
+                        // the text character by character.
+                        trailingIcon = {
+                            if (state.query.isNotEmpty()) {
+                                IconButton(onClick = { viewModel.onQueryChange("") }) {
+                                    Icon(Icons.Filled.Close, contentDescription = "清除")
+                                }
+                            }
+                        },
                         modifier = Modifier.weight(1f).padding(end = 8.dp)
                     ) { }
                 }

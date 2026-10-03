@@ -172,14 +172,20 @@ val XhsTypography = Typography().let { base ->
 }
 
 /**
- * Launch-window backgrounds. Must stay in sync with [LightColors.background] and
- * [DarkColors.background]; the Activity paints the window with these before
- * Compose draws, so a mismatch shows up as a colour flash on cold start.
+ * Launch-window background.
+ *
+ * **Black, not the theme background.** The app opens on the 推荐 feed, which is a
+ * full-screen video surface that paints black immediately. Painting the window with
+ * the light theme colour (or the purple-tinted dark one) meant every cold start
+ * showed that colour for a frame or two before the feed covered it — the
+ * "每次进入软件都得闪那么几下".
+ *
+ * The window is only visible before Compose draws its first frame and behind
+ * navigation transitions, and the screen coming up on cold start is always the
+ * feed, so black is the colour that cannot flash there. Screens with a light
+ * background are reached through a transition, which covers the change.
  */
-object XhsWindowColors {
-    const val LIGHT = 0xFFFFF8F8.toInt()
-    const val DARK = 0xFF1B1114.toInt()
-}
+const val XhsWindowBackground = 0xFF000000.toInt()
 
 /** Resolve a [ThemeMode] against the current system setting. */
 fun ThemeMode.isDark(systemDark: Boolean): Boolean = when (this) {

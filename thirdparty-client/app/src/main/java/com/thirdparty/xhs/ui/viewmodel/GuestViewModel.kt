@@ -25,8 +25,26 @@ import kotlinx.coroutines.flow.collectLatest
  */
 class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
     private companion object {
-        /** how often the VIP validity is re-checked while 自动切换 is on */
-        const val VIP_POLL_MS = 30_000L
+        /**
+         * How often the VIP validity is re-checked while 自动切换 is on.
+         *
+         * 5s — down from 30s — so an expiring window is caught promptly instead of
+         * up to half a minute late.
+         *
+         * This is only safe because the check is **free in the common case**: it
+         * decides from the cached expiry window first and returns without a request
+         * while that window still has time left (see `XhsRepository.switchToVipAccount`).
+         * A shorter interval therefore costs a cheap local read per tick, not a
+         * network round trip. The expensive path — the one that costs ~4s against
+         * the server — is still gated by that cache plus the escalating cooldown,
+         * and it still creates exactly one identity per attempt and records it
+         * immediately.
+         *
+         * That is what went wrong the first time this was set to 5s: it was an
+         * uncompensated loop that hit the server every tick, so it really ran every
+         * ~9s and piled up work. The loop is time-compensated and cache-gated now.
+         */
+        const val VIP_POLL_MS = 5_000L
     }
 
     private val _accountLabel = MutableStateFlow("游客ID：加载中…")

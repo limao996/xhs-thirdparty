@@ -18,8 +18,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.rememberNavController
 import com.thirdparty.xhs.navigation.AppNavHost
+import com.thirdparty.xhs.ui.theme.XhsWindowBackground
 import com.thirdparty.xhs.ui.theme.XhsTheme
-import com.thirdparty.xhs.ui.theme.XhsWindowColors
 import com.thirdparty.xhs.ui.theme.isDark
 
 /**
@@ -159,26 +159,17 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
         enableEdgeToEdge()
         // Paint the launch window with the colour the user will actually land on,
         // so an in-app 深色/浅色 override does not flash the system default.
-        val systemDark = (resources.configuration.uiMode and
-            android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
-            android.content.res.Configuration.UI_MODE_NIGHT_YES
-        val dark = App.INSTANCE.themeState.value.isDark(systemDark)
+        // Black regardless of theme: the app opens on the black 推荐 feed, so the
+        // window colour must be black before Compose draws or every cold start
+        // flashes the theme colour first. See XhsWindowBackground.
         window.setBackgroundDrawable(
-            android.graphics.drawable.ColorDrawable(
-                if (dark) XhsWindowColors.DARK else XhsWindowColors.LIGHT
-            )
+            android.graphics.drawable.ColorDrawable(XhsWindowBackground)
         )
         setContent {
             val themeMode by App.INSTANCE.themeState.collectAsState()
-            // keep the window background in step when the user switches theme
-            val dark = themeMode.isDark(androidx.compose.foundation.isSystemInDarkTheme())
-            androidx.compose.runtime.SideEffect {
-                window.setBackgroundDrawable(
-                    android.graphics.drawable.ColorDrawable(
-                        if (dark) XhsWindowColors.DARK else XhsWindowColors.LIGHT
-                    )
-                )
-            }
+            // The window stays black as the theme changes — it is only ever visible
+            // behind the feed, so it must not follow the theme (see
+            // XhsWindowBackground).
             XhsTheme(mode = themeMode) {
                 Surface(Modifier.fillMaxSize()) {
                     val navController = rememberNavController()

@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -158,9 +159,21 @@ private fun FeedTab(
     onOpenDetail: (Long) -> Unit
 ) {
     val clear = com.thirdparty.xhs.ui.theme.bottomNavClearance()
+    // Category row: kept here so a tap can bring the chosen chip to the middle of
+    // the viewport. Selecting a category by tapping a chip is exactly when the row
+    // should follow the choice — otherwise the chip the user just picked can sit
+    // half off the edge, or the label they need next is out of view.
+    val categoryRowState = androidx.compose.foundation.lazy.rememberLazyListState()
+    LaunchedEffect(state.selectedCategory) {
+        val index = state.categories.indexOfFirst { it.id == state.selectedCategory }
+        if (index >= 0) {
+            categoryRowState.animateScrollToItemCentered(index)
+        }
+    }
     Column(Modifier.fillMaxSize()) {
         // category chips (horizontal)
         LazyRow(
+            state = categoryRowState,
             contentPadding = androidx.compose.foundation.layout.PaddingValues(
                 horizontal = Spacing.m, vertical = Spacing.xs
             ),
@@ -433,4 +446,26 @@ private fun FollowedMineTab(
             }
         }
     }
+}
+
+/**
+ * Scrolls [index] to the middle of the viewport.
+ *
+ * `animateScrollToItem` can only align an item to the start, and its `scrollOffset`
+ * parameter needs the item's width — which varies here, because the chips are sized
+ * by their labels. So: bring it into view first, read its measured geometry from
+ * the layout info, then correct by the difference between its centre and the
+ * viewport centre.
+ *
+ * Leaves it where the first scroll put it when it cannot be measured yet (not
+ * composed), rather than guessing an offset.
+ */
+private suspend fun androidx.compose.foundation.lazy.LazyListState.animateScrollToItemCentered(
+    index: Int
+) {
+    animateScrollToItem(index)
+    val info = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index } ?: return
+    val viewport = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
+    val delta = (info.offset + info.size / 2) - viewport / 2
+    if (delta != 0) animateScrollBy(delta.toFloat())
 }
