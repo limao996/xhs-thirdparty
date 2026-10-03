@@ -47,6 +47,5 @@
                 <data android:scheme="xhstp" android:host="note" />
             </intent-filter>
         </activity>
-
     </application>
 </manifest>
