@@ -573,7 +573,13 @@ private fun AutoHideController(
                         dragging = false
                         interaction++
                     },
-                    playedColor = MaterialTheme.colorScheme.primary
+                    playedColor = MaterialTheme.colorScheme.primary,
+                    // The official Slider insets its own track by only a few dp, which
+                    // at full screen left the progress bar looking pinned to the screen
+                    // edges — reported as "进度条缺少水平边距". Give it the app's page
+                    // margin; the bar's ends then line up with the transport buttons
+                    // below it, whose icons already sit ~16dp in.
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.m)
                 )
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = if (dense) 2.dp else Spacing.xs),
