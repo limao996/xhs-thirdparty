@@ -1,104 +1,60 @@
-# 小黄书
+# 小黄书 第三方客户端
 
-**小黄书（老司机软件）的第三方 Android 客户端。装上就能看 —— 不用注册、不用登录、不用充值。**
+「小黄书」（老司机软件）的第三方 Android 客户端，Kotlin + Jetpack Compose 编写。装好打开就能看，不需要注册、不需要登录：客户端在本地生成一个游客身份去读接口，推荐视频流、发现的图文瀑布流、搜索、作者主页都能用，收藏和浏览记录存在手机本地，也可以备份出去。
+
+这个仓库只有客户端源码和文档，不含任何内容数据，也不提供任何服务器。
 
 ![Android](https://img.shields.io/badge/Android-7.0%2B-3DDC84?logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.1.21-7F52FF?logo=kotlin&logoColor=white)
-![Compose](https://img.shields.io/badge/Jetpack%20Compose-2026.02.01-4285F4?logo=jetpackcompose&logoColor=white)
 ![Material 3](https://img.shields.io/badge/Material%203-Expressive-6750A4)
 ![License](https://img.shields.io/badge/License-MIT-FFC73D)
 [![Release](https://img.shields.io/github/v/release/limao996/xhs-thirdparty?label=release&color=success)](https://github.com/limao996/xhs-thirdparty/releases/latest)
-[![Android CI](https://github.com/limao996/xhs-thirdparty/actions/workflows/android.yml/badge.svg)](https://github.com/limao996/xhs-thirdparty/actions/workflows/android.yml)
 
----
+## 功能
 
-## ⭐ VIP 是怎么一直续下去的
+底部三个标签页：推荐、发现、我的。
 
-先说重点：**这个客户端能看 VIP 内容，靠的不是改包骗过校验，而是不停换新的游客账号。**
+**推荐** —— 全屏视频流，上下滑动切换，单击显隐信息栏、双击播放 / 暂停。视频在列表与详情页之间交接播放，进详情不会从头开始。点信息栏进作品详情。
 
-服务端会给每一个新注册的游客账号发一段 VIP 体验时间。客户端就在当前账号快到期的时候，用一个全新的随机设备身份注册一个新游客号接着看——新号又自带 VIP。于是「会员到期」这件事，在这台手机上基本不会发生。
+**发现** —— 顶部横滑切换分类，下面是瀑布流，封面按原始比例排，不裁剪不拉伸。点封面进详情，点作者进作者页。
 
-```
-        当前账号的 VIP 剩不到 60 秒
-                   │
-                   ▼
-   生成一个全新的随机设备身份
-   （MAC / IMEI / android_id 四种形式随机挑一个）
-                   │
-                   ▼
-   先请求 v2/app/init 注册这个身份 ← 这一步才是「建号」
-                   │                漏了它，新身份永远建不出账号
-                   ▼
-   v2/user/login-with-guest 领到新号的 user_token
-                   │
-                   ▼
-   v2/mine/user-info 确认新号确实带 VIP
-                   │
-        ┌──────────┴──────────┐
-     有 VIP                没有 VIP
-     接着看                 留着用，60 秒起指数退避，
-                          等下一轮再换（最多 30 分钟一次）
-```
+**我的** —— 游客账号信息与 VIP 状态，关注 / 粉丝 / 作品三个数字都可以点进去；我的收藏、最近浏览、我关注的作者、切换游客账号、清除图片缓存、设置。
 
-几个你会在意的问题，直接答了：
+页面还有：
 
-- **什么时候换？** 在你点开下一个作品的那个请求之前就换好了，所以你不会卡在付费墙或者「加载失败」上，界面上最多是「游客ID」闪一下。
-- **要不要手动管？** 不用。默认开着自动切换；设置里可以关（「VIP 到期自动切换」），「我的」页也有「切换游客账号」按钮，想立刻换一个就点它。
-- **会不会把我真实账号搞出问题？** 不会。客户端从头到尾只用一次性游客身份，不读也不存你自己的账号密码；换号只换本地那串随机身份。
-- **会不会把号刷爆？** 不会。一次尝试只建一个新身份，失败后等待时间翻倍（60s → 2m → 4m …，上限 30 分钟），后端不再发 VIP 时会自己踩刹车。
+- **作品详情**：图文作品支持多图查看与全屏放大（看图时音量键翻页）；视频作品内嵌播放器，可全屏。
+- **评论区**：一级评论列表，嵌套回复用对话框查看。
+- **作者页**：作品 / 关注 / 粉丝三个 tab，可关注与取消关注。
+- **搜索**：作品和作者两个结果通道，带搜索历史。
+- **备份与恢复**：导出成本地文件，或备份到自己的 WebDAV（服务器上固定放在 `xhs/` 子目录），恢复时可选择合并或覆盖。备份内容包含收藏、浏览记录、关注列表，不包含账号。
+- **设置**：外观主题、指纹解锁、最近浏览上限、VIP 到期自动切换、备份入口、关于。
+- **关于**：版本号与 build 号、包名、客户端协议版本、GitHub 仓库与许可；「检查更新」会查 GitHub 上的最新发布版本，有新版给出下载页与更新说明。
 
-> 说白了，这是把「新用户福利」自动化地薅下来，而不是绕过付费校验——差别在 [docs/PROTOCOL.md](docs/PROTOCOL.md) 里说得很清楚。
+其他：收藏与浏览记录可以一键清空（会先弹确认）；最近浏览默认保留 2000 条，可在设置里改成 500 / 1000 / 2000 / 5000 / 10000 条，超出后自动清理最旧的；已看过并缓存下来的内容断网也能翻；深链 `xhstp://note/<id>` 能直接打开对应作品。
 
----
+只做「看」和「存」，不做发评论、点赞、批量下载，也不读写你自己的账号。
 
-## 打开它能看到什么
+## 关于游客身份
 
-底部三个标签页：**推荐**、**发现**、**我的**。
+接口需要 `User-Id` 请求头，所以客户端会自己在本地生成一个随机身份（设备 MAC / IMEI / android_id 四种形式里随机一种），先请求 `v2/app/init` 注册，再用 `v2/user/login-with-guest` 换成 `user_token`。注册这一步才会真正建号，少了它新身份是无效的。
 
-- **推荐** —— 全屏短视频流。上下滑切换，视频提前预加载，滑到哪就播到哪，不黑屏。点标题进详情；单击屏幕收起标题栏和底栏，双击暂停。
-- **发现** —— 顶部分类横滑切换，下面是瀑布流，封面按原图比例排，不会被拉长压扁。
-- **我的** —— 账号卡片（关注 / 粉丝 / 作品三个数字都能点进去）、VIP 状态、收藏、最近浏览、备份、设置。
+服务端会给新注册的游客账号发一段 VIP 体验时间。客户端在当前账号快到期时换一个新的随机身份继续，所以 VIP 内容可以一直看下去；「我的」页面里的「切换游客账号」就是手动立即换一个。自动切换默认开启，可以在设置里关掉。换号只换本地那串随机身份，失败会退避重试（60 秒起翻倍，上限 30 分钟）。
 
-再往下钻：**作品详情页**（图文多图可全屏放大、视频内嵌播放器可全屏可续播）、**评论区**（一级评论 + 对话框看完整嵌套回复）、**作者主页**（作品 / 关注 / 粉丝三个 tab）、**搜索**（作品和作者两个通道，带历史记录）。
+接口清单、加密参数与身份格式见 [docs/PROTOCOL.md](docs/PROTOCOL.md)，实现细节见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
-界面是 Material 3 Expressive：深紫配金色的品牌配色，跟着系统深浅色走，Android 12 以上还能从壁纸取色。
+## 安装
 
-## 除了看，它还能
+要求 Android 7.0（API 24）及以上。
 
-**存下来**
+在 [Releases](https://github.com/limao996/xhs-thirdparty/releases/latest) 下载最新的 `xhs-thirdparty-x.y.z-release.apk`（约 3.1 MB），传到手机安装，首次需要允许「安装未知来源应用」。发布页里写了每个包的 md5 / sha256，可以核对。
 
-- 收藏、最近浏览（条数上限在设置里改，默认 2000 条），支持一键清空并二次确认
-- 断网也能翻已经缓存过的内容
-- 备份 / 恢复：导出成本地文件，或者丢到自己的 WebDAV（服务器上固定放在 `xhs/` 子目录，好找）
+安装包用的是仓库里的自签名密钥（[keystore/release.jks](keystore/)，口令写在 [docs/BUILD.md](docs/BUILD.md)），所以只能这样侧载，不能上架应用商店。
 
-**用起来顺手**
+调试包和正式包可以同时安装，桌面上分别叫「小黄书.debug」和「小黄书」，包名分别是 `com.thirdparty.xhs.debug` 和 `com.thirdparty.xhs`，数据互不影响。
 
-- 两种播放器随处续播：详情页全屏看视频，退出后回到瀑布流接着播
-- 音量键翻页、后台是否继续播、缓冲提示，都在设置里
-- 深链 `xhstp://note/<id>`：别人发来的口令，点一下直接打开那个作品
+## 自己编译
 
-**知道自己装的是哪一版**
-
-- 设置 → 关于：版本号与 build 号、包名、客户端协议版本、GitHub 仓库入口、许可
-- 检查更新：直接去 GitHub Releases 拿最新版本号，有新版就给出「打开下载页」和更新说明；**没有正式版、被 GitHub 限流、断网，都会如实告诉你**，不会假装「已是最新」
-
-**别被人看见**
-
-- 应用锁：指纹 / 人脸解锁才能进，防止别人拿你手机乱翻
-
-**不做的事**：不写评论、不点赞、不批量下载、不动你自己的真实账号。
-
-## 装上它
-
-要求 **Android 7.0（API 24）** 及以上。两种装法，挑一个。
-
-**一、直接下安装包**（只想用，不想编）
-
-去 [Releases](https://github.com/limao996/xhs-thirdparty/releases/latest) 下载最新的 `xhs-thirdparty-x.y.z-release.apk`，传到手机点安装。首次安装要允许「安装未知来源应用」。想核对文件，页面上有 md5 / sha256。
-
-本应用是自签名的（密钥就在仓库里，见 [docs/BUILD.md](docs/BUILD.md)），所以**不能上架应用商店**，只能这样侧载。
-
-**二、自己编**（想改代码）
+需要 JDK 17 和 Android SDK（`compileSdk 37`）。
 
 ```bash
 git clone https://github.com/limao996/xhs-thirdparty.git
@@ -108,64 +64,37 @@ cp local.properties.example local.properties   # 把 sdk.dir 改成你的 Androi
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-装完桌面上叫「小黄书」，打开就能用，第一次启动要联网（去建那个游客账号）。
+`assembleRelease` 会产出签名好的正式包；签名配置、依赖版本与常见构建问题在 [docs/BUILD.md](docs/BUILD.md)。
 
-调试包叫「小黄书.debug」，包名带 `.debug` 后缀，**能和正式包一起装着**，两边数据互不影响——故意的，方便一边用一边改。
+第一次启动需要联网，客户端要在那时建游客账号。
 
-## 常见问题
-
-**一直转圈、什么都刷不出来？**
-多半是网络。这个域名在部分网络环境会被 DNS 污染（解析到 `199.59.148.89`），换个网络通常就好。别急着怀疑程序。
-
-**一打开就弹出「检测到分享内容」挡住界面？**
-你的剪贴板里有分享口令，应用在问你要不要跳过去。点「取消」就行。
-
-**我的数据在哪？**
-全在手机里：收藏、浏览记录、关注列表存在应用私有目录的 `xhs_local.db`。备份文件放在你自己指定的位置，走 WebDAV 时传的也是你自己的服务器。**换手机或重装前记得先备份。**
-
-**为什么没有发评论、点赞？**
-只做「看」和「存」。写操作一旦自动化，麻烦会落到账号上，不值当。
-
-**会员到期提示会出现吗？**
-正常不会——到期前已经换好新号了。如果后端某天不再给新号发 VIP，它会静默地按退避节奏重试，界面照旧能用。
-
-**能拿去上架吗？**
-不能。仓库里的密钥是自签名的，任何人都能伪造同样签名的包；这份工程是给你自己编、自己用的。
-
-## 想自己动手改
-
-两条底线先说清楚，细节在 [AGENTS.md](AGENTS.md)：**别动签名密钥**（换了老用户就覆盖升级不了）、**别动几个钉死的依赖版本**（material3 必须是 `1.5.0-alpha29`，Expressive 那套主题 API 只在 alpha 线公开；`fragment-ktx` 不能低于 1.8.9）。
-
-技术栈：Kotlin 2.1.21 + Jetpack Compose（BOM 2026.02.01，**没有一行 XML 布局**）+ M3 Expressive、Room 2.8.5、OkHttp 5.1.0 + AES/CBC 全量加密包体、media3 ExoPlayer/HLS、androidx.biometric。构建用 AGP 9.4.1 / Gradle 9.8.0 / KSP，JDK 17。
-
-仓库结构：
+## 项目结构
 
 ```
 xhs-thirdparty/
-├── app/        唯一模块（Java 源码全在 app/src/main/java/com/thirdparty/xhs/）
-├── docs/       架构、协议、构建、验证、更新日志
-├── keystore/   自签名发布密钥
-├── tools/      本机用的验证与资源脚本
-└── .github/ · .cursor/   CI、Issue/PR 模板、编辑器规则
+├── app/          唯一的 Gradle 模块，源码在 app/src/main/java/com/thirdparty/xhs/
+├── docs/         架构、协议、构建、验证、更新日志
+├── keystore/     自签名发布密钥
+├── tools/        本机用的设备验证与图标脚本
+└── .github/      CI 与 Issue / PR 模板
 ```
 
-提交前请确认能编过（`./gradlew assembleDebug`），改界面请附实机截图或 UI 文本，不要只说「更好看了」。APK、截图、反编译产物和 `local.properties` 都不用提交，`.gitignore` 已经挡住。
+技术栈：Kotlin 2.1.21、Jetpack Compose（BOM 2026.02.01，无 XML 布局）、Material 3 Expressive（material3 固定在 `1.5.0-alpha29`）、Room 2.8.5、OkHttp 5.1.0（请求体 AES/CBC 加密）、media3 ExoPlayer + HLS、androidx.biometric。构建：AGP 9.4.1 / Gradle 9.8.0 / KSP。
 
-## 更多文档
+## 文档
 
-| 文档 | 看它做什么 |
+| 文档 | 内容 |
 | --- | --- |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 分层、代码地图、账号轮换与数据流 |
-| [docs/PROTOCOL.md](docs/PROTOCOL.md) | 请求格式、加密参数、接口清单、游客账号机制 |
-| [docs/BUILD.md](docs/BUILD.md) | 环境要求、构建命令、签名、依赖矩阵、排查 |
-| [docs/VERIFY.md](docs/VERIFY.md) | 怎么在真机上证明改动真的生效 |
-| [docs/CHANGELOG.md](docs/CHANGELOG.md) | 按开发阶段整理的变更记录 |
-| [AGENTS.md](AGENTS.md) | 给 AI 编码工具（Copilot / Cursor / Claude Code）的规则与仓库地图 |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 分层、代码地图、数据流、导航与主题 |
+| [docs/PROTOCOL.md](docs/PROTOCOL.md) | 请求格式、加密参数、接口清单、游客身份 |
+| [docs/BUILD.md](docs/BUILD.md) | 环境要求、构建与签名、依赖矩阵、排查 |
+| [docs/VERIFY.md](docs/VERIFY.md) | 在真机 / 模拟器上验证改动的方法 |
+| [docs/CHANGELOG.md](docs/CHANGELOG.md) | 变更记录 |
+| [AGENTS.md](AGENTS.md) | 给 AI 编码工具的规则、仓库地图与踩坑清单 |
 
-## 免责声明
+## 说明
 
-- 本项目是**第三方**客户端，与「小黄书」运营方没有任何关系，也未获授权或认可。
-- 仓库里只有源码与文档：没有内容数据、没有官方安装包、没有反编译产物。
-- 它不提供内容，也不破解付费校验；它做的是**自动注册一次性游客身份**，去领取服务端发给新游客的体验权限。使用者需自行承担由此产生的一切后果。
-- 「小黄书」及相关名称、图标风格与内容版权归各自权利人所有。权利人如认为不妥，请提 Issue，仓库会立即下架。
-- 代码以 [MIT](LICENSE) 发布；第三方依赖各自遵循其原始许可。
+- 本项目是第三方客户端，与「小黄书」运营方没有关联，也未获其授权或认可。
+- 它不提供内容。它的机制是自动注册一次性游客身份，去领取服务端发给新游客的体验权限，而不是破解付费校验。使用者自行承担使用后果。
+- 「小黄书」及相关名称、图标与内容版权归各自权利人所有；权利人如认为不妥，提 Issue，仓库会立即下架。
+- 代码以 [MIT](LICENSE) 许可发布，第三方依赖各自遵循其原始许可。
