@@ -18,10 +18,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.SwitchAccount
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LoadingIndicator
@@ -59,6 +61,7 @@ import com.thirdparty.xhs.ui.theme.bottomNavClearance
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material3.Switch
 import androidx.compose.ui.draw.clip
+import com.thirdparty.xhs.BuildConfig
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Settings
@@ -92,6 +95,9 @@ fun ProfileScreen(
     onSetHistoryLimit: ((Int) -> Unit)? = null,
     /** 设置 entry */
     onOpenSettings: (() -> Unit)? = null,
+    /** 关于 / 检查更新：两个各自独立的页面，入口在这里（不在设置里） */
+    onOpenAbout: (() -> Unit)? = null,
+    onOpenUpdate: (() -> Unit)? = null,
     rotating: Boolean = false,
     /** changes whenever the guest account changes, forcing a profile reload */
     reloadKey: Any? = Unit,
@@ -252,6 +258,20 @@ fun ProfileScreen(
                 Icons.Filled.Settings, "设置",
                 "外观 / 指纹解锁 / 最近浏览上限 / 备份",
                 onOpenSettings
+            )
+        }
+        if (onOpenAbout != null) {
+            ProfileEntry(
+                Icons.Filled.Info, "关于小黄书",
+                "版本 v${BuildConfig.VERSION_NAME} · 许可与免责声明",
+                onOpenAbout
+            )
+        }
+        if (onOpenUpdate != null) {
+            ProfileEntry(
+                Icons.Filled.Autorenew, "检查更新",
+                "到 GitHub Releases 看有没有新版本",
+                onOpenUpdate
             )
         }
         // image cache management (the disk cache can hold up to 64MB)

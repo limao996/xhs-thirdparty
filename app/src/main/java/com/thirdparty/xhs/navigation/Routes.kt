@@ -20,12 +20,13 @@ object Routes {
     const val BACKUP = "backup"
     /** 设置 */
     const val SETTINGS = "settings"
-    /** 关于与检查更新；autoCheck=true 时进页面立刻查一次（设置页的「检查更新」入口） */
-    const val ABOUT = "about?autoCheck={autoCheck}"
+    /** 关于：版本 / 包名 / 协议 / 仓库 / 许可。入口在「我的」页。 */
+    const val ABOUT = "about"
+    /** 检查更新：独立页面，只查 GitHub Releases。入口在「我的」页。 */
+    const val UPDATE = "update"
 
     fun detail(noteId: Long): String = "detail/$noteId"
     fun author(userId: Int): String = "author/$userId"
-    fun about(autoCheck: Boolean = false): String = "about?autoCheck=$autoCheck"
 }
 
 /** Bottom navigation destinations hosted inside the home shell. */

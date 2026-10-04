@@ -75,6 +75,9 @@ fun HomeScreen(
     onOpenMyNotes: (Int) -> Unit,
     onOpenBackup: () -> Unit,
     onOpenSettings: () -> Unit,
+    /** 关于 / 检查更新：入口在「我的」页，各是一个独立页面 */
+    onOpenAbout: () -> Unit,
+    onOpenUpdate: () -> Unit,
     onSetBiometricLock: ((Boolean) -> Unit)? = null,
     onSetHistoryLimit: ((Int) -> Unit)? = null,
     guestViewModel: GuestViewModel = viewModel(factory = RepoViewModelFactory())
@@ -181,6 +184,8 @@ fun HomeScreen(
                             onOpenFans = onOpenFans,
                             onOpenMyNotes = { uid -> onOpenMyNotes(uid) },
                             onOpenSettings = onOpenSettings,
+                            onOpenAbout = onOpenAbout,
+                            onOpenUpdate = onOpenUpdate,
                             biometricLock = App.INSTANCE.repository.biometricLock,
                             biometricAvailable = androidx.biometric.BiometricManager.from(context).canAuthenticate(androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK or androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL) == androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS,
                             onSetBiometricLock = onSetBiometricLock,

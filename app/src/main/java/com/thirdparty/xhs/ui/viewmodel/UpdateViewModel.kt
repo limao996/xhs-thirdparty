@@ -11,36 +11,35 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * 「关于」页的状态：版本信息 + 一次的更新检查结果。
+ * 「检查更新」页的状态。
  *
- * 检查是用户手动触发的（进页面时若从设置页的「检查更新」进来会立刻跑一次），
- * 不做后台轮询 —— 应用只在用户点的时候访问 github.com。
+ * 这是独立的页面（路由 `update`）：进页面自动查一次，之后由用户点「重新检查」。
+ * 没有任何后台轮询 —— 应用只在用户进这个页面的时候访问 github.com。
  */
-data class AboutUiState(
+data class UpdateUiState(
     val versionName: String = BuildConfig.VERSION_NAME,
     val versionCode: Int = BuildConfig.VERSION_CODE,
-    val clientVersion: String = BuildConfig.CLIENT_VERSION,
-    val clientChannel: String = BuildConfig.CLIENT_CHANNEL,
     val checking: Boolean = false,
     val result: UpdateChecker.Result? = null,
     val checkedAt: Long = 0L
 )
 
-class AboutViewModel : ViewModel() {
+class UpdateViewModel : ViewModel() {
 
-    private val _ui = MutableStateFlow(AboutUiState())
-    val ui: StateFlow<AboutUiState> = _ui.asStateFlow()
+    private val _ui = MutableStateFlow(UpdateUiState())
+    val ui: StateFlow<UpdateUiState> = _ui.asStateFlow()
 
     private var entered = false
 
-    /** 每次进入页面调用一次；[autoCheck] 为真时立刻查（设置页的「检查更新」入口）。 */
-    fun onEnter(autoCheck: Boolean) {
+    /** 每次进入页面调用一次；本页面的存在意义就是检查，所以直接查。 */
+    fun onEnter() {
         if (entered) return
         entered = true
-        if (autoCheck) check()
+        check()
     }
 
     fun check() {
+        // 正在查就忽略重复点击：OkHttp 那边一次请求要几百毫秒到十几秒
         if (_ui.value.checking) return
         _ui.update { it.copy(checking = true, result = null) }
         viewModelScope.launch {
