@@ -8,6 +8,26 @@ plugins {
     id 'com.google.devtools.ksp'
 }
 
+// ---- 版本 ----------------------------------------------------------------
+//
+// 三件事分开看（以前都写 2.6.0 只是顺手对齐，并不是"必须"）：
+//
+//   versionName    —— 给人看的（安装界面 / 应用信息）。就是 `1.1.0` 这种形式，
+//                     **手工按需推进**（功能批次变了再改），不再跟后端版本缠在一起。
+//   versionCode    —— Android 用来判断"能不能覆盖安装"的整数，**必须是 32 位有符号整数**
+//                     （上限 2147483647）。所以「年(2位)月日时分秒」这种 12 位时间戳
+//                     放不下（261004124530 ≈ 2.6e11），连 10 位的 2610041245 也超了
+//                     （2.6e9 > 2.1e9）—— 时间戳没法直接当版本号。
+//                     这里用「**2026-10-01 00:00:00 起的秒数**」：时间驱动、单调递增、
+//                     每次构建都不同，而且装得下（现在约 2.6e5；32 位能用约 68 年）。
+//   CLIENT_VERSION —— 发请求时带的 `Client-Version` 头（见 net/XhsApi），后端按它决定
+//                     行为，**必须保持 2.6.0**，与服务端对齐的是它、不是 App 版本。
+def appVersionName = '1.1.0'
+def versionEpochSeconds = java.time.LocalDateTime.of(2026, 10, 1, 0, 0, 0)
+    .atZone(java.time.ZoneId.systemDefault())
+    .toEpochSecond()
+def appVersionCode = (int) (System.currentTimeMillis() / 1000L - versionEpochSeconds)
+
 android {
     namespace 'com.thirdparty.xhs'
     compileSdk 37
@@ -16,8 +36,8 @@ android {
         applicationId "com.thirdparty.xhs"
         minSdk 24
         targetSdk 37
-        versionCode 1
-        versionName "2.6.0"
+        versionCode appVersionCode
+        versionName appVersionName
         // mirror the examined app's client identity so the backend accepts us
         buildConfigField "String", "CLIENT_CHANNEL", "\"1333\""
         buildConfigField "String", "CLIENT_VERSION", "\"2.6.0\""
