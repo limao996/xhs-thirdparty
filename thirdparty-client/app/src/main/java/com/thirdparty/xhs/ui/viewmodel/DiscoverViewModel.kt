@@ -115,6 +115,11 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
         viewModelScope.launch {
             val result = runCatching { repo.discoverPage(categoryId = catId, groupId = 0, page = feedPage + 1) }
             val list = result.getOrNull()
+            // The user may have moved to another category while this was in flight (the
+            // waterfall is a pager now, so swiping makes that easy). Merging the old
+            // category's page into the new one would mix them, so drop it — and leave
+            // `feedLoading` to whoever started the newer load.
+            if (_ui.value.selectedCategory != catId) return@launch
             if (list != null) {
                 feedPage++
                 _ui.update { s ->

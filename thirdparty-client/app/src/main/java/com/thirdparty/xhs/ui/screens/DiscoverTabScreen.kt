@@ -169,11 +169,49 @@ private fun FeedTab(
     // should follow the choice — otherwise the chip the user just picked can sit
     // half off the edge, or the label they need next is out of view.
     val categoryRowState = androidx.compose.foundation.lazy.rememberLazyListState()
-    LaunchedEffect(state.selectedCategory) {
+    val categoryIndex = state.categories
+        .indexOfFirst { it.id == state.selectedCategory }
+        .coerceAtLeast(0)
+    // The waterfall is a PAGER over the categories, so a left/right swipe moves through
+    // them the way the chips suggest. The chip row stays outside the pager: it has its
+    // own horizontal drag.
+    val pagerState = androidx.compose.foundation.pager.rememberPagerState(
+        initialPage = categoryIndex,
+        pageCount = { state.categories.size }
+    )
+    LaunchedEffect(state.selectedCategory, state.categories) {
         val index = state.categories.indexOfFirst { it.id == state.selectedCategory }
         if (index >= 0) {
             categoryRowState.animateScrollToItemCentered(index)
         }
+    }
+    // chip tap -> pager follows (the chip's own onClick already changed the selection)
+    LaunchedEffect(categoryIndex, state.categories.size) {
+        if (state.categories.isNotEmpty() && pagerState.currentPage != categoryIndex) {
+            pagerState.animateScrollToPage(categoryIndex)
+        }
+    }
+    // pager swipe -> selection follows.
+    //
+    // Keyed on SETTLED pages (`currentPage`), not on `targetPage`: the ViewModel keeps
+    // only ONE category's feed, and the page that is no longer selected falls back to a
+    // placeholder — switching early would blank the grid the user is still looking at
+    // mid-swipe. The incoming page shows the spinner until its own request lands.
+    //
+    // The state is read from the ViewModel INSIDE the collect, not captured: `collect`
+    // runs for the lifetime of this effect, so a captured `state` would freeze
+    // `selectedCategory` at its value when the effect launched (it did — every swipe
+    // back to the first category compared against a stale 0 and did nothing, leaving
+    // that page on its placeholder).
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.currentPage }
+            .distinctUntilChanged()
+            .collect { page ->
+                val current = viewModel.ui.value
+                current.categories.getOrNull(page)?.let { cat ->
+                    if (cat.id != current.selectedCategory) viewModel.selectCategory(cat.id)
+                }
+            }
     }
     Column(Modifier.fillMaxSize()) {
         // category chips (horizontal)
@@ -200,65 +238,99 @@ private fun FeedTab(
             }
         }
 
-        if (state.feed.items.isEmpty() && state.feed.firstLoading) {
-            // Reserve the floating NavigationBar's height before centring, or the
-            // indicator is centred on the full screen and reads as sitting low —
-            // the bar covers the bottom ~96dp, so the visible gap above is smaller
-            // than the gap below.
-            Box(
-                Modifier.fillMaxSize()
-                    .padding(bottom = com.thirdparty.xhs.ui.theme.bottomNavClearance()),
-                contentAlignment = Alignment.Center
-            ) { LoadingIndicator() }
-            return
+        // The category content: a pager so a left/right swipe moves through the
+        // categories. Only the SELECTED page renders the real grid — the ViewModel
+        // holds one category's feed, so the others are placeholders that turn into
+        // content the moment the swipe settles (see the snapshotFlow above).
+        androidx.compose.foundation.pager.HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            // a swipe must not be stolen while a category is still loading
+            userScrollEnabled = state.categories.size > 1
+        ) { page ->
+            val cat = state.categories.getOrNull(page)
+            if (cat != null && cat.id == state.selectedCategory) {
+                FeedCategoryPage(state, viewModel, onOpenDetail, clear)
+            } else {
+                Box(
+                    Modifier.fillMaxSize().padding(bottom = clear),
+                    contentAlignment = Alignment.Center
+                ) { LoadingIndicator() }
+            }
         }
-
-        // load failed and there is nothing to fall back on -> offer a retry
-        if (state.feed.items.isEmpty() && state.feed.error) {
-            EmptyState(
-                title = "内容加载失败",
-                modifier = Modifier.fillMaxSize(),
-                description = "请检查网络后重试",
-                actionLabel = "重试",
-                onAction = { viewModel.retry() }
-            )
-            return
-        }
-
-        if (state.feed.items.isEmpty()) {
-            EmptyState(
-                title = "这个分类还没有内容",
-                modifier = Modifier.fillMaxSize(),
-                description = "换一个分类试试",
-                icon = Icons.Filled.Search
-            )
-            return
-        }
-
-        // shared masonry grid with endless pagination.
-        // No pull-to-refresh: this tab already has a dedicated refresh FAB (see
-        // the FloatingActionButton below), so the gesture was pure redundancy and
-        // fired accidental requests while scrolling.
-        XhsWaterfallGrid(
-            items = state.feed.items,
-            onOpenDetail = onOpenDetail,
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                start = Spacing.s, end = Spacing.s, top = Spacing.xs, bottom = clear
-            ),
-            hasMore = state.feed.hasMore,
-            loadingMore = state.feed.loadingMore,
-            // Reset on a category change too, not only on a refresh.
-            //
-            // The grid scrolls back to the top only when this key changes, and
-            // switching category does NOT bump refreshTick — it just swaps in an
-            // empty FeedSection — so the OLD scroll offset survived into the new
-            // category: picking a chip while scrolled down dropped the viewer into
-            // the middle of a list whose top they had never seen. Keyed on the
-            // pair, both cases reset.
-            resetKey = state.refreshTick to state.selectedCategory,
-            onLoadMore = { viewModel.loadMore() }
-        )
     }
+}
+
+/**
+ * The content of ONE category page: its loading / error / empty / grid state.
+ *
+ * Extracted from [FeedTab] when the waterfall became a pager — the page lambda needs
+ * the branches (and their early returns) in a composable of its own.
+ */
+@Composable
+private fun FeedCategoryPage(
+    state: com.thirdparty.xhs.ui.viewmodel.DiscoverUiState,
+    viewModel: DiscoverViewModel,
+    onOpenDetail: (Long) -> Unit,
+    clear: androidx.compose.ui.unit.Dp
+) {
+    if (state.feed.items.isEmpty() && state.feed.firstLoading) {
+        // Reserve the floating NavigationBar's height before centring, or the
+        // indicator is centred on the full screen and reads as sitting low —
+        // the bar covers the bottom ~96dp, so the visible gap above is smaller
+        // than the gap below.
+        Box(
+            Modifier.fillMaxSize().padding(bottom = clear),
+            contentAlignment = Alignment.Center
+        ) { LoadingIndicator() }
+        return
+    }
+
+    // load failed and there is nothing to fall back on -> offer a retry
+    if (state.feed.items.isEmpty() && state.feed.error) {
+        EmptyState(
+            title = "内容加载失败",
+            modifier = Modifier.fillMaxSize(),
+            description = "请检查网络后重试",
+            actionLabel = "重试",
+            onAction = { viewModel.retry() }
+        )
+        return
+    }
+
+    if (state.feed.items.isEmpty()) {
+        EmptyState(
+            title = "这个分类还没有内容",
+            modifier = Modifier.fillMaxSize(),
+            description = "换一个分类试试",
+            icon = Icons.Filled.Search
+        )
+        return
+    }
+
+    // shared masonry grid with endless pagination.
+    // No pull-to-refresh: this tab already has a dedicated refresh FAB (see
+    // the FloatingActionButton below), so the gesture was pure redundancy and
+    // fired accidental requests while scrolling.
+    XhsWaterfallGrid(
+        items = state.feed.items,
+        onOpenDetail = onOpenDetail,
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            start = Spacing.s, end = Spacing.s, top = Spacing.xs, bottom = clear
+        ),
+        hasMore = state.feed.hasMore,
+        loadingMore = state.feed.loadingMore,
+        // Reset on a category change too, not only on a refresh.
+        //
+        // The grid scrolls back to the top only when this key changes, and
+        // switching category does NOT bump refreshTick — it just swaps in an
+        // empty FeedSection — so the OLD scroll offset survived into the new
+        // category: picking a chip while scrolled down dropped the viewer into
+        // the middle of a list whose top they had never seen. Keyed on the
+        // pair, both cases reset.
+        resetKey = state.refreshTick to state.selectedCategory,
+        onLoadMore = { viewModel.loadMore() }
+    )
 }
 
 @Composable
