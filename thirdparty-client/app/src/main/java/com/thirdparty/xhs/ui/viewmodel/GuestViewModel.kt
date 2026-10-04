@@ -53,6 +53,19 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
                 }
             }
         }
+        // Network recovery: the guest login itself can have failed while there was no
+        // connection, which leaves the header on 「游客ID：—」 even after everything else
+        // recovers (nothing else ever asks again).
+        viewModelScope.launch {
+            com.thirdparty.xhs.App.INSTANCE.networkEpoch.drop(1).collect {
+                val label = _accountLabel.value
+                if (label.contains("—") || label.contains("加载中")) {
+                    runCatching { repo.rotateGuest() }
+                }
+                refreshLabel()
+                refreshVip()
+            }
+        }
     }
 
     /**

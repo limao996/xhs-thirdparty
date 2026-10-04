@@ -142,6 +142,43 @@ class App : Application() {
             .build()
         repository = XhsRepository(this, httpClient)
         themeState.value = loadThemeMode()
+        watchNetwork()
+    }
+
+    /**
+     * Bumped whenever the device gains a usable default network — including the moment a
+     * VPN comes up (a VPN is a new default network, and it fires again when it finishes
+     * validating).
+     *
+     * This exists because of a real sequence: without the VPN the API host is unreachable,
+     * so the app fails its first requests and parks itself in an error state; turning the
+     * VPN on afterwards retries nothing by itself, so the app sat on 「内容加载失败」 until
+     * the user hit 重试 — the "开一下 VPN 又无法及时加载" report. Screens observe this and
+     * retry whatever they failed to load.
+     */
+    val networkEpoch = MutableStateFlow(0)
+
+    private fun watchNetwork() {
+        val cm = getSystemService(android.net.ConnectivityManager::class.java) ?: return
+        runCatching {
+            cm.registerDefaultNetworkCallback(object : android.net.ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: android.net.Network) = bump()
+
+                override fun onCapabilitiesChanged(
+                    network: android.net.Network,
+                    caps: android.net.NetworkCapabilities
+                ) {
+                    if (caps.hasCapability(
+                            android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED
+                        )
+                    ) bump()
+                }
+            })
+        }
+    }
+
+    private fun bump() {
+        networkEpoch.value = networkEpoch.value + 1
     }
 
     private fun loadThemeMode(): ThemeMode {

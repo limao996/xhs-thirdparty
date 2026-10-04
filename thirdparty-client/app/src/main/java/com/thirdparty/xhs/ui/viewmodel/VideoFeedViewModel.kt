@@ -6,6 +6,7 @@ import com.thirdparty.xhs.data.NoteItem
 import com.thirdparty.xhs.data.XhsRepository
 import com.thirdparty.xhs.data.appendUnique
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -25,6 +26,17 @@ class VideoFeedViewModel(private val repo: XhsRepository) : ViewModel() {
 
     private var page = 0
     private var loading = false
+
+    init {
+        // A network that only becomes usable later (the user turns a VPN on after the first
+        // requests failed) must not leave the feed sitting on 「内容加载失败」 — retry the
+        // initial load when nothing arrived.
+        viewModelScope.launch {
+            com.thirdparty.xhs.App.INSTANCE.networkEpoch.drop(1).collect {
+                if (_ui.value.items.isEmpty() && !loading) loadMore()
+            }
+        }
+    }
 
     fun loadMore(forceRefresh: Boolean = false) {
         if (loading) return

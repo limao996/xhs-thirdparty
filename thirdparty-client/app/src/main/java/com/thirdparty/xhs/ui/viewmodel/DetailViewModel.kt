@@ -59,6 +59,14 @@ class DetailViewModel(
             // epoch left over from an earlier switch must not trigger a second load.
             repo.accountEpoch.drop(1).collect { if (it > 0) load() }
         }
+        // A network that only becomes usable later (the user switches a VPN on after the
+        // first requests failed) retries the page instead of leaving 「内容加载失败」 on
+        // screen — and re-asks for the comments if those came back empty.
+        viewModelScope.launch {
+            com.thirdparty.xhs.App.INSTANCE.networkEpoch.drop(1).collect {
+                if (_ui.value.item == null || _ui.value.comments.isEmpty()) load()
+            }
+        }
     }
 
     fun load() {

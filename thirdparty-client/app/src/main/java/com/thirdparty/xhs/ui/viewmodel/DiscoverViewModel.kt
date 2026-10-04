@@ -10,6 +10,7 @@ import com.thirdparty.xhs.data.NoteItem
 import com.thirdparty.xhs.data.XhsRepository
 import com.thirdparty.xhs.data.appendUnique
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -76,6 +77,25 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
         }
         loadMore()
         refreshFollowed()
+        // A network that only becomes usable later (turning a VPN on) must not leave the
+        // grid sitting on 「内容加载失败」: retry whatever is still missing.
+        viewModelScope.launch {
+            com.thirdparty.xhs.App.INSTANCE.networkEpoch.drop(1).collect {
+                if (_ui.value.feed.items.isEmpty() && !feedLoading) {
+                    feedPage = 0
+                    feedLoading = false
+                    loadMore(force = true)
+                }
+                if (_ui.value.fanGroup.isEmpty() && !fanGroupLoading) {
+                    // The fan-group request needs our own user id, and that id is fetched
+                    // once at construction — an offline start leaves it 0, and with 0 the
+                    // request is never even made (`recs = null`). So re-read it here, or
+                    // this tab would stay empty even after the network comes back.
+                    if (myId <= 0) myId = runCatching { repo.myUserId() }.getOrDefault(0)
+                    loadFanGroup()
+                }
+            }
+        }
     }
 
     fun selectCategory(id: Int) {
@@ -150,11 +170,31 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
         }
     }
 
-    /** Full refresh: reload the feed (for the FAB), category list, fan-group recs & followed. */
+    /**
+     * Full refresh (the 刷新 FAB): reload the category list, the feed and the fan-group
+     * recommendations.
+     *
+     * Both lists are CLEARED first and put into their loading state, so the refresh is
+     * visible: the old grid used to stay on screen until the new one landed, which read as
+     * "the button did nothing" (and left the user looking at content they had just asked to
+     * replace).
+     */
     fun refresh(onDone: (() -> Unit)? = null) {
         feedLoading = true
         fanGroupPage = 0
         emptyFanGroupPages = 0
+        fanGroupLoading = false
+        _ui.update { s ->
+            s.copy(
+                // a refresh always returns the user to the top of the list
+                refreshTick = s.refreshTick + 1,
+                feed = FeedSection(firstLoading = true),
+                fanGroup = emptyList(),
+                fanGroupLoading = true,
+                fanGroupMore = false,
+                fanGroupError = false
+            )
+        }
         viewModelScope.launch {
             val cats = runCatching { repo.categories() }.getOrNull()
             val catId = _ui.value.selectedCategory
@@ -163,8 +203,6 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
             if (list != null) emptyPages = 0
             _ui.update { s ->
                 s.copy(
-                    // a refresh always returns the user to the top of the list
-                    refreshTick = s.refreshTick + 1,
                     categories = cats ?: s.categories,
                     // only replace the feed when the refresh actually succeeded
                     feed = if (list != null) {

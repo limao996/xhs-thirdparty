@@ -133,6 +133,8 @@ fun DiscoverTabScreen(
                         onLoadMore = { viewModel.loadMoreFanGroup() },
                         onOpenAuthor = onOpenAuthor,
                         onOpenDetail = onOpenDetail,
+                        error = state.fanGroupError,
+                        onRetry = { viewModel.refresh() },
                         resetKey = state.refreshTick
                     )
                     DiscoverTab.FOLLOW_LOCAL -> FollowedMineTab(state.followed, onOpenAuthor)
@@ -352,6 +354,9 @@ private fun FanGroupTab(
     onLoadMore: () -> Unit,
     onOpenAuthor: (Int) -> Unit,
     onOpenDetail: (Long) -> Unit,
+    /** true when the last load failed with nothing to show */
+    error: Boolean = false,
+    onRetry: () -> Unit = {},
     /** bumped by a refresh; the list scrolls back to the top when it changes */
     resetKey: Int = 0
 ) {
@@ -363,6 +368,18 @@ private fun FanGroupTab(
             Modifier.fillMaxSize().padding(bottom = clear),
             contentAlignment = Alignment.Center
         ) { LoadingIndicator() }
+        return
+    }
+    if (recommended.isEmpty() && error) {
+        // A refresh now CLEARS the list first, so a failed one must say so — otherwise
+        // this tab would claim 「暂无推荐粉丝圈」 for what is really a network failure.
+        EmptyState(
+            title = "内容加载失败",
+            modifier = Modifier.fillMaxSize(),
+            description = "请检查网络后重试",
+            actionLabel = "重试",
+            onAction = onRetry
+        )
         return
     }
     if (recommended.isEmpty()) {
