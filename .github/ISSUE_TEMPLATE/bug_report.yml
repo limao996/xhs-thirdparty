@@ -14,7 +14,7 @@ body:
     attributes:
       label: 版本
       description: 应用内的版本名，或 `git rev-parse --short HEAD` 的输出
-      placeholder: "1.2.0 / c24836a"
+      placeholder: "1.2.1 / 6b311b5"
     validations:
       required: true
 
