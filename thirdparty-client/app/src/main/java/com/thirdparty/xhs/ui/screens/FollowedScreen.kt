@@ -25,6 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.thirdparty.xhs.App
 import com.thirdparty.xhs.data.FollowedEntity
+import com.thirdparty.xhs.ui.components.ConfirmActionDialog
 import com.thirdparty.xhs.ui.components.EmptyState
 import com.thirdparty.xhs.ui.components.FollowedAuthorRow
 import com.thirdparty.xhs.ui.theme.Spacing
@@ -49,6 +50,9 @@ fun FollowedScreen(
 ) {
     var list by remember { mutableStateOf<List<FollowedEntity>>(emptyList()) }
     var loaded by remember { mutableStateOf(false) }
+    // which author is waiting for a 取消关注 confirmation (null = none). One dialog
+    // for the whole list, so the row does not have to hold dialog state itself.
+    var pendingUnfollow by remember { mutableStateOf<FollowedEntity?>(null) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
@@ -88,16 +92,28 @@ fun FollowedScreen(
                         signature = f.signature,
                         avatarUrl = f.headImg,
                         onClick = { onOpenAuthor(f.userId) },
-                        onUnfollow = {
-                            // unfollow locally and drop the row
-                            scope.launch {
-                                App.repo.toggleFollowLocal(f.userId, f.userName, f.headImg, f.signature)
-                                list = list.filterNot { it.userId == f.userId }
-                            }
-                        }
+                        // ask first: the row disappears on tap and there is no undo
+                        onUnfollow = { pendingUnfollow = f }
                     )
                 }
             }
         }
+    }
+
+    pendingUnfollow?.let { f ->
+        ConfirmActionDialog(
+            title = "取消关注？",
+            text = "将不再关注「${f.userName}」。",
+            confirmText = "取消关注",
+            onConfirm = {
+                pendingUnfollow = null
+                // unfollow locally and drop the row
+                scope.launch {
+                    App.repo.toggleFollowLocal(f.userId, f.userName, f.headImg, f.signature)
+                    list = list.filterNot { it.userId == f.userId }
+                }
+            },
+            onDismiss = { pendingUnfollow = null }
+        )
     }
 }

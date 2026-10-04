@@ -65,6 +65,7 @@ import com.thirdparty.xhs.common.RepoViewModelFactory
 import com.thirdparty.xhs.data.AuthorInfo
 import com.thirdparty.xhs.data.FanGroupAuthor
 import com.thirdparty.xhs.data.NoteItem
+import com.thirdparty.xhs.ui.components.ConfirmActionDialog
 import com.thirdparty.xhs.ui.components.EmptyState
 import com.thirdparty.xhs.ui.components.FeeBadge
 import com.thirdparty.xhs.ui.components.FollowedAuthorRow
@@ -553,6 +554,12 @@ private fun FollowedMineTab(
 ) {
     val clear = com.thirdparty.xhs.ui.theme.bottomNavClearance()
     val scope = rememberCoroutineScope()
+    // which author is waiting for a 取消关注 confirmation (null = none).
+    // Declared before the empty check's early `return` so the dialog survives a
+    // recomposition of the list; with no rows there is nothing to confirm anyway.
+    var pendingUnfollow by remember {
+        mutableStateOf<com.thirdparty.xhs.data.FollowedEntity?>(null)
+    }
     if (followed.isEmpty()) {
         EmptyState(
             title = "还没有关注任何作者",
@@ -576,15 +583,27 @@ private fun FollowedMineTab(
                 signature = f.signature,
                 avatarUrl = f.headImg,
                 onClick = { onOpenAuthor(f.userId) },
-                onUnfollow = {
-                    // The ViewModel collects repo.followVersion, so this both
-                    // unfollows and refreshes the list it is rendering.
-                    scope.launch {
-                        App.repo.toggleFollowLocal(f.userId, f.userName, f.headImg, f.signature)
-                    }
-                }
+                // ask first — the row is gone the moment this commits
+                onUnfollow = { pendingUnfollow = f }
             )
         }
+    }
+
+    pendingUnfollow?.let { f ->
+        ConfirmActionDialog(
+            title = "取消关注？",
+            text = "将不再关注「${f.userName}」。",
+            confirmText = "取消关注",
+            onConfirm = {
+                pendingUnfollow = null
+                // The ViewModel collects repo.followVersion, so this both
+                // unfollows and refreshes the list it is rendering.
+                scope.launch {
+                    App.repo.toggleFollowLocal(f.userId, f.userName, f.headImg, f.signature)
+                }
+            },
+            onDismiss = { pendingUnfollow = null }
+        )
     }
 }
 

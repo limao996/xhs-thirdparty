@@ -33,6 +33,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,6 +46,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoLibrary
+import com.thirdparty.xhs.ui.components.ConfirmActionDialog
 import com.thirdparty.xhs.ui.components.EmptyState
 import com.thirdparty.xhs.ui.components.XhsWaterfallGrid
 import com.thirdparty.xhs.ui.components.XhsAvatar
@@ -68,6 +72,9 @@ fun AuthorScreen(
     )
 ) {
     val state by viewModel.ui.collectAsStateWithLifecycle()
+    // 取消关注先确认（+ 关注 直接生效）：误触会让作者从关注列表里消失，而这个页面
+    // 本身不会给出任何反馈。
+    var confirmUnfollow by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -104,7 +111,9 @@ fun AuthorScreen(
                     }
                     Spacer(Modifier.width(Spacing.s))
                     Surface(
-                        onClick = { viewModel.toggleFollow() },
+                        onClick = {
+                            if (state.followed) confirmUnfollow = true else viewModel.toggleFollow()
+                        },
                         shape = Corners.full,
                         color = if (state.followed) MaterialTheme.colorScheme.secondaryContainer
                         else MaterialTheme.colorScheme.primary,
@@ -167,5 +176,19 @@ fun AuthorScreen(
             }
             }
         }
+    }
+
+    if (confirmUnfollow) {
+        val name = state.author?.userName.orEmpty()
+        ConfirmActionDialog(
+            title = "取消关注？",
+            text = if (name.isBlank()) "将不再关注这位作者。" else "将不再关注「$name」。",
+            confirmText = "取消关注",
+            onConfirm = {
+                confirmUnfollow = false
+                viewModel.toggleFollow()
+            },
+            onDismiss = { confirmUnfollow = false }
+        )
     }
 }

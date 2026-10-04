@@ -70,6 +70,7 @@ import com.thirdparty.xhs.data.CommentItem
 import com.thirdparty.xhs.data.CommentReply
 import com.thirdparty.xhs.data.NoteImage
 import com.thirdparty.xhs.data.NoteItem
+import com.thirdparty.xhs.ui.components.ConfirmActionDialog
 import com.thirdparty.xhs.ui.components.FeeBadge
 import com.thirdparty.xhs.ui.components.ImageGallery
 import com.thirdparty.xhs.ui.components.MediaPlayer
@@ -138,6 +139,14 @@ fun DetailScreen(
     //  - 图文全屏（图片查看器占满屏幕）→ **不隐藏**，两条栏保持显示、做成透明、
     //    图标白色，让图片从其下方穿过
     val viewerFullscreen = fullscreen && openImage != null
+
+    // 取消收藏 / 取消关注 都要先确认：两个动作都是一次点击生效且没有「撤销」，
+    // 误触后不会有任何提示（收藏没了就是没了、作者从关注里消失）。加关注/收藏
+    // 本身不弹窗——再点一下就能恢复。
+    // 状态放在这里（而不是 DetailContent 里）是因为收藏按钮住在顶栏，而顶栏属于
+    // 这个 composable。
+    var confirmUnsave by remember { mutableStateOf(false) }
+    var confirmUnfollow by remember { mutableStateOf(false) }
 
     // ---- media plumbing, hoisted OUT of the metadata branch -------------------
     //
@@ -321,7 +330,10 @@ fun DetailScreen(
                         IconButton(onClick = { shareNote(context, state.item) }) {
                             Icon(Icons.Filled.Share, contentDescription = "分享")
                         }
-                        IconButton(onClick = { viewModel.toggleSave() }) {
+                        IconButton(onClick = {
+                            // only the removal asks first; 收藏 stays one tap
+                            if (state.saved) confirmUnsave = true else viewModel.toggleSave()
+                        }) {
                             Icon(
                                 if (state.saved) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
                                 if (state.saved) "取消收藏" else "收藏",
@@ -404,10 +416,37 @@ fun DetailScreen(
                     videoAspect = videoAspect,
                     onAspect = { if (it > 0f) videoAspect = it },
                     fullscreen = fullscreen,
-                    onToggleFullscreen = { fullscreen = !fullscreen }
+                    onToggleFullscreen = { fullscreen = !fullscreen },
+                    onUnfollowRequest = { confirmUnfollow = true }
                 )
             }
         }
+    }
+
+    if (confirmUnsave) {
+        ConfirmActionDialog(
+            title = "取消收藏？",
+            text = "这条内容会从「我的收藏」里移除。",
+            confirmText = "移除",
+            onConfirm = {
+                confirmUnsave = false
+                viewModel.toggleSave()
+            },
+            onDismiss = { confirmUnsave = false }
+        )
+    }
+    if (confirmUnfollow) {
+        val name = state.author?.userName.orEmpty()
+        ConfirmActionDialog(
+            title = "取消关注？",
+            text = if (name.isBlank()) "将不再关注这位作者。" else "将不再关注「$name」。",
+            confirmText = "取消关注",
+            onConfirm = {
+                confirmUnfollow = false
+                viewModel.toggleFollow()
+            },
+            onDismiss = { confirmUnfollow = false }
+        )
     }
 }
 
@@ -438,7 +477,12 @@ private fun DetailContent(
     videoAspect: Float = 0f,
     onAspect: (Float) -> Unit = {},
     fullscreen: Boolean = false,
-    onToggleFullscreen: () -> Unit = {}
+    onToggleFullscreen: () -> Unit = {},
+    /**
+     * The author row's 已关注 button asks the caller to confirm first (the dialog's
+     * state lives in DetailScreen — see the note there). 关注 is still direct.
+     */
+    onUnfollowRequest: () -> Unit = {}
 ) {
     // NULLABLE, deliberately. When the player was inherited from 推荐 it is already
     // playing, so the media is drawn while this note's own request is still in flight;
@@ -629,7 +673,8 @@ private fun DetailContent(
                     },
                     trailingContent = {
                         if (state.followed) {
-                            OutlinedButton(onClick = { viewModel.toggleFollow() }) {
+                            // unfollowing asks for confirmation; following does not
+                            OutlinedButton(onClick = onUnfollowRequest) {
                                 Icon(Icons.Filled.Check, contentDescription = null,
                                     modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(Spacing.xs + 2.dp))
