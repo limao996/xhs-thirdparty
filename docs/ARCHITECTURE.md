@@ -57,14 +57,14 @@ app/src/main/java/com/thirdparty/xhs/
 ├── ui/
 │   ├── screens/                  Home / DiscoverTab / Detail / VideoFeed / Search /
 │   │                             Author / Followed / UserList / LocalList / Profile /
-│   │                             Backup / Settings / About
+│   │                             Backup / Settings / About / Update
 │   ├── components/               XhsWaterfall（真实比例瀑布流）/ VideoPlayer / VideoSurface /
 │   │                             ImageGallery / FullscreenImageViewer / BufferedSlider /
 │   │                             CommentRepliesDialog / ConfirmActionDialog / EmptyState /
 │   │                             FeeBadge / FollowedAuthorRow / PlaybackHandoff /
 │   │                             BiometricLock / XhsAsyncImage / MediaPlayer / ResetZoomButton
 │   ├── viewmodel/                Home / Discover / Detail / VideoFeed / Search / Author /
-│   │                             Followed / UserList / LocalList / Profile / Guest / PagingGuard / About
+│   │                             Followed / UserList / LocalList / Profile / Guest / PagingGuard / Update
 │   └── theme/                    Theme.kt（M3 Expressive）+ Tokens.kt（设计令牌）
 └── res/                          仅图标与基础资源（values/values-night/自适应图标/背景色）
 ```
@@ -143,7 +143,8 @@ Room 数据库 `xhs_local.db`，`@Database(version = 2)`，实体三张：
 
 - `Routes.kt` 是唯一路由常量表：`home`、`detail/{noteId}`、`search`、`profile`、`author/{userId}`、
   `saved`、`history`、`followed`、`following`（关注，走 `member/follow-list`）、`fans`（粉丝，走 `member/fun-list`）、
-  `backup`、`settings`、`about?autoCheck={autoCheck}`；辅助构造函数 `detail(noteId)` / `author(userId)` / `about(autoCheck)`。
+  `backup`、`settings`、`about`（关于）、`update`（检查更新）；辅助构造函数 `detail(noteId)` / `author(userId)`。
+  关于与检查更新是**两个独立页面**，入口都在「我的 → 其他」（设置页只有偏好项）。
 - 底部三 tab 由 `HomeTab` 枚举定义：`FEED("tab/feed","推荐")`、`DISCOVER("tab/discover","发现")`、
   `PROFILE("tab/profile","我的")`。
 - 深链 `xhstp://note/<id>`（`DeepLink.kt` + Manifest 的 `VIEW/DEFAULT/BROWSABLE` 过滤器）→ 直接进入详情。
