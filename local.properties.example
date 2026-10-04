@@ -1,0 +1,14 @@
+# 复制本文件为 local.properties 后按需修改。
+# local.properties 是本机文件，已被 .gitignore 忽略，不要提交。
+# 详细说明见 docs/BUILD.md。
+
+# Windows（路径中的反斜杠需要转义）
+sdk.dir=D\:\\Android\\Sdk
+
+# macOS 示例
+# sdk.dir=/Users/<you>/Library/Android/sdk
+
+# Linux 示例
+# sdk.dir=/home/<you>/Android/Sdk
+
+# 也可以用环境变量代替本文件：ANDROID_SDK_ROOT / ANDROID_HOME

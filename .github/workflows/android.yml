@@ -1,0 +1,63 @@
+name: Android CI
+
+# 说明：本工作流的目的是"每次推送都能证明仓库还能构建"。
+# 注意 compileSdk 37 需要较新的 Android SDK 平台与构建工具；若 GitHub 托管 runner 的
+# 镜像尚未提供，请改用自托管 runner 或在仓库变量里指定 SDK 路径后调整下方步骤。
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: assembleDebug + 单元测试
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: 准备 Gradle 缓存
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: 构建 debug 包
+        run: ./gradlew assembleDebug --stacktrace --no-daemon
+
+      - name: 运行单元测试
+        run: ./gradlew testDebugUnitTest --stacktrace --no-daemon
+
+      - name: 上传产物（仅用于排查，不发布）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: 失败时上传报告
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-reports
+          path: |
+            app/build/reports/**
+            app/build/outputs/logs/**
+          if-no-files-found: ignore
+          retention-days: 7

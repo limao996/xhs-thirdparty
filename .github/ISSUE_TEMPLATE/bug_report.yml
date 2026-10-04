@@ -1,0 +1,83 @@
+name: 缺陷报告
+description: 报告一个可复现的缺陷（请先搜索已有 Issue）
+title: "[Bug] "
+labels: [ "bug" ]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。请尽量给出**可复现**的信息：没有复现路径的缺陷很难定位。
+        安全/合规类问题请勿在此公开，见 Issue 选择页的说明。
+
+  - type: input
+    id: version
+    attributes:
+      label: 版本
+      description: 应用内的版本名，或 `git rev-parse --short HEAD` 的输出
+      placeholder: "1.1.0 / 0abfec4"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: variant
+    attributes:
+      label: 变体
+      options:
+        - debug（com.thirdparty.xhs.debug）
+        - release（com.thirdparty.xhs）
+        - 自己构建的其它变体
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: 设备与系统
+      placeholder: "Pixel 6 / Android 14（API 34）/ 1080×2400 420dpi"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 具体的点击序列或命令；若涉及网络，请说明网络环境
+      placeholder: |
+        1. 打开应用，进入「发现」
+        2. 点第二个分类标签
+        3. 观察到 …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为（含日志/截图）
+      description: 可贴 logcat 片段、`uiautomator dump` 文本或截图；请自行隐去账号与 token
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce_rate
+    attributes:
+      label: 复现概率与其它线索
+      placeholder: "必现 / 偶发（约 3 次里 1 次）；切换网络后必现 …"
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已搜索过现有 Issue，确认不是重复
+          required: true
+        - label: 我提交的内容不含账号、token、手机号等隐私信息
+          required: true

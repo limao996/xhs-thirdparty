@@ -1,2 +1,0 @@
-rootProject.name = "thirdparty-client"
-include ':app'

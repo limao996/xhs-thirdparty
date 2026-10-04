@@ -1,0 +1,43 @@
+---
+description: xhs-thirdparty 项目规则（Android / Kotlin / Compose）
+globs:
+  - "**/*.kt"
+  - "**/*.kts"
+  - "**/*.gradle"
+  - "**/*.md"
+alwaysApply: true
+---
+
+# xhs-thirdparty（第三方小黄书客户端）
+
+完整规则在 [`AGENTS.md`](../../AGENTS.md) 与 [`docs/ai/`](../../docs/ai/)；这里是必须当场生效的约束。
+
+## 硬约束
+
+1. 输出简体中文；代码、命令、标识符保持原文。
+2. 纯 Kotlin + Compose，**不写 XML 布局**，不引入 `appcompat` / `com.google.android.material`。
+3. `material3` = `1.5.0-alpha29`（不得降级）；`fragment-ktx` ≥ `1.8.9`。
+4. `CLIENT_VERSION` = `2.6.0`（协议版本，勿动）；`versionCode` 用 `appVersionCode` 表达式。
+5. 不改 `keystore/release.jks` 与签名口令；不提交 APK / 截图 / `local.properties` / 构建缓存。
+6. 改文件用编辑工具，不要用 shell 拼字符串写源码。
+7. 声称"已修复/已验证"必须附可复现证据（编译输出、`uiautomator dump`、截图）。
+
+## 代码放置
+
+- 所有网络与数据库访问经 `data/XhsRepository.kt`；UI 与 `ui/components/` 不直接碰 `net/` 或 Room。
+- 服务端接口：加在 `XhsRepository`（含缓存写入 + 失败语义）。
+- 新页面：`ui/screens/XxxScreen.kt` + `ui/viewmodel/XxxViewModel.kt` + `navigation/Routes.kt` + `AppNavHost`。
+- 颜色/尺寸用 `ui/theme/Theme.kt` 的 colorScheme 与 `ui/theme/Tokens.kt` 的令牌，不硬编码。
+- 失败态保留已有数据，不要把失败渲染成"空数据"。
+
+## 常用命令
+
+```powershell
+gradlew.bat assembleDebug
+. .\tools\verify.ps1 ; EnsureDevice ; LaunchApp ; DumpUi
+```
+
+## 改完记得
+
+- 冲突/结构/踩坑有变化 → 更新 `AGENTS.md` 与 `docs/ai/GOTCHAS.md`。
+- 文档索引 → `docs/README.md` 与 `README.md` 的文档地图。

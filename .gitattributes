@@ -1,0 +1,32 @@
+# 默认：按内容自动判定文本，仓库内统一以 LF 存储
+* text=auto
+
+# Windows 脚本保留 CRLF（批处理必须；PowerShell 两者皆可，为一致性保留 CRLF）
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+# Unix 脚本与 Gradle wrapper 用 LF
+*.sh    text eol=lf
+gradlew text eol=lf
+
+# 二进制：禁用行尾转换与文本 diff
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.webp binary
+*.gif  binary
+*.ico  binary
+*.ttf  binary
+*.otf  binary
+*.jar  binary
+*.jks  binary
+*.keystore binary
+*.apk  binary
+*.zip  binary
+
+# 文档与图片的语言/统计归类（便于 GitHub 概览）
+*.md   text
+*.kt   text
+*.kts  text
+*.gradle text

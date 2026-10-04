@@ -1,33 +1,38 @@
-# ---- Android / Gradle build outputs ----
-build/
+# 构建产物（全部不入库）
 .gradle/
-# Kotlin's own error/scratch dir. A build failure writes errors-*.log there, and
-# one of those was committed by accident; it is per-run state, not source.
+build/
+app/build/
 .kotlin/
 *.apk
 *.aab
 *.ap_
 *.dex
-*.class
-captures/
-.cxx/
 
-# ---- IDE ----
-.idea/
-*.iml
-.DS_Store
+# 本机配置（含 SDK 绝对路径）
 local.properties
 
-# ---- Large derived / reference material (not project source) ----
-# reverse-engineering artifacts and toolchains stay out of version control
-decompiled/
-apk_unpacked/
-tools/
-shots/
-.acl-recovery/
-*.apk
+# IDE / 编辑器
+.idea/
+*.iml
+.vscode/
+captures/
+*.orig
+*.rej
 
+# 操作系统
+.DS_Store
+Thumbs.db
+desktop.ini
 
-# ---- local verification fixtures ----
-webdav_root/
-webdav_*.log
+# 工具产物（探针输出、本机截图）
+tools/out/
+docs/images/screenshots/
+*.log
+
+# 临时与备份
+*.tmp
+*.bak
+_recovery/
+
+# 注意：keystore/release.jks 是刻意入库的自签名密钥（理由见 docs/BUILD.md 的「签名」一节），
+# 不要把 *.jks / keystore/ 加进忽略列表。

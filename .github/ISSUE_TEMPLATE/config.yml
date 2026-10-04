@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 先读文档（构建 / 验证 / 协议）
+    url: https://github.com/OWNER/xhs-thirdparty/tree/master/docs
+    about: 构建失败、验证方法、协议格式等问题，多半在 docs/BUILD.md 与 docs/VERIFY.md 里已有答案。
+  - name: 合规与下架请求
+    url: https://github.com/OWNER/xhs-thirdparty/security/advisories/new
+    about: 若你认为本仓库侵犯了你的权利，请通过私密渠道联系维护者，我们会尽快处理。
