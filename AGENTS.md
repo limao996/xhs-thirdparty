@@ -18,11 +18,22 @@
 | 8 | **不提交** APK / 截图 / 反编译产物 / `local.properties` | 见 `.gitignore`；仓库只放源码与文档 |
 | 9 | 改源码一律用 `edit` / `write` 工具，**不要用 PowerShell 拼字符串写文件** | 拼串会静默产生乱码或丢内容 |
 | 10 | 声明"已修复/已验证"之前必须有可复现证据（编译输出、UI dump、截图） | 见 `docs/VERIFY.md` |
+| 11 | **不得移除或绕开游客账号轮换链路**（`v2/app/init` → `login-with-guest` → 校验 VIP → 退避） | 这是本项目唯一的核心功能；少了它页面只剩付费墙（见第 1 节与 `docs/ARCHITECTURE.md` §3.1） |
+| 12 | 文档里**不要写"不破解付费 / 不绕过付费限制"这类与事实相反的声明** | 本 App 的机制就是自动化领取新游客 VIP 福利，描述必须与实现一致 |
 
 ## 1. 项目一句话
 
 小黄书（老司机软件）第三方 Android 客户端，桌面名「小黄书」（debug 安装为「小黄书.debug」）：Kotlin + Jetpack Compose（M3 Expressive），Room 本地缓存，OkHttp + AES
 全量加密包体，media3/HLS 播放器，WebDAV 备份，指纹应用锁。包名 `com.thirdparty.xhs`（debug 加 `.debug`）。
+
+**核心机制（动账号相关代码前必读）**：VIP 不是"破解校验"骗出来的，是**不停换新游客号**换出来的 ——
+服务端会给每一个**新注册**的设备身份发一段 VIP 体验窗口，客户端在窗口快用完时换一个新身份，就又能接着看。
+链路（顺序不能变）：`IdentityGuess.randomFresh()` 生成随机身份 → `v2/app/init` 注册身份（**这一步才建号**）→
+`v2/user/login-with-guest` 拿 `user_token`/`user_hash` → `v2/mine/user-info` 确认新号真的带 VIP
+（`XhsRepository.switchToVipAccount()`）。触发点是 `XhsRepository.ensureAccountForRequest()`，由
+`XhsApi.beforeAccountRequest` 在每个"需要账号的请求"前调用；不足 `VIP_MIN_REMAINING_S = 60L` 秒就换。
+身份必须持久化（`CredentialStore` 的 `device_identity`，换号时清 `user_hash` 与 VIP 缓存），
+一次尝试只建**一个**新身份，失败按 `VIP_SWITCH_BACKOFF_BASE_S = 60L` 翻倍退避、上限 `VIP_SWITCH_BACKOFF_MAX_S = 30 分钟`。
 
 ## 2. 仓库地图
 

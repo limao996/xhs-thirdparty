@@ -8,6 +8,10 @@
 `com.thirdparty.xhs` —— 小黄书（老司机软件）第三方 Android 客户端，桌面名「小黄书」（debug 变体为「小黄书.debug」，包名带 `.debug`）。一个人手写的、单模块、纯 Kotlin + Compose 工程，
 目标是"可维护的现代 Android 样板"：单一数据源、全链路加密、可离线、可备份、可复现构建。
 
+**这个 App 的核心机制是"游客账号轮换"**：服务端给每个**新注册**的设备身份发一段 VIP 体验窗口，客户端在窗口
+将尽时用一个新的随机身份重新建号登录，于是 VIP 一直续下去（细节见 [../ARCHITECTURE.md](../ARCHITECTURE.md) §3.1
+与 [../PROTOCOL.md](../PROTOCOL.md) §4）。不是绕过付费校验，而是自动化地领"新游客福利"。
+
 | 项 | 值 |
 | --- | --- |
 | 语言 / UI | Kotlin 2.1.21 / Jetpack Compose（BOM 2026.02.01）+ material3 **1.5.0-alpha29** |
@@ -62,6 +66,9 @@ app/src/main/java/com/thirdparty/xhs/
 ```
 
 - 断网/失败语义：**已缓存内容不清空**，只叠加错误态（见 `GOTCHAS.md` 的失败态规则）。
+- 账号门（VIP 续期）：所有"需要账号"的请求都会在 `XhsApi.call()` 里先走 `XhsRepository.ensureAccountForRequest()`——
+  缓存的 VIP 剩余不足 `VIP_MIN_REMAINING_S = 60L` 秒就注册新游客身份（`v2/app/init` → `login-with-guest` → 校验 `isVip`），
+  换号成功会 `bump accountEpoch` 让 UI 刷新。**没有任何轮询**，空转发生在空闲时（细节见 [../ARCHITECTURE.md](../ARCHITECTURE.md) §3.1）。
 - 会话失效：`XhsApi.needsReauth()` 检测到身份失效 → 重新登录 guest → 原请求重试一次（`NETWORK_ATTEMPTS = 2`，退避 `RETRY_BACKOFF_MS = 350L`）。
 
 ## 4. 协议摘要（细节见 [../PROTOCOL.md](../PROTOCOL.md)）
@@ -102,5 +109,6 @@ WebDAV 配置；**不含账号凭据**。
 ## 7. 当前状态
 
 - 功能面：浏览（推荐/发现/搜索/详情/评论区/作者页）、本地（收藏/最近浏览/播放器）、应用（主题/应用锁/设置/深链/备份）均已实现。
-- 已知边界：不做发评论；不做付费规避；`app.xiaohuangbook.net` 在部分网络环境会被 DNS 污染。
+- 已知边界：不做发评论；付费内容靠**换新游客号**领取新体验窗口获得访问（不是破解校验，见 §1 与本文件第 4 节）；
+  `app.xiaohuangbook.net` 在部分网络环境会被 DNS 污染。
 - 仓库维护面：AI 档案、CI、Issue/PR 模板、文档随代码同步更新（约定见 [CONVENTIONS.md](CONVENTIONS.md)）。

@@ -83,6 +83,42 @@ app/src/main/java/com/thirdparty/xhs/
 2. 失败不得显示为"空数据"（例如"还没有评论" ≠ "评论加载失败"）。
 3. 会话失效由 `XhsApi.needsReauth()` 识别 → 重登 guest → 原请求重试（`NETWORK_ATTEMPTS = 2`、`RETRY_BACKOFF_MS = 350L`）；网络恢复后自动重试。
 
+### 3.1 VIP 续期：账号门（本项目最核心的机制）
+
+服务端会给**每一个新注册的设备身份**发一段 VIP 体验窗口。客户端不破解任何校验，而是**换号**：窗口将尽时注册一个全新随机身份，新号又自带 VIP。
+
+```
+需要账号的请求 ──► XhsApi.call()
+                      │  beforeAccountRequest = XhsRepository::ensureAccountForRequest
+                      ▼
+        cachedVipEnd − now > 60s ? ──是──► 直接放行（纯本地判断，0 次请求）
+                      │否
+                      ▼
+        hasNetwork() 为假 ? ──是──► 放弃（离线不折腾）
+                      │否
+                      ▼
+        switchToVipAccount()
+          ├ 冷却未到（退避中）→ 放弃
+          ├ IdentityGuess.randomFresh()     ← 随机身份，四种形式随机挑
+          ├ api.loginAsDevice(id)           ← 内部先 v2/app/init 建号，再 login-with-guest
+          └ myProfile().isVip ? 是 → 完成（返回 true）
+                               否 → 留用该号 + 退避（60s×2^n，上限 30 分钟）
+```
+
+| 常量 / 状态 | 值 | 作用 |
+| --- | --- | --- |
+| `VIP_MIN_REMAINING_S` | `60L` | 剩余不足 1 分钟即视作"不够用"（不能等到正好为 0 才换，否则会打断用户正在做的事） |
+| `VIP_SWITCH_BACKOFF_BASE_S` | `60L` | 失败后首次冷却，之后翻倍 |
+| `VIP_SWITCH_BACKOFF_MAX_S` | `30 * 60L` | 冷却上限，防止后端不发 VIP 时把号刷成一堆垃圾 |
+| `switchFailStreak` | `≤ 8` | 连续失败计数，驱动退避 |
+| `CredentialStore.vipEnd` | epoch 秒 | VIP 到期缓存；**换号时清零**（窗口属于读出它的那个账号） |
+| `CredentialStore.autoSwitchOnVipExpiry` | 默认 `true` | 「VIP 到期自动切换」开关，设置页可关 |
+
+- **触发时机**：`beforeAccountRequest` 挂在 `XhsApi.call()` 这个所有请求的必经点上，所以检查发生在"下一个真正要用账号的请求"之前，界面感知不到，也没有任何轮询（曾经是 5 秒轮询，已移除）。
+- **账号变化的通知**：换号发生在请求内部、没有用户操作，因此 `XhsRepository.noteIdentityChanged()` 会 `bump _accountEpoch`，`GuestViewModel` 据此刷新「游客ID」标签与 VIP 状态。
+- **手动换号**：「我的」页的「切换游客账号」走 `XhsRepository.rotateGuest()` → `api.loginAsGuest()`（同一个建号链路）。
+- **备份刻意不含账号**：identity / token / hash / VIP 窗口都不导出（旧号恢复时窗口早已过期，没有意义）；只备份「自动切换」这个开关本身。
+
 ## 4. 持久化
 
 Room 数据库 `xhs_local.db`，`@Database(version = 2)`，实体三张：
@@ -142,10 +178,13 @@ Room 数据库 `xhs_local.db`，`@Database(version = 2)`，实体三张：
 | `versionCode` 用时间戳 | 手工维护版本号在本项目反复出错；时间戳单调递增且落在 32 位内（自 2026-10-01 起的秒数） |
 | destructive migration | 本地数据都可重建（缓存/收藏都能从服务端或备份恢复），写迁移脚本的复杂度不值得 |
 | 播放实例交接而非重建 | 推荐页 → 详情页切换时保留播放位置与缓冲，避免黑屏与断点丢失；代价是释放责任必须显式管理（见 GOTCHAS D3） |
+| 账号续期用"请求前门控"而非定时轮询 | 曾经的 5 秒轮询会在后台空转、也会把用户刚手动选的账号顶掉；挂在 `XhsApi.call()` 的一个 choke point 上后，只在"真的要用账号"时判断，缓存命中时是纯本地读（0 次请求） |
 | `org.json` 而非 gson/kotlinx-serialization | 包体形态简单且已在加密层处理字节；少一个反射依赖 |
 | 应用锁用 `biometric` + `fragment-ktx ≥ 1.8.9` | 低版本 fragment-ktx 会触发 requestCode 上限崩溃 |
 
 ## 8. 不在范围内
 
-- 不做发评论 / 点赞写操作；不做付费内容规避；不内置任何内容数据。
+- 不做发评论 / 点赞写操作；不内置任何内容数据。
+- **不做（也不需要做）付费校验破解**：付费内容通过"换新游客号领新体验窗口"获得访问（见 §3.1），
+  客户端从不伪造付费凭证、不改包内校验、也不解密需要额外密钥的内容。
 - 不提供上架渠道（自签名密钥）、不做多进程、不做后台服务。

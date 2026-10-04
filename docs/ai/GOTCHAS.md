@@ -137,3 +137,42 @@
 **E3 · 路径不能写死机器**
 - 触发：写脚本或文档里的路径。
 - 正确做法：脚本用 `$PSScriptRoot` / `Path(__file__).resolve().parents[n]`；外部工具走环境变量。
+
+**E4 · 不要"顺手纠正"账号轮换机制**
+- 触发：看到 `app/init` + `login-with-guest` + VIP 校验这套链路，觉得"多此一举"或"看着像作弊"就想删/改。
+- 正确做法：那是本项目**唯一的核心功能**（换新游客号续 VIP），删掉它 App 就只会显示付费墙。要动先读
+  `AGENTS.md` 第 1 节与 `docs/ARCHITECTURE.md` §3.1。
+
+## F. 游客账号与 VIP 续期
+
+**F1 · `v2/app/init` 不能省**
+- 触发：新增"换账号 / 登录"路径，或重构 `XhsApi.loginAsGuest()`。
+- 症状：新生成的身份一律返回 `result = -1 用戶ID錯誤`，看起来像"服务端不允许创建账号"。实测先跑 `app/init` 8/8 成功、不跑 0/4。
+- 正确做法：任何"用新身份登录"的路径都必须 **先 `app/init`，再 `login-with-guest`**（`loginAsDevice()` 里已经这么做了）。
+
+**F2 · 身份必须持久化，`user_hash` 必须清**
+- 触发：写 `CredentialStore.deviceId` 之类的 getter。
+- 症状：每次读都返回一个新的随机身份 → `app/init` 与随后的登录用了不同身份 → 每次启动都建一个一次性账号、VIP 状态永远对不上。
+- 正确做法：`deviceId` 首次生成即 `apply()` 落盘；换号时同时清 `user_hash`（`getUserId()` 优先用它，残留会把会话钉在旧账号上）与 `vipEnd` 缓存。
+
+**F3 · 身份长度是硬约束**
+- 触发：自己拼一个身份或改 `IdentityGuess`。
+- 正确做法：只用四种合法形式且长度精确 —— `<12hex>889X`、`<15digits>X`、`<16hex>I`、`<30hex>AI`；`AI` 形式 30 字符可建号、32 字符不行（官方先截断再拼后缀）。
+
+**F4 · 一次只建一个新身份，且必须退避**
+- 触发：觉得"多试几个总能碰到有 VIP 的"，于是在一次检查里循环建号。
+- 症状：一次检查就产生一堆孤儿账号；后端不再发 VIP 时会把号刷爆（历史上的 `VIP_SWITCH_ATTEMPTS` 就是这么写的）。
+- 正确做法：`switchToVipAccount()` 保持"一次一个新身份"，失败走 `switchFailStreak` 指数退避（60s 起、上限 30 分钟）。
+
+**F5 · 换号发生在请求内部，UI 必须跟着 epoch 走**
+- 触发：在请求路径里改账号，或新增显示账号信息的界面。
+- 症状：「游客ID」停在旧账号、VIP 标记与实际账号不一致。
+- 正确做法：换号时调 `noteIdentityChanged()` 触发 `accountEpoch`，界面订阅它刷新；不要在 UI 里自己缓存账号串。
+
+**F6 · 判定 VIP 前先确认新号真的带 VIP**
+- 触发：写"切到有 VIP 的账号"的逻辑。
+- 正确做法：切完必须读 `myProfile()`（`v2/mine/user-info`）验证 `isVip`，不能假设"新号一定有 VIP"（`Models.kt`：`vipStatus >= 1 || vipEnd > now`）。
+
+**F7 · 离线不换号**
+- 触发：网络异常时仍走账号门。
+- 正确做法：`hasNetwork()` 要求 `NET_CAPABILITY_VALIDATED`（半连的 Wi-Fi 会挂住请求）；无网直接放弃切换，让请求自己报错。
