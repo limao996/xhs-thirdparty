@@ -222,11 +222,16 @@
 - README 按 App 介绍重写，并把「游客账号轮换续 VIP」写成正式机制说明（`b9500d7`）
 - 档案与文档全面对源码核事实：新增「列表滚动位置」踩坑（GOTCHAS C8）、「内容断言先排除 chrome」（A7）、
   「文档声明必须与实现一致」（E5）；修正 `CONTEXT.md` 的账号门描述与多处错误引用
+- 按分类 pager 的实测结论再次修正 GOTCHAS C8 与 `ARCHITECTURE.md` §5：滚动状态按 `resetKey` 分组，
+  列表身份位在"同名却是新列表"的场景必须单调递增
 
 ### 缺陷修复
 
 - 发现页子 tab（发现/粉丝圈/关注）切换后保留各自的滚动进度；从粉丝圈进作者页再返回不再回到顶部
-  （`ui/components/XhsWaterfall.kt` 的 `resetKey` 守卫 + `ui/screens/DiscoverTabScreen.kt` 的子 tab 状态持有器）
+  （`ui/screens/DiscoverTabScreen.kt` 的子 tab 状态持有器 + `ui/components/XhsWaterfall.kt` 的 `resetKey`）
+- 发现页左右滑动切换分类时列表回到顶部；此前滑回已访问过的分类会落回旧偏移，即落在"从没看过顶部的新列表"中间
+  ——滚动状态改为按 `resetKey` 分组（`key(resetKey) { rememberLazyStaggeredGridState() }`），
+  并新增单调递增的 `DiscoverUiState.feedEpoch` 作为列表身份
 
 ---
 
@@ -240,7 +245,7 @@
 | 阶段二（账号/播放/备份） | 约 100 个提交（含 40+ 个 docs） |
 | 阶段三（M3 Expressive） | 约 25 个提交（含 5 个 docs） |
 | 阶段四（发布准备） | 约 24 个提交 |
-| 阶段五（开源化迁移） | 4 个提交（结构 / 文档 / 修复） |
+| 阶段五（开源化迁移） | 6 个提交（结构 / 文档 / 修复 ×2） |
 | 当前版本 | `versionName 1.1.0`，`versionCode = 当前秒数 − 2026-10-01T00:00:00 的秒数` |
 
 > 提交信息中的"第 N 轮"指开发轮次（需求批次），与 commit 序号无关。

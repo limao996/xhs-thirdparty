@@ -147,11 +147,18 @@ Room 数据库 `xhs_local.db`，`@Database(version = 2)`，实体三张：
   `PROFILE("tab/profile","我的")`。
 - 深链 `xhstp://note/<id>`（`DeepLink.kt` + Manifest 的 `VIEW/DEFAULT/BROWSABLE` 过滤器）→ 直接进入详情。
 - 页面状态保留：跨页返回不重建上级界面（用导航的保存/恢复状态机制），"返回后关注状态要更新"这类需求通过共享仓库数据 + 重新读取实现。
-- **列表滚动位置（易错，2026-10-04 修过）**：要让子 tab / 列表在"切走再回来"或"跳转返回"后不归零，必须同时满足两件事——
-  (1) 分支内容包在 `rememberSaveableStateHolder().SaveableStateProvider(key)` 里（`HomeScreen` 的底部三 tab、
-  `DiscoverTabScreen` 的 发现/粉丝圈/关注 子 tab 都这么做）；(2) 列表自己的 `LaunchedEffect(resetKey)` 守卫要记住
-  "当前位置属于哪个 key"，**不能用"跳过第一次运行"的 flag**（被重新激活时 flag 仍为 true，会把刚恢复的位置推回顶部）。
-  细节与代码片段见 [ai/GOTCHAS.md](ai/GOTCHAS.md) C2 / C8。
+- **列表滚动位置（易错，2026-10-04 两次修正）**：规则是"**滚动状态按 `resetKey` 分组**"——
+  `ui/components/XhsWaterfall.kt` 写作 `val gridState = key(resetKey) { rememberLazyStaggeredGridState() }`：
+  同 key 恢复位置，换 key 从顶部开始。两侧都要照顾：
+  - 要**保留**（子 tab 切走再回来、跳转详情/作者页返回）：分支内容包在
+    `rememberSaveableStateHolder().SaveableStateProvider(key)` 里（`HomeScreen` 底部三 tab、`DiscoverTabScreen` 三个子 tab 都这么做），
+    `resetKey` 在这些路径上不得变化。**不要**用 `LaunchedEffect(resetKey) { scrollToItem(0) }` + "跳过第一次运行"的 flag——
+    被重新激活时 flag 仍为 true，恢复好的位置会被推回顶部。
+  - 要**重置**（刷新、切分类）：`resetKey` 必须真的变，且要能被 key 区分出来。`HorizontalPager` 的每一页是独立 saveable 作用域
+    （按页 key 存取状态），所以"推荐 → 最新 → 推荐"回到同一分类 id 时旧偏移会恢复进刚重新拉取的列表
+    → 身份位必须**单调递增**：`DiscoverUiState.feedEpoch`（只在 `selectCategory` 里 +1），
+    `resetKey = state.refreshTick to state.feedEpoch`；别复用 `refreshTick` 做分类切换（它一变，粉丝圈列表位置也会被重置）。
+  细节与症状对照见 [ai/GOTCHAS.md](ai/GOTCHAS.md) C2 / C8。
 
 ## 6. 主题与设计令牌
 

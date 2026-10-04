@@ -18,7 +18,7 @@
 | 新页面 | 同时登记 `navigation/Routes.kt` 常量与 `AppNavHost` 的 `composable`；属底部页则补 `HomeTab` |
 | DB 变更 | 改实体/表结构必须 `@Database(version = n+1)`；当前是 destructive migration，需在提交信息里说明数据会清空 |
 | 错误处理 | 失败时保留已有数据 + 暴露错误态，禁止把失败显示成"空数据" |
-| Compose 状态 | 子 tab 内容包在 `rememberSaveableStateHolder().SaveableStateProvider(key)` 里；列表的 `LaunchedEffect(resetKey)` 守卫记住"位置属于哪个 key"，不要用"跳过第一次运行"的 flag（GOTCHAS C2/C8） |
+| Compose 状态 | 子 tab 内容包在 `rememberSaveableStateHolder().SaveableStateProvider(key)` 里；列表滚动状态按 `resetKey` 分组（`key(resetKey) { rememberLazyStaggeredGridState() }`），换 key = 回顶部、同 key = 保留位置；身份位在同名却是新列表时要单调递增（GOTCHAS C2/C8） |
 | 并发 | 协程只在 ViewModel / Repository；`Dispatchers.IO` 用于 IO；不在组合函数里做阻塞调用 |
 | 注释 | 只解释"为什么"（含约束来源），不复述代码 |
 

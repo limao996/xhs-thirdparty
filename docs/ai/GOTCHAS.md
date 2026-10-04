@@ -77,21 +77,27 @@
 - 触发：在 `when` 的不同分支里各自 `remember` 页面状态。
 - 正确做法：分支切换会丢弃另一个分支的组合状态，用 `rememberSaveableStateHolder`（见 C8）或提升状态。
 
-**C8 · 列表滚动位置：光有 SaveableStateHolder 还不够**
-- 触发：子 tab（`when` 分支）里的列表/瀑布流，期望"切走再回来"或"跳转返回"后仍停在原处。
-- 症状：位置被推回顶部。**两种成因，缺一不可**：
-  1. 分支没有状态容器 → 用 `rememberSaveableStateHolder().SaveableStateProvider(key)` 包住
+**C8 · 列表滚动位置：三种成因，一个正确写法**
+- 触发：列表/瀑布流在"切走再回来""跳转返回"或"切换分类"后的位置不对。
+- 期望一：子 tab / 列表在**切走再回来、跳转详情返回**后要**保留**位置。两个前提：
+  1. 分支内容有状态容器：`rememberSaveableStateHolder().SaveableStateProvider(key)`
      （`HomeScreen` 的底部 tab、`DiscoverTabScreen` 的子 tab 都这么做，key 用稳定字符串如 `tab.name`）。
-  2. 列表自己带 `LaunchedEffect(resetKey) { scrollToItem(0) }` → **"跳过第一次运行"的守卫是错的**：
-     被重新激活时该 flag 仍为 true，恢复好的位置会被这次运行推回顶部。正确写法是记住"当前位置属于哪个 key"：
-     ```kotlin
-     var positionKey by remember { mutableStateOf(resetKey) }
-     LaunchedEffect(resetKey) {
-         if (resetKey != positionKey) { positionKey = resetKey; listState.scrollToItem(0) }
-     }
-     ```
-     已按此改 `ui/components/XhsWaterfall.kt`（发现/搜索/作者/本地列表共用）与 `DiscoverTabScreen` 的 `FanGroupTab`。
-- 验证方式：滚动 → 切子 tab / 进详情或作者页 → 返回，比对**首项文本与 y 坐标**是否一致（见 `docs/VERIFY.md` §4）。
+  2. 列表自己的滚动状态可保存，且**不要**再用 `LaunchedEffect(resetKey) { scrollToItem(0) }` 去重置它：
+     "跳过第一次运行"的 flag 是错的（被重新激活时 flag 仍为 true，恢复好的位置会被这次运行推回顶部）。
+- 正确写法（2026-10-04 第二次修正后的最终形态，`ui/components/XhsWaterfall.kt`，`FanGroupTab` 同理）：
+  **把滚动状态按 `resetKey` 分组** —— 换 key 得到新状态（顶部），同 key 恢复（保留位置）：
+  ```kotlin
+  val gridState = key(resetKey) { rememberLazyStaggeredGridState() }
+  ```
+- 期望二：`resetKey` 变了必须**真的**回到顶部（刷新、切分类）。注意"变了"要能被 key 区分出来：
+  `HorizontalPager` 的**每一页是独立的 saveable 作用域**（lazy 布局按页 key 存取状态），所以
+  "推荐 → 最新 → 推荐"回到同一个分类 id 时，旧偏移会被恢复进刚重新拉取的列表 → 用户落在"从没看过顶部"的列表中间。
+  **凡"同一个名字可能代表一份新列表"，身份位就必须单调递增**：本项目用 `DiscoverUiState.feedEpoch`
+  （只在 `selectCategory` 里 +1），`resetKey = state.refreshTick to state.feedEpoch`。
+  另外不要复用 `refreshTick` 做分类切换 —— 它一变，粉丝圈列表的位置也会被重置。
+- 症状对照：滚 → 切子 tab / 进详情返回 → 归零 = 缺"期望一"；滚 → 滑到别的分类再滑回来 → 落在列表中间 = 缺"期望二"。
+- 验证方式：滚动 → 切子 tab / 进详情或作者页 → 返回，比对**首项文本与 y 坐标**是否一致（`docs/VERIFY.md` §4）；
+  分类切换看**首卡是否完整可见**（内容文本会随重新拉取而变，断言不可靠，用截图判定）。
 
 **C3 · 修饰符顺序决定绘制与命中范围**
 - 触发：`background` / `padding` / `clip` / `clickable` 组合出非预期外观或点击区域。
