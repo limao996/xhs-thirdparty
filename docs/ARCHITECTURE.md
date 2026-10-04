@@ -42,7 +42,8 @@ app/src/main/java/com/thirdparty/xhs/
 │   ├── XhsDao.kt / FollowDao.kt  各表 DAO
 │   ├── Models.kt / NoteItem.kt   DTO 与 UI 模型
 │   ├── ShareText.kt              分享口令文本构造/解析
-│   └── BackupManager.kt          备份与恢复（本地文件 / WebDAV）
+│   ├── BackupManager.kt          备份与恢复（本地文件 / WebDAV）
+│   └── AppCaches.kt              可清理缓存的枚举 / 逐项体积 / 清理 + formatBytes
 ├── net/
 │   ├── XhsApi.kt                 请求封装、重试、会话自愈、身份与设备标识
 │   ├── XhsCrypto.kt              AES/CBC 包体加解密 + CDN 图片 AES/ECB
@@ -57,14 +58,14 @@ app/src/main/java/com/thirdparty/xhs/
 ├── ui/
 │   ├── screens/                  Home / DiscoverTab / Detail / VideoFeed / Search /
 │   │                             Author / Followed / UserList / LocalList / Profile /
-│   │                             Backup / Settings / About / Update
+│   │                             Backup / Settings / About / Update / Cache
 │   ├── components/               XhsWaterfall（真实比例瀑布流）/ VideoPlayer / VideoSurface /
 │   │                             ImageGallery / FullscreenImageViewer / BufferedSlider /
 │   │                             CommentRepliesDialog / ConfirmActionDialog / EmptyState /
-│   │                             FeeBadge / FollowedAuthorRow / PlaybackHandoff /
+│   │                             UpdateAvailableDialog / FeeBadge / FollowedAuthorRow / PlaybackHandoff /
 │   │                             BiometricLock / XhsAsyncImage / MediaPlayer / ResetZoomButton
 │   ├── viewmodel/                Home / Discover / Detail / VideoFeed / Search / Author /
-│   │                             Followed / UserList / LocalList / Profile / Guest / PagingGuard / Update
+│   │                             Followed / UserList / LocalList / Profile / Guest / PagingGuard / Update / Cache
 │   └── theme/                    Theme.kt（M3 Expressive）+ Tokens.kt（设计令牌）
 └── res/                          仅图标与基础资源（values/values-night/自适应图标/背景色）
 ```
@@ -143,8 +144,8 @@ Room 数据库 `xhs_local.db`，`@Database(version = 2)`，实体三张：
 
 - `Routes.kt` 是唯一路由常量表：`home`、`detail/{noteId}`、`search`、`profile`、`author/{userId}`、
   `saved`、`history`、`followed`、`following`（关注，走 `member/follow-list`）、`fans`（粉丝，走 `member/fun-list`）、
-  `backup`、`settings`、`about`（关于）、`update`（检查更新）；辅助构造函数 `detail(noteId)` / `author(userId)`。
-  关于与检查更新是**两个独立页面**，入口都在「我的 → 其他」（设置页只有偏好项）。
+  `backup`、`settings`、`cache`（清除缓存）、`about`（关于）、`update`（检查更新）；辅助构造函数 `detail(noteId)` / `author(userId)`。
+  关于与检查更新是**两个独立页面**，入口都在「我的 → 其他」；设置页只放偏好项与数据相关入口（备份与恢复、清除缓存）。
 - 底部三 tab 由 `HomeTab` 枚举定义：`FEED("tab/feed","推荐")`、`DISCOVER("tab/discover","发现")`、
   `PROFILE("tab/profile","我的")`。
 - 深链 `xhstp://note/<id>`（`DeepLink.kt` + Manifest 的 `VIEW/DEFAULT/BROWSABLE` 过滤器）→ 直接进入详情。
@@ -200,6 +201,8 @@ Room 数据库 `xhs_local.db`，`@Database(version = 2)`，实体三张：
 | `org.json` 而非 gson/kotlinx-serialization | 包体形态简单且已在加密层处理字节；少一个反射依赖 |
 | 检查更新用**独立的 OkHttpClient**，且不套 AES | 共用客户端带 64 MB 磁盘缓存（为图片 CDN 的 `max-age` 服务），会把 GitHub 应答缓存成"永远同一个结果"；公网 JSON 不含账号信息，不需要也不应该走加密链路（见 GOTCHAS G1） |
 | 应用锁用 `biometric` + `fragment-ktx ≥ 1.8.9` | 低版本 fragment-ktx 会触发 requestCode 上限崩溃 |
+| 缓存按类型列出、可逐项勾选清理（`data/AppCaches.kt`） | 只有"清"一个按钮时用户不知道会清掉什么；按 `CacheKind` 拆成 磁盘图片 / 内存位图 / 其它临时文件 后，每项都能显示真实体积与代价。一项勾选只清一项 —— 清磁盘不再顺手清内存（见 GOTCHAS D8） |
+| 启动时后台自动检查更新，**仅在有新版时弹窗** | 用户要求"进入软件自动检查更新"；但限流 / 断网 / 没有正式版 / 已是最新都不该打扰用户，因此只在 `Newer` 且未被「跳过这个版本」时弹（见 GOTCHAS G4/G5）。失败后由 `App.bump()` 在网络恢复时补查一次 |
 
 ## 8. 不在范围内
 

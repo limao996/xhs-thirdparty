@@ -36,7 +36,8 @@ app/src/main/java/com/thirdparty/xhs/
 │   ├── Models.kt / NoteItem.kt / ShareText.kt   DTO 与 UI 模型
 │   ├── XhsDatabase.kt         Room 数据库（xhs_local.db，version 2）
 │   ├── XhsEntity.kt / XhsDao.kt / FollowDao.kt 实体与 DAO
-│   └── BackupManager.kt       备份/恢复（本地文件 + WebDAV）
+│   ├── BackupManager.kt       备份/恢复（本地文件 + WebDAV）
+│   └── AppCaches.kt           可清理缓存（CacheKind：磁盘图片 / 内存位图 / 临时文件）与 formatBytes
 ├── net/
 │   ├── XhsApi.kt              请求封装、重试、会话自愈
 │   ├── XhsCrypto.kt           AES/CBC 包体 + CDN 图片 AES/ECB
@@ -107,7 +108,7 @@ app/src/main/java/com/thirdparty/xhs/
 | 解压版 Gradle（快） | `%USERPROFILE%\.gradle\wrapper\dists\gradle-9.8.0-bin\*\gradle-9.8.0\bin\gradle.bat` |
 | 模拟器 AVD | `xhs_test`（API 34、1080×2400、420dpi），位于 `%USERPROFILE%\.android\avd`，**不在仓库里** |
 | 构建产物 | `app/build/outputs/apk/{debug,release}/`（不入库） |
-| 最近一次实测 | 2026-10-04：`assembleDebug` 成功（Gradle 9.8.0 / AGP 9.4.1 / JDK 17），产物 `app-debug.apk` 26,185,264 B、md5 `f21bb3ab0efde54be47ca0649a656b51`；设备侧验证「发现⇄粉丝圈 子 tab 滚动位置保持」「进作者页返回不归零」通过 |
+| 最近一次实测 | 2026-10-04：`assembleDebug` 成功（Gradle 9.8.0 / AGP 9.4.1 / JDK 17），产物 `app-debug.apk` 26,267,184 B、md5 `AEDFB147B80C9BFD60B568D0A9F84F40`；设备侧验证「设置 → 清除缓存」逐项勾选/清理、「我的 → 检查更新」均通过 |
 
 ## 7. 当前状态
 
@@ -115,3 +116,10 @@ app/src/main/java/com/thirdparty/xhs/
 - 已知边界：不做发评论；付费内容靠**换新游客号**领取新体验窗口获得访问（不是破解校验，见 §1 与 [../ARCHITECTURE.md](../ARCHITECTURE.md) §3.1）；
   `app.xiaohuangbook.net` 在部分网络环境会被 DNS 污染。
 - 仓库维护面：AI 档案、CI、Issue/PR 模板、文档随代码同步更新（约定见 [CONVENTIONS.md](CONVENTIONS.md)）。
+- 缓存与数据的边界（改"清除缓存"前必读）：可清理的只有三种 —— `cache/http_cache`（OkHttp 磁盘图片与封面，上限 64 MB）、
+  进程内位图 LRU（`ui/components/XhsAsyncImage.kt` 的 `BitmapCache`，`maxMemory/8`）、`cache/` 下的其它临时文件。
+  收藏 / 最近浏览 / 关注在 Room（`xhs_local.db`）里，是**数据不是缓存**，清理不会动它们；视频不落盘（边看边下，退出即释放）。
+  入口：设置 → 数据 → 清除缓存（`ui/screens/CacheScreen.kt` + `ui/viewmodel/CacheViewModel.kt`）。
+- 检查更新：`net/UpdateChecker.kt` 查 GitHub `releases/latest`；启动时 `App.checkUpdateOnLaunch()` 自动查一次，
+  只有 `Newer` 且未被「跳过这个版本」（`settings.ignored_update_version`）时才弹 `UpdateAvailableDialog`。
+  GitHub 匿名额度 60 次/小时/IP，超出是 HTTP 403（页面上显示「检查失败：GitHub 限流」），限流/断网不会弹窗。

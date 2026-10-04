@@ -27,6 +27,8 @@ Body: AES/CBC/PKCS5Padding( JSON 明文 )
 > **唯一的例外**：我的 → 检查更新 走 `https://api.github.com/repos/limao996/xhs-thirdparty/releases/latest`，
 > 是**明文 JSON、没有 `User-Id`、没有 AES 包体**的普通 HTTPS 请求（`net/UpdateChecker.kt`，自带独立的 OkHttpClient）。
 > 它只读版本号与下载地址，不携带任何账号、身份或设备信息，也不使用本文件描述的任何加密参数。
+> 应用启动时也会自动查一次（`App.checkUpdateOnLaunch()`）；GitHub 匿名额度是 60 次/小时/IP，
+> 超出会返回 HTTP 403，此时应用静默降级为"未查到新版本"，只在检查更新页显示「检查失败：GitHub 限流」。
 
 ## 2. 加解密（`net/XhsCrypto.kt`）
 

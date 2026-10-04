@@ -153,6 +153,14 @@
 - 触发：为调试临时加代码或临时改环境。
 - 正确做法：验证完成后删除探针并 `grep -ri 'probe'` 复查；临时环境改动要还原（否则会成为下一个"诡异现象"）。
 
+**D8 · 一个缓存一个勾选框：清磁盘不得顺手清内存**
+- 触发：改「清除缓存」页或 `AppCaches.clear()` / `XhsRepository.clearHttpCache()`。
+- 症状（实测过）：只勾「图片与封面缓存」（63.9 MB）并确认，清完「图片内存缓存」也跟着变成 0 B ——
+  确认框写的是"清除选中的 2 项"，实际清了 3 项，界面与用户勾选不符。
+- 原因：`clearHttpCache()` 原实现是 `evictAll()` + `clearImageMemoryCache()` 两件事。
+- 正确做法：`XhsRepository.clearHttpCache()` 只 evict 磁盘；内存位图缓存只在勾了 `CacheKind.IMAGE_MEMORY` 时由
+  `XhsAsyncImage.clearImageMemoryCache()` 清。验证方式：只勾磁盘 → 清完磁盘为 0 B、内存仍非 0（见 `docs/VERIFY.md`）。
+
 ## E. 文档与仓库
 
 **E1 · 不把非项目内容搬进仓库**
@@ -229,3 +237,19 @@
 - 触发：写版本比较（检查更新）或把版本号显示给用户。
 - 正确处理：`UpdateChecker.numbers()` 会先截掉 `-`/`+` 之后的部分，所以 `1.2.0-debug` 与 `1.2.0` 相等；
   比较逻辑不要自己去 `split('-')`，复用它，否则 debug 包会永远报"有新版本"。
+
+**G4 · 匿名 GitHub API 只有 60 次/小时/IP，超了是 403**
+- 触发：反复冷启动验证「自动检查更新」，或同一出口 IP 下多台机器在测。
+- 症状（实测过）：检查更新页显示「检查失败：GitHub 限流（HTTP 403），过一会儿再试」，
+  重启多少次都不弹更新弹窗 —— 因为根本没查成功，不是弹窗逻辑坏了。
+- 正确做法：先查配额再下结论 —— `Invoke-RestMethod https://api.github.com/rate_limit` 看
+  `resources.core.remaining` 与 `reset`（本地是匿名额度；`gh` 已登录走 5000 次/小时的另一个额度，不会替你省额度）。
+  等 `reset` 过后再复测；应用侧则必须把 403 映射成 `Failed` 并静默降级（硬约束 14）。
+
+**G5 · `releases/latest` 不含 prerelease / draft**
+- 触发：为了验证"发现新版本"临时发一个版本号很高的 release。
+- 症状：发了 `v9.9.9 --prerelease` 后应用依旧报"已是最新版本"。
+- 原因：`GET /repos/{owner}/{repo}/releases/latest` 只返回最新的**正式**（非 prerelease、非 draft）release。
+- 正确做法：临时验证版本要发成正式 release（`prerelease=false`、`draft=false`），验证完立刻
+  `gh release delete <tag> --yes --cleanup-tag`，并清掉设备上 `shared_prefs/settings.xml` 里的
+  `ignored_update_version`（否则那台设备永远不会再弹这个版本号）。

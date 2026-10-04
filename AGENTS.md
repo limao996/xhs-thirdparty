@@ -20,6 +20,8 @@
 | 10 | 声明"已修复/已验证"之前必须有可复现证据（编译输出、UI dump、截图） | 见 `docs/VERIFY.md` |
 | 11 | **不得移除或绕开游客账号轮换链路**（`v2/app/init` → `login-with-guest` → 校验 VIP → 退避） | 这是本项目唯一的核心功能；少了它页面只剩付费墙（见第 1 节与 `docs/ARCHITECTURE.md` §3.1） |
 | 12 | 文档里**不要写"不破解付费 / 不绕过付费限制"这类与事实相反的声明** | 本 App 的机制就是自动化领取新游客 VIP 福利，描述必须与实现一致 |
+| 13 | 缓存清理**一项勾选只清一项**：`AppCaches.clear()` 按 `CacheKind` 分别调用，`XhsRepository.clearHttpCache()` 只清磁盘、不得顺手清内存位图缓存 | 之前清磁盘会连带清内存，确认框列的是 2 项、实际清了 3 项，与用户勾选不符 |
+| 14 | 启动自动检查更新**只在真有新版时弹窗**，其余（无正式版 / 限流 / 断网 / 已是最新）一律静默；「跳过这个版本」必须持久化到 `settings` | 每次启动都弹会骚扰用户；GitHub 匿名 API 只有 60 次/小时/IP，实测会 403 |
 
 ## 1. 项目一句话
 
@@ -46,7 +48,8 @@
 | `net/XhsApi.kt` | 请求封装、重试、会话自愈 | 重试次数/退避在这里（`NETWORK_ATTEMPTS` / `RETRY_BACKOFF_MS`） |
 | `net/XhsCrypto.kt` | AES/CBC 加解密 + CDN 图片 AES/ECB | 参数见 `docs/PROTOCOL.md`，不要"顺手"改 |
 | `net/WebDavClient.kt` | WebDAV 客户端 | 备份固定写 `xhs/` 子目录 |
-| `net/UpdateChecker.kt` | 检查更新（GitHub Releases，**全应用唯一不经 AES 的请求**） | 必须用**独立的 OkHttpClient**（共用的带 64 MB 磁盘缓存会把应答缓存住），且必须带 `User-Agent`（否则 GitHub 403）；见 `docs/ai/GOTCHAS.md` G1 |
+| `net/UpdateChecker.kt` | 检查更新（GitHub Releases，**全应用唯一不经 AES 的请求**） | 必须用**独立的 OkHttpClient**（共用的带 64 MB 磁盘缓存会把应答缓存住），且必须带 `User-Agent`（否则 GitHub 403）；见 `docs/ai/GOTCHAS.md` G1。启动时由 `App.checkUpdateOnLaunch()` 自动查一次，仅 `Newer` 且不等于「已跳过版本」时才写 `App.pendingUpdate` → `MainActivity` 弹 `ui/components/UpdateAvailableDialog.kt`；GitHub 匿名 API 上限 60 次/小时/IP，超了是 403（映射成 `Failed`，UI 如实显示"检查失败：GitHub 限流"） |
+| `data/AppCaches.kt` | 可清理缓存的枚举、逐项体积与清理（含顶层 `formatBytes`） | 每种缓存**各自一个 `CacheKind`、各自一个勾选框**，清理必须一一对应（硬约束 13）；`IMAGE_DISK` 走 `XhsRepository.clearHttpCache()`，`IMAGE_MEMORY` 走 `ui/components/XhsAsyncImage.kt` 的 `clearImageMemoryCache()`；`TEMP_FILES` 只含 `cache/` 下除 `http_cache/` 与 SQLite 锁文件 `xhs_local.db.lck` 之外的文件（`isClearableTemp`） |
 | `navigation/AppNavHost.kt` + `Routes.kt` | 唯一路由注册处 | 新页面必须同时登记 `Routes` 常量与 `HomeTab`（如属底部页） |
 | `ui/screens/*.kt` | 页面级组合函数 | 每个 screen 对应一个 `ui/viewmodel/`；子 tab 内容要包 `rememberSaveableStateHolder()`，列表滚动状态要按 `resetKey` 分组（`key(resetKey) { … }`），身份位同名却是新列表时必须单调递增（GOTCHAS C2/C8） |
 | `ui/components/*.kt` | 可复用组件（瀑布流/播放器/画廊/对话框/水印状态…） | 组件不要直接访问 Room |

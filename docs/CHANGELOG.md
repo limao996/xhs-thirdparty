@@ -279,6 +279,38 @@
 
 ---
 
+## 阶段八 · 启动自动检查更新与缓存分类清理（2026-10-04）
+
+### 新功能
+
+- **进入软件自动检查更新**：`App.checkUpdateOnLaunch()` 在 `onCreate()` 里后台查一次 GitHub Releases，
+  只有真的查到新版本才写 `App.pendingUpdate`；`MainActivity` 收到后弹 `ui/components/UpdateAvailableDialog.kt`
+  （标题「发现新版本 vX」，正文是更新说明，按钮「打开下载页」/「以后再说」/「跳过这个版本」）。
+  其余情况（已是最新 / 没有正式版 / 限流 / 断网）一律静默，只在「我的 → 检查更新」页如实显示；
+  「以后再说」下次启动仍会提醒，「跳过这个版本」持久化到 `settings`（`ignored_update_version`）后不再提醒；
+  网络恢复时（`App.bump()`）补查一次。锁屏状态下不弹窗（避免盖在解锁页上）。
+- **缓存清理改为按类型多选，并移到设置页**：新增 `data/AppCaches.kt`（`CacheKind`：图片与封面缓存 /
+  图片内存缓存 / 其它临时文件，各自显示真实体积）、`ui/viewmodel/CacheViewModel.kt`、
+  `ui/screens/CacheScreen.kt`；每项一个勾选框 + 全选 / 全不选 + 底部按钮显示「清除选中（N 项 · X）」，
+  确认框列出将清项与合计，清完 Toast 报告实际释放量。入口从「我的」移到「设置 → 数据 → 清除缓存」
+  （行内显示当前占用）。
+
+### 修复
+
+- 一项勾选只清一项：原先清「图片与封面缓存」会连带把「图片内存缓存」清掉（`XhsRepository.clearHttpCache()`
+  同时做了 `evictAll()` 与 `clearImageMemoryCache()`），确认框列 2 项、实际清 3 项。
+  现在 `clearHttpCache()` 只清磁盘，内存位图缓存只在勾选 `IMAGE_MEMORY` 时清
+- 删除 `ProfileViewModel` 里已无用的 `cacheBytes` / `clearCache()`，`formatBytes()` 收敛到 `data/AppCaches.kt`
+
+### 设备验证（模拟器 emulator-5554）
+
+- 我的页不再有「清除图片缓存」；设置 → 数据 出现「清除缓存 | 图片 / 临时文件，共 66.2 MB；可逐项勾选」
+- 缓存页实测：3 项分别 63.9 MB / 2.3 MB / 0 B，勾 1 项按钮变「清除选中（1 项 · 63.9 MB）」、
+  勾 2 项变「（2 项 · 63.9 MB）」，确认框列出所选两项与合计，清完各项归 0 B
+- 只勾磁盘缓存后复测：磁盘 0 B、内存位图缓存仍为 6.9 MB（语义修正生效），全程 `crash: 0`
+
+---
+
 ## 统计
 
 | 项目 | 值 |
@@ -292,6 +324,7 @@
 | 阶段五（开源化迁移） | 6 个提交（结构 / 文档 / 修复 ×2） |
 | 阶段六（关于 / 检查更新与开源发布） | 2 个提交（feat + docs） |
 | 阶段七（页面拆分与入口调整） | 2 个提交（fix + docs 同步） |
+| 阶段八（启动自动检查更新与缓存分类清理） | 2 个提交（feat + docs 同步） |
 | 当前版本 | `versionName 1.2.0`，`versionCode = 当前秒数 − 2026-10-01T00:00:00 的秒数` |
 | 公开发布 | `v1.2.0`（2026-10-04），<https://github.com/limao996/xhs-thirdparty/releases/tag/v1.2.0> |
 
