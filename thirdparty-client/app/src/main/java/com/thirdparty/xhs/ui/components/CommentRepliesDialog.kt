@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
@@ -25,9 +26,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.distinctUntilChanged
 import com.thirdparty.xhs.App
 import com.thirdparty.xhs.data.CommentReply
 import com.thirdparty.xhs.ui.theme.AvatarSize
@@ -61,6 +64,7 @@ fun CommentRepliesDialog(
     var loading by remember(commentId) { mutableStateOf(true) }
     var hasMore by remember(commentId) { mutableStateOf(true) }
     var exhausted by remember(commentId) { mutableStateOf(false) }
+    val listState = rememberLazyListState()
 
     suspend fun loadMore() {
         val next = page + 1
@@ -71,7 +75,7 @@ fun CommentRepliesDialog(
             replies = (replies + batch).distinctBy { it.replyId }
             hasMore = batch.isNotEmpty()
         } else {
-            // empty list or error — stop offering "load more"
+            // empty list or error — stop trying
             hasMore = false
             exhausted = true
         }
@@ -79,6 +83,23 @@ fun CommentRepliesDialog(
     }
 
     LaunchedEffect(commentId) { loadMore() }
+
+    // Auto-load when the end of the list comes into view, instead of a
+    // 「加载更多回复」 button.
+    //
+    // (That button was also dead: its onClick only set `loading = true`, while the
+    // fetch hung off a `LaunchedEffect(commentId)`, whose key never changed — so
+    // tapping it did nothing at all.)
+    LaunchedEffect(listState, commentId) {
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1 }
+            .distinctUntilChanged()
+            .collect { last ->
+                if (hasMore && !loading && last >= replies.size - 2) {
+                    loading = true
+                    loadMore()
+                }
+            }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -101,6 +122,7 @@ fun CommentRepliesDialog(
                 )
             } else {
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp),
                     verticalArrangement = Arrangement.spacedBy(Spacing.s)
                 ) {
@@ -137,7 +159,7 @@ fun CommentRepliesDialog(
                                 Modifier.fillMaxWidth().padding(Spacing.s),
                                 contentAlignment = Alignment.Center
                             ) {
-                                TextButton(onClick = { loading = true }) { Text("加载更多回复") }
+                                LoadingIndicator(Modifier.size(20.dp))
                             }
                         }
                     }

@@ -13,6 +13,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
@@ -20,6 +22,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.distinctUntilChanged
 import com.thirdparty.xhs.data.NoteImage
 import com.thirdparty.xhs.ui.theme.Corners
 import com.thirdparty.xhs.ui.theme.Scrim
@@ -47,12 +50,36 @@ fun ImageGallery(
     modifier: Modifier = Modifier,
     /** null = no cap (grids and other callers that manage their own size) */
     maxHeight: Dp? = null,
+    /**
+     * Page to show. Hoisted so the full-screen viewer and this gallery can share ONE
+     * index: swiping in the viewer then closing it used to drop the user back on the
+     * page the gallery was left at, and the two counters disagreed.
+     */
+    page: Int = 0,
+    /** reports swipes here, so the caller can feed the viewer the same index */
+    onPageChange: ((Int) -> Unit)? = null,
     /** tapping an image opens the full-screen viewer at that page */
     onOpen: ((Int) -> Unit)? = null
 ) {
     // rememberPagerState must be called unconditionally: hoisting it above the
     // size checks keeps the slot count stable when the image list is swapped.
-    val pagerState = rememberPagerState(pageCount = { images.size })
+    val pagerState = rememberPagerState(
+        initialPage = page.coerceIn(0, (images.size - 1).coerceAtLeast(0)),
+        pageCount = { images.size }
+    )
+
+    // follow the shared index when it changes from the outside (the viewer swiped, or
+    // the page came back from a restore)
+    LaunchedEffect(page, images.size) {
+        val target = page.coerceIn(0, (images.size - 1).coerceAtLeast(0))
+        if (images.isNotEmpty() && pagerState.currentPage != target) pagerState.scrollToPage(target)
+    }
+    // ...and report our own swipes back out
+    LaunchedEffect(pagerState, images.size) {
+        snapshotFlow { pagerState.currentPage }
+            .distinctUntilChanged()
+            .collect { onPageChange?.invoke(it) }
+    }
 
     if (images.isEmpty()) return
 

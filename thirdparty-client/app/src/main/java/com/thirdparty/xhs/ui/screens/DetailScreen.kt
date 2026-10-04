@@ -50,7 +50,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -112,6 +115,10 @@ fun DetailScreen(
     // Hoisted here (not in DetailContent) so the app bar can open the image
     // viewer for image posts — see the 全屏 action below.
     var openImage by rememberSaveable { mutableStateOf<Int?>(null) }
+    // 图文: the page the gallery is on. Hoisted here because BOTH the inline gallery and
+    // the full-screen viewer read it — one index, so the "N/M" counters agree and
+    // closing the viewer leaves the gallery on the picture the user swiped to.
+    var imagePage by rememberSaveable(noteId) { mutableIntStateOf(0) }
     val context = LocalContext.current
 
     // In fullscreen the app bar is hidden, so the system back gesture must leave
@@ -341,7 +348,10 @@ fun DetailScreen(
                             // came up with 内容详情 still sitting above it — not
                             // fullscreen at all.
                             fullscreen = true
-                            if (!videoNote) openImage = 0
+                            // open the viewer on the page the gallery is showing, not on
+                            // the first one (that was the other half of the two
+                            // counters disagreeing)
+                            if (!videoNote) openImage = imagePage
                         }) {
                             Icon(
                                 if (fullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
@@ -380,6 +390,8 @@ fun DetailScreen(
                     isVideo = isVideoNote,
                     onEnterFullscreen = { fullscreen = true },
                     openImage = openImage,
+                    imagePage = imagePage,
+                    onImagePage = { imagePage = it },
                     onOpenImage = { page ->
                         openImage = page
                         // Tapping a picture in the embedded gallery must go FULL screen,
@@ -414,6 +426,12 @@ private fun DetailContent(
      */
     openImage: Int?,
     onOpenImage: (Int?) -> Unit,
+    /**
+     * Page the 图文 gallery is showing, shared with the full-screen viewer so the two
+     * cannot drift apart (see [ImageGallery] and [FullscreenImageViewer]).
+     */
+    imagePage: Int,
+    onImagePage: (Int) -> Unit,
     onEnterFullscreen: () -> Unit = {},
     sharedPlayer: androidx.media3.exoplayer.ExoPlayer? = null,
     /** width/height of the video, or 0 while it is not known yet */
@@ -438,10 +456,13 @@ private fun DetailContent(
     // Fullscreen changes only how this column is laid out — no scroll, no padding, the
     // media fills it — so the media's place in the composition (and with it its view and
     // surface) is identical in both modes.
+    // The page's scroll position is read below as well: the comments auto-load when it
+    // reaches the end (see the comments section).
+    val scrollState = rememberScrollState()
     Column(
         Modifier.fillMaxSize()
             .then(if (fullscreen) Modifier else Modifier.padding(pad))
-            .then(if (fullscreen) Modifier else Modifier.verticalScroll(rememberScrollState()))
+            .then(if (fullscreen) Modifier else Modifier.verticalScroll(scrollState))
     ) {
         if (isVideo) {
             // Windowed player: an inset media card, sized inside a RANGE.
@@ -512,6 +533,9 @@ private fun DetailContent(
             ImageGallery(
                 images = images,
                 maxHeight = (galleryConfig.screenHeightDp * 0.5f).dp,
+                // one shared index with the full-screen viewer (see [ImageGallery])
+                page = imagePage,
+                onPageChange = onImagePage,
                 onOpen = { onOpenImage(it) }
             )
         }
@@ -670,16 +694,23 @@ private fun DetailContent(
                 Text("还没有评论", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             } else {
                 state.comments.forEach { c -> CommentRow(c) { openReplies = it } }
+                // Auto-load instead of a 「查看更多评论」 button: the list is paged and a
+                // tap per page is pure friction. Keyed on the SCROLL POSITION rather
+                // than on the state, so a failed page is not retried in a loop — it
+                // tries again when the user scrolls again.
                 if (state.commentsHasMore) {
-                    TextButton(
-                        onClick = { viewModel.loadMoreComments() },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        if (state.commentsLoading) {
-                            LoadingIndicator(Modifier.size(16.dp))
-                            Spacer(Modifier.width(Spacing.s))
-                        }
-                        Text("查看更多评论")
+                    LaunchedEffect(scrollState, item.noteId) {
+                        snapshotFlow { scrollState.value to scrollState.maxValue }
+                            .distinctUntilChanged()
+                            .collect { (value, max) ->
+                                val atEnd = max == 0 || value >= max - 600
+                                if (atEnd && !state.commentsLoading) viewModel.loadMoreComments()
+                            }
+                    }
+                }
+                if (state.commentsLoading) {
+                    Box(Modifier.fillMaxWidth().padding(Spacing.s), contentAlignment = Alignment.Center) {
+                        LoadingIndicator(Modifier.size(20.dp))
                     }
                 }
             }
@@ -695,6 +726,9 @@ private fun DetailContent(
                     listOf(note.cover).filter { it.isNotEmpty() }.map { com.thirdparty.xhs.data.NoteImage(it) }
                 },
                 initialPage = page,
+                // report swipes back, so the inline gallery is on the same picture when
+                // the viewer closes
+                onPageChange = onImagePage,
                 // FULLSCREEN: edge to edge (no content padding) so the picture runs
                 // under the transparent status/navigation bars — the whole point of
                 // asking for transparent bars instead of hidden ones. The viewer's own

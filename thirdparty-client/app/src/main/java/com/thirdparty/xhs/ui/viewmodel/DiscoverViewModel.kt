@@ -202,16 +202,23 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
                 fanGroupPage = next
                 _ui.update { s ->
                     val before = s.fanGroup.size
-                    // the backend repeats authors across page boundaries
-                    val merged = (s.fanGroup + recs).distinctBy { it.userId }
+                    // a RESET (the refresh FAB / re-entering the tab) REPLACES the list.
+                    // It used to merge unconditionally, so a refresh appended page 1 to
+                    // the pages already on screen: the recommendations came back the
+                    // same, the list did not change, and the refresh looked like it did
+                    // nothing at all.
+                    val merged = if (reset) recs
+                    else (s.fanGroup + recs).distinctBy { it.userId }
                     if (reset) emptyFanGroupPages = 0
-                    emptyFanGroupPages =
-                        if (merged.size == before && !reset) emptyFanGroupPages + 1 else 0
+                    else emptyFanGroupPages =
+                        if (merged.size == before) emptyFanGroupPages + 1 else 0
                     s.copy(
                         fanGroup = merged,
                         fanGroupLoading = false,
                         fanGroupMore = false,
                         fanGroupError = false,
+                        // a reset also returns the user to the top of the list
+                        refreshTick = if (reset) s.refreshTick + 1 else s.refreshTick,
                         // a short page is normal here (3 authors per page) — only an
                         // empty page, or two pages that add nothing, is the end
                         fanGroupHasMore = recs.isNotEmpty() && emptyFanGroupPages < 2

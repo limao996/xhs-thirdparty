@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -126,7 +127,8 @@ fun DiscoverTabScreen(
                         loadingMore = state.fanGroupMore,
                         onLoadMore = { viewModel.loadMoreFanGroup() },
                         onOpenAuthor = onOpenAuthor,
-                        onOpenDetail = onOpenDetail
+                        onOpenDetail = onOpenDetail,
+                        resetKey = state.refreshTick
                     )
                     DiscoverTab.FOLLOW_LOCAL -> FollowedMineTab(state.followed, onOpenAuthor)
                 }
@@ -267,7 +269,9 @@ private fun FanGroupTab(
     loadingMore: Boolean,
     onLoadMore: () -> Unit,
     onOpenAuthor: (Int) -> Unit,
-    onOpenDetail: (Long) -> Unit
+    onOpenDetail: (Long) -> Unit,
+    /** bumped by a refresh; the list scrolls back to the top when it changes */
+    resetKey: Int = 0
 ) {
     val clear = com.thirdparty.xhs.ui.theme.bottomNavClearance()
     if (loading && recommended.isEmpty()) {
@@ -289,6 +293,10 @@ private fun FanGroupTab(
         return
     }
     val listState = rememberLazyListState()
+    // A refresh replaces the list, so put the user back at the top of it — otherwise
+    // a refresh while scrolled down leaves the new list positioned wherever the old
+    // one was, which reads as "nothing happened".
+    LaunchedEffect(resetKey) { listState.scrollToItem(0) }
     // Endless pagination, keyed on the item count so it re-evaluates after every
     // batch — the backend serves only 3 authors per page here.
     if (hasMore) {
@@ -485,23 +493,58 @@ private fun FollowedMineTab(
 private val CategoryRowHeight = 48.dp
 
 /**
- * Scrolls [index] to the middle of the viewport.
+ * Brings [index] to the middle of the viewport.
  *
- * `animateScrollToItem` can only align an item to the start, and its `scrollOffset`
- * parameter needs the item's width — which varies here, because the chips are sized
- * by their labels. So: bring it into view first, read its measured geometry from
- * the layout info, then correct by the difference between its centre and the
- * viewport centre.
+ * Two things were wrong before, and both were visible when tapping a chip:
  *
- * Leaves it where the first scroll put it when it cannot be measured yet (not
- * composed), rather than guessing an offset.
+ *  1. It called `animateScrollToItem(index)` first, which aligns the item to the
+ *     START — so an already-visible chip slid left and then slid back to the middle.
+ *     Reported as "总是把标签移动到左侧再居中". Now an item that is already on screen
+ *     is not realigned at all: it just gets the one correction that centres it. An
+ *     item that is off screen is placed near the middle instantly (a negative
+ *     `scrollOffset` stops short of the start) and then corrected.
+ *
+ *  2. It measured the chip immediately. Selecting a `FilterChip` ANIMATES a leading
+ *     check icon in, so the width at that moment is the narrower pre-selection one
+ *     and the correction landed ~13dp off centre — the "居中并没有对齐" half. So the
+ *     width is now watched until it stops changing, and only then does the single
+ *     animated correction run.
  */
 private suspend fun androidx.compose.foundation.lazy.LazyListState.animateScrollToItemCentered(
     index: Int
 ) {
-    animateScrollToItem(index)
+    val start = layoutInfo.viewportStartOffset
+    val end = layoutInfo.viewportEndOffset
+    val viewport = end - start
+    if (viewport <= 0) return
+
+    // The CENTRE of the viewport in the layout's own coordinates — start + (end-start)/2,
+    // not (end-start)/2.
+    //
+    // This row has a 12dp contentPadding, and that makes `viewportStartOffset` NEGATIVE
+    // (and `viewportEndOffset` correspondingly larger). Using (end-start)/2 as the target
+    // therefore aimed 12dp to the right of the real middle, which is exactly the "居中
+    // 并没有对齐" report: every chip settled one content-padding off centre.
+    val viewportCentre = (start + end) / 2
+
+    if (layoutInfo.visibleItemsInfo.none { it.index == index }) {
+        // off screen: land it roughly in the middle without animating through the row
+        scrollToItem(index, -viewportCentre)
+    }
+
+    // wait for the size to settle (the selected chip animates a check icon in, which
+    // makes it wider)
+    var lastSize = -1
+    var stableFrames = 0
+    while (stableFrames < 2) {
+        val size = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }?.size ?: break
+        if (size == lastSize) stableFrames++ else stableFrames = 0
+        lastSize = size
+        withFrameNanos { }
+    }
+
     val info = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index } ?: return
-    val viewport = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
-    val delta = (info.offset + info.size / 2) - viewport / 2
+    val centre = (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2
+    val delta = (info.offset + info.size / 2) - centre
     if (delta != 0) animateScrollBy(delta.toFloat())
 }

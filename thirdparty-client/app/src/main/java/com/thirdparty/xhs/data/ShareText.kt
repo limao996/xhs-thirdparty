@@ -37,7 +37,7 @@ object ShareText {
 
         append("\n\n① 复制本条消息\n")
         append(DeepLink.noteUrl(item.noteId))
-        append("\n② 打开（或切回）「").append(APP_NAME).append("」App → 会自动弹出打开提示")
+        append("\n② 打开「").append(APP_NAME).append("」App → 会自动弹出提示")
     }
 
     /** `图文` / `视频`, from the same `note_type` mapping the badges use. */

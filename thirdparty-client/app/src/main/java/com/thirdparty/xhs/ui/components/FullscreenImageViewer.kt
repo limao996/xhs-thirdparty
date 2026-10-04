@@ -20,6 +20,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -65,6 +67,13 @@ fun FullscreenImageViewer(
     initialPage: Int,
     onDismiss: () -> Unit,
     /**
+     * Reports the page being shown, so the caller can keep ONE index for this viewer
+     * and the embedded gallery: swiping here and then closing lands back on the same
+     * picture instead of the one the gallery was left at (the two counters used to
+     * disagree).
+     */
+    onPageChange: ((Int) -> Unit)? = null,
+    /**
      * Applied to the root. Callers rendering this INSIDE a padded Scaffold content slot
      * must pass that padding: without it the viewer starts at y=0 and its top bar ends
      * up BEHIND the page's own app bar — which is exactly why the counter and close
@@ -80,6 +89,12 @@ fun FullscreenImageViewer(
     val pagerState = rememberPagerState(
         initialPage = initialPage.coerceIn(0, images.lastIndex)
     ) { images.size }
+
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.currentPage }
+            .distinctUntilChanged()
+            .collect { onPageChange?.invoke(it) }
+    }
 
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
