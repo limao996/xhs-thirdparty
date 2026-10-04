@@ -168,7 +168,13 @@ private object BitmapCache {
     }
 
     fun clear() = lru.evictAll()
+
+    /** Rough bytes held right now (`sizeOf` counts KiB per entry). */
+    fun bytes(): Long = lru.size().toLong() * 1024L
 }
 
 /** Drop all decoded bitmaps (called when the system reports memory pressure). */
 fun clearImageMemoryCache() = BitmapCache.clear()
+
+/** Bytes held by the decoded-bitmap cache (shown in 设置 → 清除缓存). */
+fun imageMemoryCacheBytes(): Long = BitmapCache.bytes()

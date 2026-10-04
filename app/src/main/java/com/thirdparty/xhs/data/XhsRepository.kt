@@ -131,10 +131,15 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
         } ?: 0L
     }.getOrDefault(0L)
 
-    /** Evict every cached image response (memory + disk). */
+    /**
+     * Evict every cached response from disk.
+     *
+     * Decoded bitmaps are deliberately NOT touched: they are a different cache with
+     * their own checkbox in 设置 → 清除缓存 (see data/AppCaches). Clearing both from
+     * one selection made the list disagree with what the user had ticked.
+     */
     fun clearHttpCache() {
         runCatching { http.cache?.evictAll() }
-        com.thirdparty.xhs.ui.components.clearImageMemoryCache()
     }
 
     /**

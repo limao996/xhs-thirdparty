@@ -24,6 +24,8 @@ object Routes {
     const val ABOUT = "about"
     /** 检查更新：独立页面，只查 GitHub Releases。入口在「我的」页。 */
     const val UPDATE = "update"
+    /** 清除缓存：多选要清的缓存类型。入口在 设置 → 数据。 */
+    const val CACHE = "cache"
 
     fun detail(noteId: Long): String = "detail/$noteId"
     fun author(userId: Int): String = "author/$userId"

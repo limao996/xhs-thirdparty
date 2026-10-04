@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Palette
@@ -29,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,6 +43,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.background
 import androidx.compose.material3.Surface
+import com.thirdparty.xhs.data.AppCaches
+import com.thirdparty.xhs.data.formatBytes
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.thirdparty.xhs.ui.theme.Corners
 import androidx.compose.foundation.layout.fillMaxWidth
 
@@ -64,7 +70,9 @@ fun SettingsScreen(
     onSetHistoryLimit: (Int) -> Unit,
     autoVip: Boolean,
     onSetAutoVip: (Boolean) -> Unit,
-    onOpenBackup: () -> Unit
+    onOpenBackup: () -> Unit,
+    /** 清除缓存：多选要清的缓存类型 */
+    onOpenCache: () -> Unit
 ) {
     var pickTheme by remember { mutableStateOf(false) }
     // The lock / limit / auto-switch values come from SharedPreferences, which is
@@ -75,6 +83,14 @@ fun SettingsScreen(
     var autoOn by remember { mutableStateOf(autoVip) }
     var limit by remember { mutableStateOf(historyLimit) }
     var pickLimit by remember { mutableStateOf(false) }
+
+    // 数据 组的说明里要显示缓存总共占多少。量一次就够了：这张页面每次被打开
+    // 都会重新组合（清缓存在另一个页面，回来时数值自然刷新），而且量磁盘缓存
+    // 会 flush OkHttp 的日志，不能放在主线程。
+    var cacheBytes by remember { mutableStateOf(0L) }
+    LaunchedEffect(Unit) {
+        cacheBytes = withContext(Dispatchers.IO) { AppCaches.totalBytes() }
+    }
 
     Scaffold(
         topBar = {
@@ -165,6 +181,18 @@ fun SettingsScreen(
                     leadingContent = { Icon(Icons.Filled.CloudUpload, null, tint = MaterialTheme.colorScheme.primary) },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     modifier = Modifier.clickable { onOpenBackup() }
+                )
+                ListItem(
+                    headlineContent = { Text("清除缓存") },
+                    supportingContent = {
+                        Text(
+                            if (cacheBytes > 0) "图片 / 临时文件，共 ${formatBytes(cacheBytes)}；可逐项勾选"
+                            else "图片 / 临时文件；可逐项勾选"
+                        )
+                    },
+                    leadingContent = { Icon(Icons.Filled.DeleteSweep, null, tint = MaterialTheme.colorScheme.primary) },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    modifier = Modifier.clickable { onOpenCache() }
                 )
             }
         }

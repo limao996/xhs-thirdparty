@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Autorenew
-import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.History
@@ -256,7 +255,7 @@ fun ProfileScreen(
         if (onOpenSettings != null) {
             ProfileEntry(
                 Icons.Filled.Settings, "设置",
-                "外观 / 指纹解锁 / 最近浏览上限 / 备份",
+                "外观 / 指纹解锁 / 最近浏览上限 / 备份 / 清除缓存",
                 onOpenSettings
             )
         }
@@ -274,47 +273,7 @@ fun ProfileScreen(
                 onOpenUpdate
             )
         }
-        // image cache management (the disk cache can hold up to 64MB)
-        var confirmClear by remember { mutableStateOf(false) }
-        ListItem(
-            headlineContent = { Text("清除图片缓存") },
-            supportingContent = { Text(formatBytes(state.cacheBytes)) },
-            leadingContent = {
-                Icon(
-                    Icons.Filled.DeleteSweep,
-                    null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            },
-            colors = ListItemDefaults.colors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
-            ),
-            modifier = Modifier.cardRow { confirmClear = true }
-        )
-        if (confirmClear) {
-            AlertDialog(
-                onDismissRequest = { confirmClear = false },
-                title = { Text("清除图片缓存？") },
-                text = { Text("将删除已缓存的封面与头像（${formatBytes(state.cacheBytes)}），下次浏览时重新下载。") },
-                confirmButton = {
-                    TextButton(onClick = {
-                        viewModel.clearCache()
-                        confirmClear = false
-                    }) { Text("清除") }
-                },
-                dismissButton = {
-                    TextButton(onClick = { confirmClear = false }) { Text("取消") }
-                }
-            )
-        }
-
     }
-}
-
-private fun formatBytes(bytes: Long): String = when {
-    bytes >= 1024L * 1024L -> "%.1f MB".format(bytes / 1024.0 / 1024.0)
-    bytes >= 1024L -> "%.0f KB".format(bytes / 1024.0)
-    else -> "$bytes B"
 }
 
 @Composable
