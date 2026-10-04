@@ -18,7 +18,7 @@
 | 构建 | AGP 9.4.1 / Gradle 9.8.0 / KSP 2.1.21-2.0.2 / JDK 17 |
 | SDK | minSdk 24、targetSdk 37、compileSdk 37 |
 | 包名 | release `com.thirdparty.xhs`，debug `com.thirdparty.xhs.debug` |
-| 版本 | `versionName 1.2.0`；`versionCode = 当前秒数 − 2026-10-01T00:00:00 的秒数` |
+| 版本 | `versionName 1.2.1`；`versionCode = 当前秒数 − 2026-10-01T00:00:00 的秒数` |
 | 模块 | 只有 `:app` 一个模块（`settings.gradle`） |
 | XML 布局 | 无。模块只有一个 `AndroidManifest.xml` + 图标资源 |
 | 第三方 UI 框架 | 无（不用 appcompat / material / 任何 UI 库） |
@@ -108,7 +108,7 @@ app/src/main/java/com/thirdparty/xhs/
 | 解压版 Gradle（快） | `%USERPROFILE%\.gradle\wrapper\dists\gradle-9.8.0-bin\*\gradle-9.8.0\bin\gradle.bat` |
 | 模拟器 AVD | `xhs_test`（API 34、1080×2400、420dpi），位于 `%USERPROFILE%\.android\avd`，**不在仓库里** |
 | 构建产物 | `app/build/outputs/apk/{debug,release}/`（不入库） |
-| 最近一次实测 | 2026-10-04：`assembleDebug` 成功（Gradle 9.8.0 / AGP 9.4.1 / JDK 17），产物 `app-debug.apk` 26,267,184 B、md5 `AEDFB147B80C9BFD60B568D0A9F84F40`；设备侧验证「设置 → 清除缓存」逐项勾选/清理、「我的 → 检查更新」均通过 |
+| 最近一次实测 | 2026-10-04：`assembleRelease` 成功（Gradle 9.8.0 / AGP 9.4.1 / JDK 17），产物 `app-release.apk` 3,306,226 B、md5 `6d799ca08d1fab281aef854961c70057`、versionName `1.2.1` / versionCode `326862`；模拟器上装正式包实测通过（冷启动注册游客身份并拿到 VIP、设置 → 清除缓存逐项勾选与清理、关于页显示 `v1.2.1（build 326862）`、检查更新页正常），全程 `crash: 0` |
 
 ## 7. 当前状态
 

@@ -46,7 +46,7 @@
 
 要求 Android 7.0（API 24）及以上。
 
-在 [Releases](https://github.com/limao996/xhs-thirdparty/releases/latest) 下载最新的 `xhs-thirdparty-x.y.z-release.apk`（约 3.1 MB），传到手机安装，首次需要允许「安装未知来源应用」。发布页里写了每个包的 md5 / sha256，可以核对。
+在 [Releases](https://github.com/limao996/xhs-thirdparty/releases/latest) 下载最新的 `xhs-thirdparty-x.y.z-release.apk`（约 3.3 MB），传到手机安装，首次需要允许「安装未知来源应用」。发布页里写了每个包的 md5 / sha256，可以核对。
 
 安装包用的是仓库里的自签名密钥（[keystore/release.jks](keystore/)，口令写在 [docs/BUILD.md](docs/BUILD.md)），所以只能这样侧载，不能上架应用商店。
 

@@ -62,12 +62,13 @@ Get-FileHash $apk -Algorithm MD5                          # 分发时贴这个�
 & "$bt\aapt2.exe" dump xmltree $apk --file AndroidManifest.xml | Select-String debuggable  # 应无输出
 ```
 
-`2026-10-04` 实测（`assembleRelease` **1 分 56 秒**，50 tasks executed，含 `lintVitalRelease` / `minifyReleaseWithR8` / `optimizeReleaseResources`）：
+`2026-10-04` 实测（`assembleRelease` **2 分 34 秒**，含 `lintVitalRelease` / `minifyReleaseWithR8` / `optimizeReleaseResources`）：
 
 | 项 | 值 |
 | --- | --- |
-| 大小 / md5 | `3,289,838 B` / `1ea558980a0f9d6085c232d0fc6b0462` |
-| versionName / versionCode | `1.2.0` / `321075`（时间戳表达式，每次构建递增） |
+| 大小 / md5 | `3,306,226 B` / `6d799ca08d1fab281aef854961c70057` |
+| sha256 | `1c1cbdecf1cfb9bf96b00e3fb992c41c175dafa65ab9d1f69f30e75669e7e860` |
+| versionName / versionCode | `1.2.1` / `326862`（时间戳表达式，每次构建递增） |
 | minSdk / targetSdk / compileSdk | `24` / `37` / `37` |
 | 签名 | v2 scheme（v1/v3 未启用），`CN=ThirdParty XHS Client`，RSA 2048 |
 | 权限（合并后） | `INTERNET`、`ACCESS_NETWORK_STATE`、`WAKE_LOCK` + `USE_BIOMETRIC`、`USE_FINGERPRINT`（biometric 库合入）+ `com.thirdparty.xhs.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`（androidx 合入） |
@@ -80,7 +81,7 @@ Get-FileHash $apk -Algorithm MD5                          # 分发时贴这个�
 
 | 名称 | 规则 | 当前值 |
 | --- | --- | --- |
-| `appVersionName` | 给人看的版本，按功能批次手动推进 | `1.2.0` |
+| `appVersionName` | 给人看的版本，按功能批次手动推进 | `1.2.1` |
 | `appVersionCode` | `(int)(System.currentTimeMillis()/1000L - versionEpochSeconds)`，`versionEpochSeconds` = 2026-10-01T00:00:00 本地时区的 epoch 秒 | 随时间递增 |
 | `CLIENT_VERSION`（buildConfigField） | 与服务端对齐的**协议版本** | `2.6.0` |
 | `CLIENT_CHANNEL`（buildConfigField） | 渠道号 | `1333` |
@@ -88,7 +89,9 @@ Get-FileHash $apk -Algorithm MD5                          # 分发时贴这个�
 为什么要时间戳：手工维护 `versionCode` 会忘记递增导致无法覆盖安装；时间戳单调递增；减去固定纪元保证
 值落在**32 位有符号整数**范围内（Android 要求，超限会安装失败）。
 
-`versionName` 变了就更新 README 的版本表格与 `docs/ai/CONTEXT.md`。
+`versionName` 变了就更新 `docs/CHANGELOG.md` 的统计表与 `docs/ai/CONTEXT.md`。
+
+上一版 `v1.2.0` 的实测值留档：`3,289,838 B` / md5 `1ea558980a0f9d6085c232d0fc6b0462` / versionCode `321075`。
 
 ## 4. 签名
 
