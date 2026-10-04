@@ -50,6 +50,32 @@ cp local.properties.example local.properties
 & "$env:USERPROFILE\.gradle\wrapper\dists\gradle-9.8.0-bin\*\gradle-9.8.0\bin\gradle.bat" assembleDebug
 ```
 
+### 2.1 校验正式包（可复现）
+
+```powershell
+$apk = 'app\build\outputs\apk\release\app-release.apk'
+$bt  = "$env:ANDROID_SDK_ROOT\build-tools\37.0.0"        # 换成本机 build-tools 版本目录
+
+Get-FileHash $apk -Algorithm MD5                          # 分发时贴这个值
+& "$bt\aapt2.exe" dump badging $apk | Select-String 'package:|sdkVersion|uses-permission|application-label:|launchable-activity'
+& "$bt\apksigner.bat" verify --print-certs --verbose $apk # 必须 Verifies + v2 scheme true
+& "$bt\aapt2.exe" dump xmltree $apk --file AndroidManifest.xml | Select-String debuggable  # 应无输出
+```
+
+`2026-10-04` 实测（`assembleRelease` **1 分 56 秒**，50 tasks executed，含 `lintVitalRelease` / `minifyReleaseWithR8` / `optimizeReleaseResources`）：
+
+| 项 | 值 |
+| --- | --- |
+| 大小 / md5 | `3,257,070 B` / `30e08640177aae2709af25018bb65c7a` |
+| versionName / versionCode | `1.1.0` / `319715`（时间戳表达式，每次构建递增） |
+| minSdk / targetSdk / compileSdk | `24` / `37` / `37` |
+| 签名 | v2 scheme（v1/v3 未启用），`CN=ThirdParty XHS Client`，RSA 2048 |
+| 权限（合并后） | `INTERNET`、`ACCESS_NETWORK_STATE`、`WAKE_LOCK` + `USE_BIOMETRIC`、`USE_FINGERPRINT`（biometric 库合入）+ `com.thirdparty.xhs.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`（androidx 合入） |
+| 可调试 | 否（manifest 里没有 `debuggable`） |
+
+装到设备后至少确认两件事：冷启动能看到顶栏的 `游客ID：…` 与瀑布流内容（这一步同时证明 R8 压缩没有破坏 AES 包体与 Room 路径），
+以及 `adb logcat` 里没有 `FATAL EXCEPTION`。release 与 debug 是两个 applicationId，可以共存；release 首次安装会新建一个游客身份。
+
 ## 3. 版本号规则
 
 | 名称 | 规则 | 当前值 |

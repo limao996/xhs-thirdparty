@@ -39,7 +39,7 @@
 | 路径 | 职责 | 改动注意 |
 | --- | --- | --- |
 | `app/build.gradle` | 版本号、签名、`buildConfigField`、依赖矩阵 | 版本号规则见 `docs/BUILD.md` |
-| `app/src/main/AndroidManifest.xml` | 权限、Activity、深链 `xhstp://note` | 新增权限要在 `README.md` 的隐私/权限说明与 `docs/PROTOCOL.md` 里同步（当前只有 INTERNET / ACCESS_NETWORK_STATE / WAKE_LOCK） |
+| `app/src/main/AndroidManifest.xml` | 权限、Activity、深链 `xhstp://note` | 新增权限要在 `README.md` 的隐私/权限说明与 `docs/PROTOCOL.md` 里同步（清单里只声明 INTERNET / ACCESS_NETWORK_STATE / WAKE_LOCK；合并后的 APK 还会带 biometric 库的 USE_BIOMETRIC / USE_FINGERPRINT 与 androidx 的 DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION） |
 | `data/XhsRepository.kt` | **单一数据源**，所有网络读写都在这里 | 新接口先加在这里，不要在 UI 直接调 `XhsApi` |
 | `data/XhsDatabase.kt` | Room 数据库 `xhs_local.db`（v2） | 改 schema 必须 bump version；当前是 destructive migration |
 | `data/BackupManager.kt` | 备份/恢复内容与格式 | 改字段要同步 `docs/ai/CONTEXT.md` 的备份清单 |
