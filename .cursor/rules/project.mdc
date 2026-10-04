@@ -8,7 +8,7 @@ globs:
 alwaysApply: true
 ---
 
-# xhs-thirdparty（第三方小黄书客户端）
+# 小黄书第三方客户端（xhs-thirdparty）
 
 完整规则在 [`AGENTS.md`](../../AGENTS.md) 与 [`docs/ai/`](../../docs/ai/)；这里是必须当场生效的约束。
 

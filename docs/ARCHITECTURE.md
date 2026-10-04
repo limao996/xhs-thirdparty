@@ -3,8 +3,6 @@
 本文说明**分层、代码地图、数据流、设计令牌与取舍**。面向"要改这个仓库的人（或 AI）"。
 AI 专用的速览版在 [ai/CONTEXT.md](ai/CONTEXT.md)；踩坑规则在 [ai/GOTCHAS.md](ai/GOTCHAS.md)。
 
-![架构总览](images/architecture.png)
-
 ## 1. 分层
 
 ```

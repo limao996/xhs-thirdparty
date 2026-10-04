@@ -5,7 +5,7 @@
 
 ## 1. 项目是什么
 
-`com.thirdparty.xhs` —— 第三方小黄书 Android 客户端。一个人手写的、单模块、纯 Kotlin + Compose 工程，
+`com.thirdparty.xhs` —— 小黄书（老司机软件）第三方 Android 客户端，桌面名「小黄书」（debug 变体为「小黄书.debug」，包名带 `.debug`）。一个人手写的、单模块、纯 Kotlin + Compose 工程，
 目标是"可维护的现代 Android 样板"：单一数据源、全链路加密、可离线、可备份、可复现构建。
 
 | 项 | 值 |

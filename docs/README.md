@@ -27,12 +27,10 @@
 | [.github/copilot-instructions.md](../.github/copilot-instructions.md) | GitHub Copilot 指令 |
 | [.cursor/rules/project.mdc](../.cursor/rules/project.mdc) | Cursor 项目规则 |
 
-## 图像资源
+## 实机截图
 
-[`images/`](images/) 内的图片都由 [`tools/make_readme_assets.py`](../tools/make_readme_assets.py) 生成
-（`hero.png` 横幅、`palette.png` 品牌色板、`icon-set.png` 启动图标对照、`architecture.png` 架构图）。
-它们标注为「自绘示意图」——**不是应用截图**；开发期的实机截图按约定不入库，
-需要时用 `tools/verify.ps1` 的 `Shot` 在本机生成。
+仓库**不存放应用截图**（`.gitignore` 已忽略 `docs/images/screenshots/`）。
+需要截图做说明时，用 `tools/verify.ps1` 的 `Shot` 函数在本机生成，文件落在 `docs/images/screenshots/`。
 
 ## 维护约定
 

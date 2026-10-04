@@ -21,7 +21,7 @@
 
 ## 1. 项目一句话
 
-第三方小黄书 Android 客户端：Kotlin + Jetpack Compose（M3 Expressive），Room 本地缓存，OkHttp + AES
+小黄书（老司机软件）第三方 Android 客户端，桌面名「小黄书」（debug 安装为「小黄书.debug」）：Kotlin + Jetpack Compose（M3 Expressive），Room 本地缓存，OkHttp + AES
 全量加密包体，media3/HLS 播放器，WebDAV 备份，指纹应用锁。包名 `com.thirdparty.xhs`（debug 加 `.debug`）。
 
 ## 2. 仓库地图
@@ -42,7 +42,6 @@
 | `ui/viewmodel/*.kt` | 状态与业务编排 | 用 `RepoViewModelFactory` 注入仓库 |
 | `ui/theme/Theme.kt`, `ui/theme/Tokens.kt` | M3 Expressive 主题、间距/圆角/`Scrim` 令牌 | 新颜色优先用 `MaterialTheme.colorScheme`，scrim 只用于媒体之上 |
 | `tools/verify.ps1` | 设备验证函数库（解锁、启动、dump、点击、截图、崩溃计数） | 是 PowerShell，改动后要真跑一次 |
-| `tools/make_readme_assets.py` | 生成 README 图像（自绘） | 图片是产物，改脚本后重新运行 |
 | `docs/` | 项目文档 | 结构变更同步 `docs/README.md` |
 | `docs/ai/` | **AI 档案本体** | 见下节 |
 

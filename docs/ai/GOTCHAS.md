@@ -128,7 +128,7 @@
 
 **E1 · 不把非项目内容搬进仓库**
 - 触发：想提交 APK、截图、反编译/解包产物、`local.properties`、构建缓存。
-- 正确做法：都不提交。需要时本机再生成（图标由 `tools/probes/gen_icon.py`，README 图由 `tools/make_readme_assets.py`）。
+- 正确做法：都不提交。需要时本机再生成（例如图标由 `tools/probes/gen_icon.py` 生成）。
 
 **E2 · AI 档案与项目文档分离**
 - 触发：更新规则/地图/坑。
