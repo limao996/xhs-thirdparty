@@ -22,7 +22,7 @@ plugins {
 //                     每次构建都不同，而且装得下（现在约 2.6e5；32 位能用约 68 年）。
 //   CLIENT_VERSION —— 发请求时带的 `Client-Version` 头（见 net/XhsApi），后端按它决定
 //                     行为，**必须保持 2.6.0**，与服务端对齐的是它、不是 App 版本。
-def appVersionName = '1.1.0'
+def appVersionName = '1.2.0'
 def versionEpochSeconds = java.time.LocalDateTime.of(2026, 10, 1, 0, 0, 0)
     .atZone(java.time.ZoneId.systemDefault())
     .toEpochSecond()
@@ -152,4 +152,7 @@ dependencies {
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0'
 
     testImplementation 'junit:junit:4.13.2'
+    // 本地单元测试里 android 自带的 org.json 是空壳（调用即 "not mocked"），
+    // 检查更新的应答解析要真实现才能在 JVM 上测（只影响测试 classpath）。
+    testImplementation 'org.json:json:20240303'
 }

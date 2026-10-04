@@ -15,6 +15,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.composable
 import com.thirdparty.xhs.ui.screens.AuthorScreen
+import com.thirdparty.xhs.ui.screens.AboutScreen
 import com.thirdparty.xhs.ui.screens.DetailScreen
 import com.thirdparty.xhs.ui.screens.FollowedScreen
 import com.thirdparty.xhs.ui.screens.HomeScreen
@@ -377,11 +378,19 @@ fun AppNavHost(
                     App.INSTANCE.autoVipSetter?.invoke(on)
                         ?: run { App.repo.autoSwitchOnVipExpiry = on }
                 },
-                onOpenBackup = { nav.navigate(Routes.BACKUP) }
+                onOpenBackup = { nav.navigate(Routes.BACKUP) },
+                onOpenAbout = { autoCheck -> nav.navigate(Routes.about(autoCheck)) }
             )
         }
         composable(Routes.BACKUP) {
             BackupScreen(onBack = { nav.popBackStack() })
+        }
+
+        composable(Routes.ABOUT) { backStackEntry ->
+            AboutScreen(
+                autoCheck = backStackEntry.arguments?.getString("autoCheck") == "true",
+                onBack = { nav.popBackStack() }
+            )
         }
 
         composable(Routes.FANS) {

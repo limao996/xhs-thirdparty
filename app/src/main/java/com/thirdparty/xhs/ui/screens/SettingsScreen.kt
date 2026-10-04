@@ -11,6 +11,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Visibility
@@ -34,6 +35,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import com.thirdparty.xhs.BuildConfig
 import com.thirdparty.xhs.ui.theme.Spacing
 import com.thirdparty.xhs.ui.theme.ThemeMode
 import androidx.compose.foundation.layout.Spacer
@@ -64,7 +66,9 @@ fun SettingsScreen(
     onSetHistoryLimit: (Int) -> Unit,
     autoVip: Boolean,
     onSetAutoVip: (Boolean) -> Unit,
-    onOpenBackup: () -> Unit
+    onOpenBackup: () -> Unit,
+    /** 打开「关于」；参数为 true 表示同时立刻检查一次更新 */
+    onOpenAbout: (Boolean) -> Unit
 ) {
     var pickTheme by remember { mutableStateOf(false) }
     // The lock / limit / auto-switch values come from SharedPreferences, which is
@@ -165,6 +169,25 @@ fun SettingsScreen(
                     leadingContent = { Icon(Icons.Filled.CloudUpload, null, tint = MaterialTheme.colorScheme.primary) },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     modifier = Modifier.clickable { onOpenBackup() }
+                )
+            }
+
+            SettingsGroup("关于") {
+                ListItem(
+                    headlineContent = { Text("关于小黄书") },
+                    // 版本号从 BuildConfig 取，避免这里的文案和 app/build.gradle 走偏
+                    supportingContent = { Text("v${BuildConfig.VERSION_NAME} · MIT License · 项目主页与许可") },
+                    leadingContent = { Icon(Icons.Filled.Info, null, tint = MaterialTheme.colorScheme.primary) },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    modifier = Modifier.clickable { onOpenAbout(false) }
+                )
+
+                ListItem(
+                    headlineContent = { Text("检查更新") },
+                    supportingContent = { Text("到 GitHub Releases 看有没有新版本") },
+                    leadingContent = { Icon(Icons.Filled.Autorenew, null, tint = MaterialTheme.colorScheme.primary) },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    modifier = Modifier.clickable { onOpenAbout(true) }
                 )
             }
         }
