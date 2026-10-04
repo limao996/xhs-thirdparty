@@ -23,8 +23,7 @@
 
 ## 1. 项目一句话
 
-小黄书（老司机软件）第三方 Android 客户端，桌面名「小黄书」（debug 安装为「小黄书.debug」）：Kotlin + Jetpack Compose（M3 Expressive），Room 本地缓存，OkHttp + AES
-全量加密包体，media3/HLS 播放器，WebDAV 备份，指纹应用锁。包名 `com.thirdparty.xhs`（debug 加 `.debug`）。
+小黄书（老司机软件）第三方 Android 客户端，桌面名「小黄书」（debug 安装为「小黄书.debug」）：Kotlin + Jetpack Compose（M3 Expressive），Room 本地缓存，OkHttp + AES 全量加密包体，media3/HLS 播放器，WebDAV 备份，指纹应用锁。包名 `com.thirdparty.xhs`（debug 加 `.debug`）。
 
 **核心机制（动账号相关代码前必读）**：VIP 不是"破解校验"骗出来的，是**不停换新游客号**换出来的 ——
 服务端会给每一个**新注册**的设备身份发一段 VIP 体验窗口，客户端在窗口快用完时换一个新身份，就又能接着看。
@@ -40,7 +39,7 @@
 | 路径 | 职责 | 改动注意 |
 | --- | --- | --- |
 | `app/build.gradle` | 版本号、签名、`buildConfigField`、依赖矩阵 | 版本号规则见 `docs/BUILD.md` |
-| `app/src/main/AndroidManifest.xml` | 权限、Activity、深链 `xhstp://note` | 新增权限要写进 README 的隐私说明 |
+| `app/src/main/AndroidManifest.xml` | 权限、Activity、深链 `xhstp://note` | 新增权限要在 `README.md` 的隐私/权限说明与 `docs/PROTOCOL.md` 里同步（当前只有 INTERNET / ACCESS_NETWORK_STATE / WAKE_LOCK） |
 | `data/XhsRepository.kt` | **单一数据源**，所有网络读写都在这里 | 新接口先加在这里，不要在 UI 直接调 `XhsApi` |
 | `data/XhsDatabase.kt` | Room 数据库 `xhs_local.db`（v2） | 改 schema 必须 bump version；当前是 destructive migration |
 | `data/BackupManager.kt` | 备份/恢复内容与格式 | 改字段要同步 `docs/ai/CONTEXT.md` 的备份清单 |
@@ -48,13 +47,15 @@
 | `net/XhsCrypto.kt` | AES/CBC 加解密 + CDN 图片 AES/ECB | 参数见 `docs/PROTOCOL.md`，不要"顺手"改 |
 | `net/WebDavClient.kt` | WebDAV 客户端 | 备份固定写 `xhs/` 子目录 |
 | `navigation/AppNavHost.kt` + `Routes.kt` | 唯一路由注册处 | 新页面必须同时登记 `Routes` 常量与 `HomeTab`（如属底部页） |
-| `ui/screens/*.kt` | 页面级组合函数 | 每个 screen 对应一个 `ui/viewmodel/` |
+| `ui/screens/*.kt` | 页面级组合函数 | 每个 screen 对应一个 `ui/viewmodel/`；子 tab 内容与列表滚动位置要用 `rememberSaveableStateHolder()` + `resetKey` 守卫（GOTCHAS C2/C8） |
 | `ui/components/*.kt` | 可复用组件（瀑布流/播放器/画廊/对话框/水印状态…） | 组件不要直接访问 Room |
 | `ui/viewmodel/*.kt` | 状态与业务编排 | 用 `RepoViewModelFactory` 注入仓库 |
 | `ui/theme/Theme.kt`, `ui/theme/Tokens.kt` | M3 Expressive 主题、间距/圆角/`Scrim` 令牌 | 新颜色优先用 `MaterialTheme.colorScheme`，scrim 只用于媒体之上 |
 | `tools/verify.ps1` | 设备验证函数库（解锁、启动、dump、点击、截图、崩溃计数） | 是 PowerShell，改动后要真跑一次 |
 | `docs/` | 项目文档 | 结构变更同步 `docs/README.md` |
 | `docs/ai/` | **AI 档案本体** | 见下节 |
+
+上表中未写目录前缀的源码路径，均相对于 `app/src/main/java/com/thirdparty/xhs/`（例：`data/XhsRepository.kt` 即 `app/src/main/java/com/thirdparty/xhs/data/XhsRepository.kt`）。
 
 ## 3. 常用命令
 

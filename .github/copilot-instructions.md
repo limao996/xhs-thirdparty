@@ -11,6 +11,10 @@
 - JSON 用内置 `org.json`，不引入 gson / kotlinx-serialization。
 - 插件只 apply `com.android.application` + `org.jetbrains.kotlin.plugin.compose` + `com.google.devtools.ksp`；
   AGP 9 自带 Kotlin 扩展，再 apply `kotlin-android` 会报 `Cannot add extension with name 'kotlin'`。
+- **核心机制是"游客账号轮换"**：服务端给每个新注册的设备身份发一段 VIP 体验窗口，客户端在窗口将尽时换新身份续期
+  （`IdentityGuess.randomFresh()` → `v2/app/init` → `login-with-guest` → 校验 `isVip`，由 `XhsRepository.ensureAccountForRequest()` 在请求前门控）。
+  这是本项目"VIP 一直有"的真正原因，改账号相关代码前先读 [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md) §3.1 与
+  [`docs/ai/GOTCHAS.md`](../docs/ai/GOTCHAS.md) F 节。
 
 ## 写代码时
 
@@ -21,6 +25,8 @@
 - 颜色用 `MaterialTheme.colorScheme.*`；媒体之上的叠加层用 `ui/theme/Tokens.kt` 的 `Scrim.*`；
   尺寸用 `Tokens.kt` 的 `Spacing` / `Corners` / `AvatarSize` / `Thumb` / `BottomNavClearance`，不要硬编码。
 - 失败时**保留已有数据**并暴露错误态；不要把失败渲染成"空数据"。
+- 子 tab 内容与列表滚动位置：分支包在 `rememberSaveableStateHolder().SaveableStateProvider(key)` 里，列表的
+  `LaunchedEffect(resetKey)` 守卫要记住"位置属于哪个 key"（不要用"跳过第一次运行"的 flag）——见 `docs/ai/GOTCHAS.md` C2/C8。
 - 注释只解释"为什么"（尤其要写出约束来源）。
 
 ## 不要做的事
@@ -29,7 +35,9 @@
 - 不修改 `keystore/release.jks` 与 `signingConfigs.release` 的口令。
 - 不手写 `versionCode` 常数（用 `appVersionCode` 表达式）。
 - 不改 `CLIENT_VERSION`（协议版本，与服务端对齐，与 App 版本无关）。
-- 不做付费内容规避、不实现发评论/点赞等写操作。
+- **不得移除或绕开游客账号轮换链路**（`v2/app/init` → `login-with-guest` → 校验 VIP → 退避），也不要"顺手"把它改成定时轮询。
+- 文档/注释里**不要写"不破解付费 / 不绕过付费限制"这类与实现相反的声明**：本 App 的机制就是自动注册新游客身份、领取新游客体验窗口。
+- 不实现发评论、点赞等写操作（当前产品范围如此）。
 
 ## 提交与验证
 

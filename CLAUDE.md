@@ -11,3 +11,4 @@
 5. 提交前必须 `gradlew.bat assembleDebug` 通过；UI 改动要留实机证据（见 [docs/VERIFY.md](docs/VERIFY.md)）。
 6. 不提交 APK、截图、反编译产物、`local.properties`。
 7. 改完同步 AI 档案：[AGENTS.md](AGENTS.md)、[docs/ai/GOTCHAS.md](docs/ai/GOTCHAS.md)。
+8. 不得移除或绕开"游客账号轮换续 VIP"链路（`v2/app/init` → `login-with-guest` → 校验 `isVip`）；文档里也不要写与之相反的"不破解付费"声明。

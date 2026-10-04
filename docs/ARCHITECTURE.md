@@ -91,6 +91,10 @@ app/src/main/java/com/thirdparty/xhs/
 需要账号的请求 ──► XhsApi.call()
                       │  beforeAccountRequest = XhsRepository::ensureAccountForRequest
                       ▼
+        自动换号开关关闭（autoSwitchOnVipExpiry = false）? ──是──► 直接放行
+                      │否
+        还没建过号（currentUserHash() 为空）? ──是──► 直接放行（首个账号由启动路径 GuestViewModel.ensureFreshGuest 负责）
+                      │否
         cachedVipEnd − now > 60s ? ──是──► 直接放行（纯本地判断，0 次请求）
                       │否
                       ▼
@@ -114,7 +118,7 @@ app/src/main/java/com/thirdparty/xhs/
 | `CredentialStore.vipEnd` | epoch 秒 | VIP 到期缓存；**换号时清零**（窗口属于读出它的那个账号） |
 | `CredentialStore.autoSwitchOnVipExpiry` | 默认 `true` | 「VIP 到期自动切换」开关，设置页可关 |
 
-- **触发时机**：`beforeAccountRequest` 挂在 `XhsApi.call()` 这个所有请求的必经点上，所以检查发生在"下一个真正要用账号的请求"之前，界面感知不到，也没有任何轮询（曾经是 5 秒轮询，已移除）。
+- **触发时机**：`beforeAccountRequest` 挂在 `XhsApi.call()` 这个所有请求的必经点上，所以检查发生在"下一个真正要用账号的请求"之前，界面感知不到，也没有任何轮询（曾经是 5 秒轮询，已移除）。因此界面**空闲时不会产生任何建号请求**；代价是"挂了很久没动、窗口过期后再点开某个页面"会先经历一次换号。
 - **账号变化的通知**：换号发生在请求内部、没有用户操作，因此 `XhsRepository.noteIdentityChanged()` 会 `bump _accountEpoch`，`GuestViewModel` 据此刷新「游客ID」标签与 VIP 状态。
 - **手动换号**：「我的」页的「切换游客账号」走 `XhsRepository.rotateGuest()` → `api.loginAsGuest()`（同一个建号链路）。
 - **备份刻意不含账号**：identity / token / hash / VIP 窗口都不导出（旧号恢复时窗口早已过期，没有意义）；只备份「自动切换」这个开关本身。
@@ -131,7 +135,7 @@ Room 数据库 `xhs_local.db`，`@Database(version = 2)`，实体三张：
 
 - 当前使用 `fallbackToDestructiveMigration()`：**改 schema 必须升级 version，升级后本地数据会被清空**。
   因此"必须保留"的数据依靠备份（`BackupManager`）而不是默认迁移。
-- 备份内容：收藏、最近浏览、关注、设置项、搜索记录、WebDAV 配置。**不包含账号凭据**。
+- 备份内容：收藏、最近浏览、关注、设置项、搜索记录、WebDAV 配置（**含 URL、用户名与密码**，JSON 明文；备份文件本身要放好）。**不包含账号凭据**（identity / token / user_hash / VIP 窗口都不导出）。
 - 备份落点：本地文件（用户选择）或 WebDAV 的 `xhs/` 子目录（固定，便于恢复时定位）。
 
 ## 5. 导航与深链
@@ -143,6 +147,11 @@ Room 数据库 `xhs_local.db`，`@Database(version = 2)`，实体三张：
   `PROFILE("tab/profile","我的")`。
 - 深链 `xhstp://note/<id>`（`DeepLink.kt` + Manifest 的 `VIEW/DEFAULT/BROWSABLE` 过滤器）→ 直接进入详情。
 - 页面状态保留：跨页返回不重建上级界面（用导航的保存/恢复状态机制），"返回后关注状态要更新"这类需求通过共享仓库数据 + 重新读取实现。
+- **列表滚动位置（易错，2026-10-04 修过）**：要让子 tab / 列表在"切走再回来"或"跳转返回"后不归零，必须同时满足两件事——
+  (1) 分支内容包在 `rememberSaveableStateHolder().SaveableStateProvider(key)` 里（`HomeScreen` 的底部三 tab、
+  `DiscoverTabScreen` 的 发现/粉丝圈/关注 子 tab 都这么做）；(2) 列表自己的 `LaunchedEffect(resetKey)` 守卫要记住
+  "当前位置属于哪个 key"，**不能用"跳过第一次运行"的 flag**（被重新激活时 flag 仍为 true，会把刚恢复的位置推回顶部）。
+  细节与代码片段见 [ai/GOTCHAS.md](ai/GOTCHAS.md) C2 / C8。
 
 ## 6. 主题与设计令牌
 

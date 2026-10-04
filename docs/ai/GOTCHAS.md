@@ -34,9 +34,16 @@
 - 触发：等待某状态出现。
 - 正确做法：用绝对时间戳比较或带 deadline 的循环，不要写 `sleep(N)` 后假设状态已就绪。
 
+**A7 · 内容断言先排除屏幕 chrome**
+- 触发：用 UI dump 判断"列表滚到哪儿了 / 内容变没变"。
+- 正确做法：先按文本与 y 坐标滤掉常驻 chrome（底部 tab、子 tab 标签、分类 chip、`去看看`、`刷新`、`共 N 个作品`），
+  只拿剩下的**内容项**做对比。只取"前 N 个文本节点"会把 chrome 当内容，产生**假通过**
+  （实测：`发现`/`粉丝圈`/`关注` 三个标签 + 三个分类 chip 正好占满前 6 个节点，于是"切换前后一致=True"毫无意义）。
+- 另外：对比"滚动前首项"与"滚动后首项"，相同就说明手势没生效，先别下结论。
+
 ## B. 依赖与构建
 
-**B1 · 版本不是"越新越好"，有些是**钉死的****
+**B1 · 版本不是"越新越好"，有些是钉死的**
 - `material3` 必须是 `1.5.0-alpha29`：降到 BOM 自带的版本会**编译失败**（expressive 主题 API 在低版本是 internal）。
 - `fragment-ktx` 必须 ≥ `1.8.9`：`1.2.5` 会让 biometric 抛 `Can only use lower 16 bits for requestCode`。
 - `CLIENT_VERSION`（buildConfigField）= `2.6.0` 是**协议版本**，不要跟着 App 版本改。
@@ -68,7 +75,23 @@
 
 **C2 · `when` 分支不是状态容器**
 - 触发：在 `when` 的不同分支里各自 `remember` 页面状态。
-- 正确做法：分支切换会丢弃另一个分支的组合状态，用 `rememberSaveableStateHolder` 或提升状态。
+- 正确做法：分支切换会丢弃另一个分支的组合状态，用 `rememberSaveableStateHolder`（见 C8）或提升状态。
+
+**C8 · 列表滚动位置：光有 SaveableStateHolder 还不够**
+- 触发：子 tab（`when` 分支）里的列表/瀑布流，期望"切走再回来"或"跳转返回"后仍停在原处。
+- 症状：位置被推回顶部。**两种成因，缺一不可**：
+  1. 分支没有状态容器 → 用 `rememberSaveableStateHolder().SaveableStateProvider(key)` 包住
+     （`HomeScreen` 的底部 tab、`DiscoverTabScreen` 的子 tab 都这么做，key 用稳定字符串如 `tab.name`）。
+  2. 列表自己带 `LaunchedEffect(resetKey) { scrollToItem(0) }` → **"跳过第一次运行"的守卫是错的**：
+     被重新激活时该 flag 仍为 true，恢复好的位置会被这次运行推回顶部。正确写法是记住"当前位置属于哪个 key"：
+     ```kotlin
+     var positionKey by remember { mutableStateOf(resetKey) }
+     LaunchedEffect(resetKey) {
+         if (resetKey != positionKey) { positionKey = resetKey; listState.scrollToItem(0) }
+     }
+     ```
+     已按此改 `ui/components/XhsWaterfall.kt`（发现/搜索/作者/本地列表共用）与 `DiscoverTabScreen` 的 `FanGroupTab`。
+- 验证方式：滚动 → 切子 tab / 进详情或作者页 → 返回，比对**首项文本与 y 坐标**是否一致（见 `docs/VERIFY.md` §4）。
 
 **C3 · 修饰符顺序决定绘制与命中范围**
 - 触发：`background` / `padding` / `clip` / `clickable` 组合出非预期外观或点击区域。
@@ -137,6 +160,11 @@
 **E3 · 路径不能写死机器**
 - 触发：写脚本或文档里的路径。
 - 正确做法：脚本用 `$PSScriptRoot` / `Path(__file__).resolve().parents[n]`；外部工具走环境变量。
+
+**E5 · 文档声明必须与实现一致**
+- 触发：想写"本工具不破解付费 / 不绕过访问控制"这类免责话术。
+- 正确做法：本项目的机制就是**自动注册新游客身份、领取服务端发给新游客的 VIP 窗口**，照实描述；
+  与之相反的免责声明属于事实错误（AGENTS.md 硬约束 12）。
 
 **E4 · 不要"顺手纠正"账号轮换机制**
 - 触发：看到 `app/init` + `login-with-guest` + VIP 校验这套链路，觉得"多此一举"或"看着像作弊"就想删/改。

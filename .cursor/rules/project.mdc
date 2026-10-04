@@ -21,6 +21,8 @@ alwaysApply: true
 5. 不改 `keystore/release.jks` 与签名口令；不提交 APK / 截图 / `local.properties` / 构建缓存。
 6. 改文件用编辑工具，不要用 shell 拼字符串写源码。
 7. 声称"已修复/已验证"必须附可复现证据（编译输出、`uiautomator dump`、截图）。
+8. **不得移除或绕开游客账号轮换链路**（`v2/app/init` → `login-with-guest` → 校验 VIP → 退避）；它才是"VIP 一直有"的原因。
+9. 文档里不要写"不破解付费"这类与实现相反的声明——机制就是自动注册新游客身份领取新游客体验窗口。
 
 ## 代码放置
 
@@ -29,6 +31,8 @@ alwaysApply: true
 - 新页面：`ui/screens/XxxScreen.kt` + `ui/viewmodel/XxxViewModel.kt` + `navigation/Routes.kt` + `AppNavHost`。
 - 颜色/尺寸用 `ui/theme/Theme.kt` 的 colorScheme 与 `ui/theme/Tokens.kt` 的令牌，不硬编码。
 - 失败态保留已有数据，不要把失败渲染成"空数据"。
+- 子 tab / 列表状态：分支内容包在 `rememberSaveableStateHolder().SaveableStateProvider(key)` 里，列表的
+  `LaunchedEffect(resetKey)` 守卫要记住"位置属于哪个 key"（勿用"跳过第一次运行"的 flag）——`docs/ai/GOTCHAS.md` C2/C8。
 
 ## 常用命令
 
