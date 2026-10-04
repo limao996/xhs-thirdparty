@@ -22,7 +22,11 @@ Body: AES/CBC/PKCS5Padding( JSON 明文 )
 - 基址：`XhsApi.kt` 顶部注释写明 `POST https://{baseHost}/v2/{path}`；生产基址为 `app.xiaohuangbook.net`。
 - 包体不是表单，是**加密后的原始字节**；`Content-Type` / `Accept` 都是 `application/octet-stream`。
 - `Client-Version: 2.6.0` 与 `Client-Channel: 1333` 由 `app/build.gradle` 的 `buildConfigField` 提供，
-  它们是**协议版本**，与 App 的 `versionName`（1.1.0）无关。
+  它们是**协议版本**，与 App 的 `versionName`（1.2.0）无关。
+
+> **唯一的例外**：设置 → 关于 → 检查更新 走 `https://api.github.com/repos/limao996/xhs-thirdparty/releases/latest`，
+> 是**明文 JSON、没有 `User-Id`、没有 AES 包体**的普通 HTTPS 请求（`net/UpdateChecker.kt`，自带独立的 OkHttpClient）。
+> 它只读版本号与下载地址，不携带任何账号、身份或设备信息，也不使用本文件描述的任何加密参数。
 
 ## 2. 加解密（`net/XhsCrypto.kt`）
 

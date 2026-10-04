@@ -66,8 +66,8 @@ Get-FileHash $apk -Algorithm MD5                          # 分发时贴这个�
 
 | 项 | 值 |
 | --- | --- |
-| 大小 / md5 | `3,257,070 B` / `30e08640177aae2709af25018bb65c7a` |
-| versionName / versionCode | `1.1.0` / `319715`（时间戳表达式，每次构建递增） |
+| 大小 / md5 | `3,289,838 B` / `1ea558980a0f9d6085c232d0fc6b0462` |
+| versionName / versionCode | `1.2.0` / `321075`（时间戳表达式，每次构建递增） |
 | minSdk / targetSdk / compileSdk | `24` / `37` / `37` |
 | 签名 | v2 scheme（v1/v3 未启用），`CN=ThirdParty XHS Client`，RSA 2048 |
 | 权限（合并后） | `INTERNET`、`ACCESS_NETWORK_STATE`、`WAKE_LOCK` + `USE_BIOMETRIC`、`USE_FINGERPRINT`（biometric 库合入）+ `com.thirdparty.xhs.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`（androidx 合入） |
@@ -80,7 +80,7 @@ Get-FileHash $apk -Algorithm MD5                          # 分发时贴这个�
 
 | 名称 | 规则 | 当前值 |
 | --- | --- | --- |
-| `appVersionName` | 给人看的版本，按功能批次手动推进 | `1.1.0` |
+| `appVersionName` | 给人看的版本，按功能批次手动推进 | `1.2.0` |
 | `appVersionCode` | `(int)(System.currentTimeMillis()/1000L - versionEpochSeconds)`，`versionEpochSeconds` = 2026-10-01T00:00:00 本地时区的 epoch 秒 | 随时间递增 |
 | `CLIENT_VERSION`（buildConfigField） | 与服务端对齐的**协议版本** | `2.6.0` |
 | `CLIENT_CHANNEL`（buildConfigField） | 渠道号 | `1333` |

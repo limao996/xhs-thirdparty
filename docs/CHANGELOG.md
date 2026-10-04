@@ -235,6 +235,34 @@
 
 ---
 
+## 阶段六 · 关于 / 检查更新与开源发布（2026-10-04，`c24836a` 起）
+
+> 从本阶段起仓库有公开远端：<https://github.com/limao996/xhs-thirdparty>（默认分支 `main`）。
+
+### 新功能
+
+- 设置页新增「关于」组：「关于小黄书」（版本 / 包名 / 客户端协议）与「检查更新」（`c24836a`）
+- 新增 `ui/screens/AboutScreen.kt` + `ui/viewmodel/AboutViewModel.kt` + `net/UpdateChecker.kt`：
+  从 `api.github.com/repos/limao996/xhs-thirdparty/releases/latest` 读最新 tag，与本地版本分段比较（`1.10.0 > 1.9.2` 这类必须正确）；
+  有新版给出「打开下载页」与「更新说明」；**没有正式版 / 被限流（403）/ 断网都会如实显示原因**，不假装"已是最新"
+- 这一条是全应用**唯一**不经 AES 的请求：明文 JSON、无 `User-Agent` 会被 GitHub 403，
+  且必须用独立的 OkHttpClient，否则应答会被图片 CDN 用的 64 MB 磁盘缓存住（GOTCHAS G1）
+- `versionName` 1.1.0 → 1.2.0（`CLIENT_VERSION` 2.6.0 / `CLIENT_CHANNEL` 1333 保持不变，它们是协议版本）
+- 单元测试：`UpdateCheckerTest` 6 个用例（新版本/同版本/本地更高/无 apk 资产/缺字段/版本比较）；
+  JVM 测试里 Android 自带的 `org.json` 是空壳，需 `testImplementation 'org.json:json:20240303'`（GOTCHAS G2）
+
+### 开源发布
+
+- 仓库公开：`gh repo create limao996/xhs-thirdparty --public --source . --remote origin --push`，默认分支 `main`
+- 首个正式发布 `v1.2.0`：`xhs-thirdparty-1.2.0-release.apk` = 3,289,838 B，
+  md5 `1ea558980a0f9d6085c232d0fc6b0462`，sha256 `4abc616b83faae2b0e41f32b22fd8774ae57f9ee8c9f026636a816c4774bff84`
+- GitHub Actions「Android CI」在 push 后通过（5m0s）
+- 设备验证两轮（模拟器 emulator-5554）：发布会前 `GitHub 上还没有发布版本`，发布后 `已是最新版本（v1.2.0-debug）`，两次均无崩溃
+- 文档同步：README 徽章与安装路径、`docs/BUILD.md` 实测值、`docs/PROTOCOL.md` 明文请求例外、
+  `docs/ai/GOTCHAS.md` 新增 G 节、ISSUE 模板占位符改为真实仓库
+
+---
+
 ## 统计
 
 | 项目 | 值 |
@@ -246,7 +274,9 @@
 | 阶段三（M3 Expressive） | 约 25 个提交（含 5 个 docs） |
 | 阶段四（发布准备） | 约 24 个提交 |
 | 阶段五（开源化迁移） | 6 个提交（结构 / 文档 / 修复 ×2） |
-| 当前版本 | `versionName 1.1.0`，`versionCode = 当前秒数 − 2026-10-01T00:00:00 的秒数` |
+| 阶段六（关于 / 检查更新与开源发布） | 2 个提交（feat + docs） |
+| 当前版本 | `versionName 1.2.0`，`versionCode = 当前秒数 − 2026-10-01T00:00:00 的秒数` |
+| 公开发布 | `v1.2.0`（2026-10-04），<https://github.com/limao996/xhs-thirdparty/releases/tag/v1.2.0> |
 
 > 提交信息中的"第 N 轮"指开发轮次（需求批次），与 commit 序号无关。
 > 本文件由仓库的 git 历史整理而成；新增提交请按同样格式追加到对应阶段。

@@ -49,21 +49,22 @@ app/src/main/java/com/thirdparty/xhs/
 │   ├── OkHttpAwait.kt            OkHttp → 协程
 │   ├── CredentialStore.kt        账号 / 设备标识持久化
 │   ├── IdentityGuess.kt          设备身份（MAC）生成与猜测试探
-│   └── WebDavClient.kt           WebDAV（PROPFIND / PUT / GET / MKCOL / DELETE）
+│   ├── WebDavClient.kt           WebDAV（PROPFIND / PUT / GET / MKCOL / DELETE）
+│   └── UpdateChecker.kt          检查更新（GitHub Releases；全应用唯一不经 AES 的请求，自带独立 OkHttpClient）
 ├── navigation/
 │   ├── Routes.kt                 路由常量 + HomeTab 枚举
 │   └── AppNavHost.kt             唯一 NavHost 注册处
 ├── ui/
 │   ├── screens/                  Home / DiscoverTab / Detail / VideoFeed / Search /
 │   │                             Author / Followed / UserList / LocalList / Profile /
-│   │                             Backup / Settings
+│   │                             Backup / Settings / About
 │   ├── components/               XhsWaterfall（真实比例瀑布流）/ VideoPlayer / VideoSurface /
 │   │                             ImageGallery / FullscreenImageViewer / BufferedSlider /
 │   │                             CommentRepliesDialog / ConfirmActionDialog / EmptyState /
 │   │                             FeeBadge / FollowedAuthorRow / PlaybackHandoff /
 │   │                             BiometricLock / XhsAsyncImage / MediaPlayer / ResetZoomButton
 │   ├── viewmodel/                Home / Discover / Detail / VideoFeed / Search / Author /
-│   │                             Followed / UserList / LocalList / Profile / Guest / PagingGuard
+│   │                             Followed / UserList / LocalList / Profile / Guest / PagingGuard / About
 │   └── theme/                    Theme.kt（M3 Expressive）+ Tokens.kt（设计令牌）
 └── res/                          仅图标与基础资源（values/values-night/自适应图标/背景色）
 ```
@@ -142,7 +143,7 @@ Room 数据库 `xhs_local.db`，`@Database(version = 2)`，实体三张：
 
 - `Routes.kt` 是唯一路由常量表：`home`、`detail/{noteId}`、`search`、`profile`、`author/{userId}`、
   `saved`、`history`、`followed`、`following`（关注，走 `member/follow-list`）、`fans`（粉丝，走 `member/fun-list`）、
-  `backup`、`settings`；辅助构造函数 `detail(noteId)` / `author(userId)`。
+  `backup`、`settings`、`about?autoCheck={autoCheck}`；辅助构造函数 `detail(noteId)` / `author(userId)` / `about(autoCheck)`。
 - 底部三 tab 由 `HomeTab` 枚举定义：`FEED("tab/feed","推荐")`、`DISCOVER("tab/discover","发现")`、
   `PROFILE("tab/profile","我的")`。
 - 深链 `xhstp://note/<id>`（`DeepLink.kt` + Manifest 的 `VIEW/DEFAULT/BROWSABLE` 过滤器）→ 直接进入详情。
@@ -196,6 +197,7 @@ Room 数据库 `xhs_local.db`，`@Database(version = 2)`，实体三张：
 | 播放实例交接而非重建 | 推荐页 → 详情页切换时保留播放位置与缓冲，避免黑屏与断点丢失；代价是释放责任必须显式管理（见 GOTCHAS D3） |
 | 账号续期用"请求前门控"而非定时轮询 | 曾经的 5 秒轮询会在后台空转、也会把用户刚手动选的账号顶掉；挂在 `XhsApi.call()` 的一个 choke point 上后，只在"真的要用账号"时判断，缓存命中时是纯本地读（0 次请求） |
 | `org.json` 而非 gson/kotlinx-serialization | 包体形态简单且已在加密层处理字节；少一个反射依赖 |
+| 检查更新用**独立的 OkHttpClient**，且不套 AES | 共用客户端带 64 MB 磁盘缓存（为图片 CDN 的 `max-age` 服务），会把 GitHub 应答缓存成"永远同一个结果"；公网 JSON 不含账号信息，不需要也不应该走加密链路（见 GOTCHAS G1） |
 | 应用锁用 `biometric` + `fragment-ktx ≥ 1.8.9` | 低版本 fragment-ktx 会触发 requestCode 上限崩溃 |
 
 ## 8. 不在范围内

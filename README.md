@@ -7,6 +7,8 @@
 ![Compose](https://img.shields.io/badge/Jetpack%20Compose-2026.02.01-4285F4?logo=jetpackcompose&logoColor=white)
 ![Material 3](https://img.shields.io/badge/Material%203-Expressive-6750A4)
 ![License](https://img.shields.io/badge/License-MIT-FFC73D)
+[![Release](https://img.shields.io/github/v/release/limao996/xhs-thirdparty?label=release&color=success)](https://github.com/limao996/xhs-thirdparty/releases/latest)
+[![Android CI](https://github.com/limao996/xhs-thirdparty/actions/workflows/android.yml/badge.svg)](https://github.com/limao996/xhs-thirdparty/actions/workflows/android.yml)
 
 ---
 
@@ -75,6 +77,11 @@
 - 音量键翻页、后台是否继续播、缓冲提示，都在设置里
 - 深链 `xhstp://note/<id>`：别人发来的口令，点一下直接打开那个作品
 
+**知道自己装的是哪一版**
+
+- 设置 → 关于：版本号与 build 号、包名、客户端协议版本、GitHub 仓库入口、许可
+- 检查更新：直接去 GitHub Releases 拿最新版本号，有新版就给出「打开下载页」和更新说明；**没有正式版、被 GitHub 限流、断网，都会如实告诉你**，不会假装「已是最新」
+
 **别被人看见**
 
 - 应用锁：指纹 / 人脸解锁才能进，防止别人拿你手机乱翻
@@ -83,10 +90,18 @@
 
 ## 装上它
 
-要求 **Android 7.0（API 24）** 及以上。项目不发布 APK，自己编一个：
+要求 **Android 7.0（API 24）** 及以上。两种装法，挑一个。
+
+**一、直接下安装包**（只想用，不想编）
+
+去 [Releases](https://github.com/limao996/xhs-thirdparty/releases/latest) 下载最新的 `xhs-thirdparty-x.y.z-release.apk`，传到手机点安装。首次安装要允许「安装未知来源应用」。想核对文件，页面上有 md5 / sha256。
+
+本应用是自签名的（密钥就在仓库里，见 [docs/BUILD.md](docs/BUILD.md)），所以**不能上架应用商店**，只能这样侧载。
+
+**二、自己编**（想改代码）
 
 ```bash
-git clone <本仓库>
+git clone https://github.com/limao996/xhs-thirdparty.git
 cd xhs-thirdparty
 cp local.properties.example local.properties   # 把 sdk.dir 改成你的 Android SDK 路径
 ./gradlew assembleDebug                        # Windows 用 gradlew.bat assembleDebug

@@ -210,3 +210,22 @@
 **F7 · 离线不换号**
 - 触发：网络异常时仍走账号门。
 - 正确做法：`hasNetwork()` 要求 `NET_CAPABILITY_VALIDATED`（半连的 Wi-Fi 会挂住请求）；无网直接放弃切换，让请求自己报错。
+
+## G. 检查更新（`net/UpdateChecker.kt`）
+
+**G1 · 检查更新必须用独立的 OkHttpClient，并且必须带 User-Agent**
+- 触发：新增任何直接访问公网 JSON 接口的功能（检查更新走 `api.github.com`）。
+- 症状：结果永远不变（"已是最新"或者"没有发布版本"卡住不刷新）；或者请求直接 403。
+- 原因：`App.httpClient` 带着 64 MB 磁盘缓存（本来是给图片 CDN 的 `max-age=31536000` 用的，见 `App.kt`），
+  GitHub 的应答会被缓存住；而 GitHub 对没有 `User-Agent` 的请求直接 403。
+- 正确做法：`UpdateChecker` 自己建一个不带缓存的 client，并设 `User-Agent: xhs-thirdparty/<VERSION_NAME>`。
+
+**G2 · JVM 单元测试里 Android 自带的 `org.json` 是空壳**
+- 触发：给解析 JSON 的代码写本地单元测试（`app/src/test`）。
+- 症状：`java.lang.RuntimeException: Method optString in org.json.JSONObject not mocked.`
+- 正确做法：`testImplementation 'org.json:json:20240303'`（只影响测试 classpath，不改应用的运行期行为）。
+
+**G3 · debug 包的 `VERSION_NAME` 带 `-debug` 后缀**
+- 触发：写版本比较（检查更新）或把版本号显示给用户。
+- 正确处理：`UpdateChecker.numbers()` 会先截掉 `-`/`+` 之后的部分，所以 `1.2.0-debug` 与 `1.2.0` 相等；
+  比较逻辑不要自己去 `split('-')`，复用它，否则 debug 包会永远报"有新版本"。

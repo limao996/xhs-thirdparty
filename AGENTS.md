@@ -46,6 +46,7 @@
 | `net/XhsApi.kt` | 请求封装、重试、会话自愈 | 重试次数/退避在这里（`NETWORK_ATTEMPTS` / `RETRY_BACKOFF_MS`） |
 | `net/XhsCrypto.kt` | AES/CBC 加解密 + CDN 图片 AES/ECB | 参数见 `docs/PROTOCOL.md`，不要"顺手"改 |
 | `net/WebDavClient.kt` | WebDAV 客户端 | 备份固定写 `xhs/` 子目录 |
+| `net/UpdateChecker.kt` | 检查更新（GitHub Releases，**全应用唯一不经 AES 的请求**） | 必须用**独立的 OkHttpClient**（共用的带 64 MB 磁盘缓存会把应答缓存住），且必须带 `User-Agent`（否则 GitHub 403）；见 `docs/ai/GOTCHAS.md` G1 |
 | `navigation/AppNavHost.kt` + `Routes.kt` | 唯一路由注册处 | 新页面必须同时登记 `Routes` 常量与 `HomeTab`（如属底部页） |
 | `ui/screens/*.kt` | 页面级组合函数 | 每个 screen 对应一个 `ui/viewmodel/`；子 tab 内容要包 `rememberSaveableStateHolder()`，列表滚动状态要按 `resetKey` 分组（`key(resetKey) { … }`），身份位同名却是新列表时必须单调递增（GOTCHAS C2/C8） |
 | `ui/components/*.kt` | 可复用组件（瀑布流/播放器/画廊/对话框/水印状态…） | 组件不要直接访问 Room |
