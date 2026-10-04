@@ -47,6 +47,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -345,15 +346,17 @@ private fun FeedCategoryPage(
         ),
         hasMore = state.feed.hasMore,
         loadingMore = state.feed.loadingMore,
-        // Reset on a category change too, not only on a refresh.
+        // Identity of the list on screen: a refresh, or another category, starts
+        // at the top.
         //
-        // The grid scrolls back to the top only when this key changes, and
-        // switching category does NOT bump refreshTick — it just swaps in an
-        // empty FeedSection — so the OLD scroll offset survived into the new
-        // category: picking a chip while scrolled down dropped the viewer into
-        // the middle of a list whose top they had never seen. Keyed on the
-        // pair, both cases reset.
-        resetKey = state.refreshTick to state.selectedCategory,
+        // refreshTick alone does not cover a category switch, and selectedCategory
+        // alone does not either: 推荐 -> 最新 -> 推荐 comes back to the SAME id, so
+        // the pager page (which is its own saveable scope) restored the offset the
+        // user had on 推荐 into the freshly refetched 推荐 list — swiping back
+        // landed mid-list of content whose top was never shown. feedEpoch only ever
+        // grows, so every visit to a category is a new identity, while a sub-tab
+        // switch or a detail round trip keeps the same one and keeps the position.
+        resetKey = state.refreshTick to state.feedEpoch,
         onLoadMore = { viewModel.loadMore() }
     )
 }
@@ -404,25 +407,18 @@ private fun FanGroupTab(
         )
         return
     }
-    val listState = rememberLazyListState()
-    // A refresh replaces the list, so put the user back at the top of it — but ONLY
-    // when the reset really happened since the position on screen was placed.
+    // Scroll position saved against [resetKey]: a refresh (new key) starts the list at
+    // the top, while an unchanged key keeps the user's place — which is what makes
+    // "open an author / a work and come back" land on the same row again.
     //
-    // This used to be an ungarded `LaunchedEffect(resetKey) { scrollToItem(0) }`,
-    // which also ran on every RE-ENTRY into the composition: the list kept its
-    // restored offset for one frame and was then thrown back to the top, so opening
-    // an author (or a work) from this tab and coming back always landed at the top
-    // of the list. Comparing against the key the current position belongs to makes
-    // the reset fire on real resets only — and a refresh that happened while the
-    // user was elsewhere still resets, because the remembered key is older than the
-    // one arriving.
-    var positionKey by remember { mutableStateOf(resetKey) }
-    LaunchedEffect(resetKey) {
-        if (resetKey != positionKey) {
-            positionKey = resetKey
-            listState.scrollToItem(0)
-        }
-    }
+    // This was once an unguarded `LaunchedEffect(resetKey) { scrollToItem(0) }`: it
+    // also ran on every RE-ENTRY into the composition, so the list kept its restored
+    // offset for a frame and was then thrown back to the top. A guard comparing
+    // `resetKey` with the key the current position belonged to fixed that half but
+    // lost the other: a refresh that happened while the user was on another screen
+    // left no trace in a `remember`ed flag, so the stale offset survived it. Grouping
+    // the state itself by the key covers both halves.
+    val listState = key(resetKey) { rememberLazyListState() }
     // Endless pagination, keyed on the item count so it re-evaluates after every
     // batch — the backend serves only 3 authors per page here.
     if (hasMore) {

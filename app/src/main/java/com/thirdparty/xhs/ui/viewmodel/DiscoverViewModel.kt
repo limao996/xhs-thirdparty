@@ -48,7 +48,21 @@ data class DiscoverUiState(
     val followed: List<FollowedEntity> = emptyList(),
     /** true while a pull-to-refresh is in flight */
     /** bumped on every refresh so the grid scrolls back to the top */
-    val refreshTick: Int = 0
+    val refreshTick: Int = 0,
+    /**
+     * Bumped whenever the feed content is REPLACED by another list — a category switch.
+     *
+     * The grid keys its saved scroll position on the feed identity, and a category
+     * switch alone would be invisible to that key: 推荐 -> 最新 -> 推荐 is the SAME
+     * category id, so the pager page it lives on (which is its own saveable scope,
+     * see GOTCHAS C8) handed the OLD offset back and the user landed in the middle
+     * of a freshly fetched list whose top they had never seen. A counter that only
+     * ever grows makes every "new list" a genuinely new identity.
+     *
+     * Deliberately NOT bumped by a sub-tab switch or a detail round trip: those must
+     * keep the position.
+     */
+    val feedEpoch: Int = 0
 )
 
 class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
@@ -100,7 +114,11 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
 
     fun selectCategory(id: Int) {
         if (_ui.value.selectedCategory == id) return
-        _ui.update { it.copy(selectedCategory = id, feed = FeedSection()) }
+        // feedEpoch grows on every switch so the grid starts the NEW list at the top
+        // even when the user comes back to a category they already scrolled.
+        _ui.update {
+            it.copy(selectedCategory = id, feed = FeedSection(), feedEpoch = it.feedEpoch + 1)
+        }
         feedPage = 0
         feedLoading = false
         emptyPages = 0

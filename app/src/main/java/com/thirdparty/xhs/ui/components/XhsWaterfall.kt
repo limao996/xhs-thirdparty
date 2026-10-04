@@ -21,6 +21,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -31,9 +32,6 @@ import com.thirdparty.xhs.data.NoteItem
 import com.thirdparty.xhs.ui.theme.Spacing
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
 import androidx.compose.material.icons.filled.CheckCircle
@@ -49,7 +47,8 @@ import androidx.compose.material.icons.Icons
  *  - fee badge on the cover corner
  *  - endless pagination: watches the tail index and calls [onLoadMore]
  *  - a trailing loading row while the next page is in flight
- *  - scroll-to-top when [resetKey] changes (refresh)
+ *  - scroll position saved against [resetKey]: a new key starts at the top,
+ *    the same key keeps where the user was
  */
 
 /** How close to the tail (in items) triggers the next page. */
@@ -74,39 +73,32 @@ fun XhsWaterfallGrid(
     /** long-press handler; enabling it turns on multi-select (null = disabled) */
     onLongPress: ((NoteItem) -> Unit)? = null,
     /**
-     * Changing this value scrolls the grid back to the top. Callers pass a
-     * counter that increments on refresh — reloading data alone leaves the
-     * LazyGrid at its old scroll offset, so the user stays parked mid-list.
+     * Identity of the list this grid is showing. The scroll position is saved
+     * against it: a changed key starts at the top, the same key keeps the user's
+     * place (sub-tab switch, returning from a detail page). It must be unique per
+     * distinct list — see `DiscoverUiState.feedEpoch` for why a category id alone
+     * is not enough in the 发现 pager.
      */
     resetKey: Any? = Unit
 ) {
-    val gridState = rememberLazyStaggeredGridState()
+    // Scoping the state to [resetKey] is what makes "another list" mean "another
+    // position" — `key(...)` moves the composite key hash the saveable registry
+    // stores this state under, so a key that moved on cannot restore an old
+    // offset, and an unchanged key restores one.
+    //
+    // Why not `LaunchedEffect(resetKey) { scrollToItem(0) }`: it fires only AFTER
+    // the stale position has already been put on screen, and right after a category
+    // switch the list is still empty, so the scroll had nothing to act on and the
+    // old offset came back with the new data — 发现 pager: swipe to another chip
+    // and back landed mid-list of content whose top was never shown. "Skip the
+    // first run" flags could not fix that either: a re-entering composition has no
+    // memory of the flag.
+    val gridState = key(resetKey) { rememberLazyStaggeredGridState() }
 
     // Defensive: Lazy layouts throw when two items share a key, and the backend's
     // page boundaries are not stable. Callers already de-dup on append; this
     // guarantees the grid can never crash regardless.
     val safeItems = remember(items) { items.distinctBy { it.noteId } }
-
-    // Back to the top when the caller signals a refresh — but ONLY when [resetKey]
-    // really moved on since the position now on screen was placed.
-    //
-    // A LaunchedEffect also re-runs when the composable RE-ENTERS the composition
-    // (returning from a detail page) or is REACTIVATED inside a
-    // SaveableStateHolder (switching sub-tabs, …). "Skip the very first run" looked
-    // like it covered that, but it does not: after a reactivation the flag is still
-    // true, so the SECOND run already scrolled the restored grid back to the top —
-    // the 发现/粉丝圈 "it forgot where I was" report. Remembering WHICH key the
-    // current position belongs to fixes both halves: a reactivation with an
-    // unchanged key keeps the position, while a key that changed while the tab was
-    // away (a background refresh) still resets — which is exactly what a refresh is
-    // supposed to do.
-    var positionKey by remember { mutableStateOf(resetKey) }
-    LaunchedEffect(resetKey) {
-        if (resetKey != positionKey) {
-            positionKey = resetKey
-            if (safeItems.isNotEmpty()) gridState.scrollToItem(0)
-        }
-    }
 
     // Endless pagination — trigger when the tail becomes visible.
     //
