@@ -3,9 +3,12 @@ package com.thirdparty.xhs
 import android.app.Application
 import android.content.Context
 import com.thirdparty.xhs.data.XhsRepository
+import com.thirdparty.xhs.net.UpdateChecker
 import com.thirdparty.xhs.ui.theme.ThemeMode
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 
 /**
@@ -87,6 +90,58 @@ class App : Application() {
     var systemPickerActive: Boolean = false
 
     /**
+     * A newer release found by the startup check, waiting to be shown as a dialog.
+     *
+     * Only ever set when there really IS a newer release: no network, a rate-limit,
+     * or no published release stays silent (see [checkUpdateOnLaunch]).
+     */
+    val pendingUpdate = MutableStateFlow<UpdateChecker.Result.Newer?>(null)
+
+    /** The startup check runs once per process, not once per Activity. */
+    private val autoUpdateTried = AtomicBoolean(false)
+
+    /**
+     * Set when the startup check could not answer (offline, GitHub down, rate
+     * limited), so the next moment the device gets a network we try once more.
+     * Without it a launch in a tunnel would mean "no update check this session".
+     */
+    @Volatile
+    private var autoUpdateWantsRetry = false
+
+    /**
+     * Ask GitHub for the latest release and, if it is newer, surface it.
+     *
+     * Called from [onCreate] (i.e. every cold start) and again from [bump] after a
+     * failed attempt. It uses the standalone client inside UpdateChecker — no
+     * account, no AES envelope — so it works before any guest identity exists.
+     */
+    fun checkUpdateOnLaunch(force: Boolean = false) {
+        if (!force && !autoUpdateTried.compareAndSet(false, true)) return
+        appScope.launch {
+            val result = runCatching { UpdateChecker.check() }.getOrNull()
+            autoUpdateWantsRetry = result == null || result is UpdateChecker.Result.Failed
+            if (result is UpdateChecker.Result.Newer && result.version != ignoredUpdateVersion()) {
+                pendingUpdate.value = result
+            }
+        }
+    }
+
+    /** User closed the update dialog for now (it will be offered again next launch). */
+    fun dismissUpdate() {
+        pendingUpdate.value = null
+    }
+
+    /** User pressed 跳过这个版本: never offer [version] again. */
+    fun ignoreUpdateVersion(version: String) {
+        pendingUpdate.value = null
+        settingsPrefs().edit().putString(KEY_IGNORED_UPDATE, version).apply()
+    }
+
+    fun ignoredUpdateVersion(): String? = settingsPrefs().getString(KEY_IGNORED_UPDATE, null)
+
+    private fun settingsPrefs() = getSharedPreferences("settings", Context.MODE_PRIVATE)
+
+    /**
      * True while any of this app's activities is started (i.e. the UI is on screen).
      *
      * Owned here because more than one thing needs it: the VIP poll asks it so it does
@@ -143,6 +198,8 @@ class App : Application() {
         repository = XhsRepository(this, httpClient)
         themeState.value = loadThemeMode()
         watchNetwork()
+        // 每次冷启动查一次有没有新版本：查不到就什么都不发生（见 checkUpdateOnLaunch）
+        checkUpdateOnLaunch()
     }
 
     /**
@@ -179,18 +236,19 @@ class App : Application() {
 
     private fun bump() {
         networkEpoch.value = networkEpoch.value + 1
+        // a startup update check that failed offline gets one more chance now
+        if (autoUpdateWantsRetry) checkUpdateOnLaunch(force = true)
     }
 
     private fun loadThemeMode(): ThemeMode {
-        val key = getSharedPreferences("settings", Context.MODE_PRIVATE)
-            .getString("theme_mode", ThemeMode.SYSTEM.key) ?: ThemeMode.SYSTEM.key
+        val key = settingsPrefs().getString("theme_mode", ThemeMode.SYSTEM.key)
+            ?: ThemeMode.SYSTEM.key
         return ThemeMode.entries.firstOrNull { it.key == key } ?: ThemeMode.SYSTEM
     }
 
     fun setThemeMode(mode: ThemeMode) {
         themeState.value = mode
-        getSharedPreferences("settings", Context.MODE_PRIVATE)
-            .edit().putString("theme_mode", mode.key).apply()
+        settingsPrefs().edit().putString("theme_mode", mode.key).apply()
     }
 
     /**
@@ -217,5 +275,7 @@ class App : Application() {
         val http: OkHttpClient get() = INSTANCE.httpClient
 
         private const val HTTP_CACHE_BYTES = 64L * 1024 * 1024
+        /** release version the user pressed 跳过这个版本 on */
+        private const val KEY_IGNORED_UPDATE = "ignored_update_version"
     }
 }

@@ -18,6 +18,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.rememberNavController
 import com.thirdparty.xhs.navigation.AppNavHost
+import com.thirdparty.xhs.ui.components.UpdateAvailableDialog
+import com.thirdparty.xhs.ui.components.openUrl
 import com.thirdparty.xhs.ui.theme.XhsWindowBackground
 import com.thirdparty.xhs.ui.theme.XhsTheme
 import com.thirdparty.xhs.ui.theme.isDark
@@ -233,6 +235,23 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
                                 }) { Text("取消") }
                             }
                         )
+                    }
+                    // 启动时的自动检查更新：只有真的查到更新的版本才弹（见
+                    // App.checkUpdateOnLaunch）。锁着的时候不弹，否则对话框会浮在
+                    // 解锁页上面。
+                    val pendingUpdate by App.INSTANCE.pendingUpdate.collectAsStateWithLifecycle()
+                    if (!locked) {
+                        pendingUpdate?.let { info ->
+                            UpdateAvailableDialog(
+                                info = info,
+                                onOpenPage = {
+                                    App.INSTANCE.dismissUpdate()
+                                    openUrl(this@MainActivity, info.pageUrl)
+                                },
+                                onLater = { App.INSTANCE.dismissUpdate() },
+                                onSkipVersion = { App.INSTANCE.ignoreUpdateVersion(info.version) }
+                            )
+                        }
                     }
                 }
             }
