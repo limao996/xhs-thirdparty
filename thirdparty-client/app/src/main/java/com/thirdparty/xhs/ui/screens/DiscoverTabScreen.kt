@@ -99,12 +99,17 @@ fun DiscoverTabScreen(
     var tab by rememberSaveable { mutableStateOf(DiscoverTab.FEED) }
     val scope = rememberCoroutineScope()
 
-    // auto-refresh the sub-tab content whenever the user switches tabs
-    // (skip the very first composition — the ViewModel already loads then)
+    // Switching sub-tabs no longer refreshes anything.
+    //
+    // 发现 and 粉丝圈 keep whatever is already loaded (the ViewModel loads both once on
+    // entry, and the 刷新 FAB is right there if the user wants new content — re-fetching on
+    // every switch was network work nobody asked for). 关注 is the exception: it lists the
+    // authors followed on THIS device, so it is re-read on entry — a local DB read, no
+    // request — which is what keeps it current after a follow/unfollow elsewhere.
     var firstTabEffect by remember { mutableStateOf(true) }
     LaunchedEffect(tab) {
         if (firstTabEffect) { firstTabEffect = false; return@LaunchedEffect }
-        viewModel.refreshTab(tab)
+        if (tab == DiscoverTab.FOLLOW_LOCAL) viewModel.refreshFollowedList()
     }
 
     Box(Modifier.fillMaxSize()) {

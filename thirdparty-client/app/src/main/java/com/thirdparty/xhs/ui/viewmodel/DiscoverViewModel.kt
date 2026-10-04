@@ -253,27 +253,16 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
     }
 
     /**
-     * Auto-refresh a specific sub-tab when the user switches to it.
-     * Keeps the currently displayed items so switching tabs never flashes empty.
+     * Re-read the 关注 list (the authors followed on THIS device).
+     *
+     * Only the local DB is touched — no request — so this is cheap enough to run on every
+     * switch to that tab, and it is what keeps the tab current after a follow/unfollow
+     * happened elsewhere in the app.
+     *
+     * 发现 / 粉丝圈 deliberately have NO counterpart any more: switching to them used to
+     * re-fetch (a silent feed refresh, another fan-group page). The content is already
+     * there and stays there, and if the user wants fresh content the 刷新 FAB is one tap
+     * away; auto-refreshing on every tab switch was just network work nobody asked for.
      */
-    fun refreshTab(tab: DiscoverTab) {
-        when (tab) {
-            DiscoverTab.FEED -> {
-                if (_ui.value.feed.items.isEmpty()) {
-                    feedPage = 0
-                    feedLoading = false
-                    _ui.update { it.copy(feed = it.feed.copy(firstLoading = true, error = false)) }
-                    loadMore(force = true)
-                } else {
-                    // silent background refresh
-                    refresh()
-                }
-            }
-            DiscoverTab.FAN_GROUP -> {
-                if (myId <= 0) viewModelScope.launch { myId = runCatching { repo.myUserId() }.getOrDefault(0); loadFanGroup() }
-                else loadFanGroup()
-            }
-            DiscoverTab.FOLLOW_LOCAL -> refreshFollowed()
-        }
-    }
+    fun refreshFollowedList() = refreshFollowed()
 }
