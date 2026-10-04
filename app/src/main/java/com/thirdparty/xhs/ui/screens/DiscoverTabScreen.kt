@@ -124,21 +124,33 @@ fun DiscoverTabScreen(
             // fillMaxSize() child of a Column would claim the parent's full
             // height and push centred empty states below the visible area
             Box(Modifier.fillMaxWidth().weight(1f)) {
-                when (tab) {
-                    DiscoverTab.FEED -> FeedTab(state, viewModel, onOpenDetail)
-                    DiscoverTab.FAN_GROUP -> FanGroupTab(
-                        recommended = state.fanGroup,
-                        loading = state.fanGroupLoading,
-                        hasMore = state.fanGroupHasMore,
-                        loadingMore = state.fanGroupMore,
-                        onLoadMore = { viewModel.loadMoreFanGroup() },
-                        onOpenAuthor = onOpenAuthor,
-                        onOpenDetail = onOpenDetail,
-                        error = state.fanGroupError,
-                        onRetry = { viewModel.refresh() },
-                        resetKey = state.refreshTick
-                    )
-                    DiscoverTab.FOLLOW_LOCAL -> FollowedMineTab(state.followed, onOpenAuthor)
+                // Sub-tab state lives in a holder, NOT in the bare `when` below.
+                //
+                // Leaving a `when` branch DISCARDS that branch's state (only
+                // navigation destinations and SaveableStateProviders keep it), so
+                // 发现 ⇄ 粉丝圈 used to rebuild each list from scratch and the scroll
+                // position of the tab you came back to was gone. Reusable content
+                // keeps the inactive branch's state alive without drawing it. This is
+                // the same fix the bottom tabs use in HomeScreen — see the comment
+                // there — and it is why both directions of the switch keep the offset.
+                val subTabStateHolder = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
+                subTabStateHolder.SaveableStateProvider(tab.name) {
+                    when (tab) {
+                        DiscoverTab.FEED -> FeedTab(state, viewModel, onOpenDetail)
+                        DiscoverTab.FAN_GROUP -> FanGroupTab(
+                            recommended = state.fanGroup,
+                            loading = state.fanGroupLoading,
+                            hasMore = state.fanGroupHasMore,
+                            loadingMore = state.fanGroupMore,
+                            onLoadMore = { viewModel.loadMoreFanGroup() },
+                            onOpenAuthor = onOpenAuthor,
+                            onOpenDetail = onOpenDetail,
+                            error = state.fanGroupError,
+                            onRetry = { viewModel.refresh() },
+                            resetKey = state.refreshTick
+                        )
+                        DiscoverTab.FOLLOW_LOCAL -> FollowedMineTab(state.followed, onOpenAuthor)
+                    }
                 }
             }
         }
@@ -393,10 +405,24 @@ private fun FanGroupTab(
         return
     }
     val listState = rememberLazyListState()
-    // A refresh replaces the list, so put the user back at the top of it — otherwise
-    // a refresh while scrolled down leaves the new list positioned wherever the old
-    // one was, which reads as "nothing happened".
-    LaunchedEffect(resetKey) { listState.scrollToItem(0) }
+    // A refresh replaces the list, so put the user back at the top of it — but ONLY
+    // when the reset really happened since the position on screen was placed.
+    //
+    // This used to be an ungarded `LaunchedEffect(resetKey) { scrollToItem(0) }`,
+    // which also ran on every RE-ENTRY into the composition: the list kept its
+    // restored offset for one frame and was then thrown back to the top, so opening
+    // an author (or a work) from this tab and coming back always landed at the top
+    // of the list. Comparing against the key the current position belongs to makes
+    // the reset fire on real resets only — and a refresh that happened while the
+    // user was elsewhere still resets, because the remembered key is older than the
+    // one arriving.
+    var positionKey by remember { mutableStateOf(resetKey) }
+    LaunchedEffect(resetKey) {
+        if (resetKey != positionKey) {
+            positionKey = resetKey
+            listState.scrollToItem(0)
+        }
+    }
     // Endless pagination, keyed on the item count so it re-evaluates after every
     // batch — the backend serves only 3 authors per page here.
     if (hasMore) {

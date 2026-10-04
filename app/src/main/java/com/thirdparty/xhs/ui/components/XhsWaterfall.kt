@@ -87,19 +87,25 @@ fun XhsWaterfallGrid(
     // guarantees the grid can never crash regardless.
     val safeItems = remember(items) { items.distinctBy { it.noteId } }
 
-    // Back to the top when the caller signals a refresh — but ONLY on an actual
-    // change of [resetKey].
+    // Back to the top when the caller signals a refresh — but ONLY when [resetKey]
+    // really moved on since the position now on screen was placed.
     //
-    // A LaunchedEffect also re-runs every time the composable RE-ENTERS the
-    // composition (returning from a detail page, switching tabs, …), so an
-    // ungarded `scrollToItem(0)` here threw away the restored scroll offset and
-    // dumped the user back at the top of the list after every trip — exactly the
-    // "I have to find that post again" complaint. The first run after entering is
-    // therefore skipped; the grid keeps whatever position it restored.
-    var resetKeySeen by remember { mutableStateOf(false) }
+    // A LaunchedEffect also re-runs when the composable RE-ENTERS the composition
+    // (returning from a detail page) or is REACTIVATED inside a
+    // SaveableStateHolder (switching sub-tabs, …). "Skip the very first run" looked
+    // like it covered that, but it does not: after a reactivation the flag is still
+    // true, so the SECOND run already scrolled the restored grid back to the top —
+    // the 发现/粉丝圈 "it forgot where I was" report. Remembering WHICH key the
+    // current position belongs to fixes both halves: a reactivation with an
+    // unchanged key keeps the position, while a key that changed while the tab was
+    // away (a background refresh) still resets — which is exactly what a refresh is
+    // supposed to do.
+    var positionKey by remember { mutableStateOf(resetKey) }
     LaunchedEffect(resetKey) {
-        if (!resetKeySeen) { resetKeySeen = true; return@LaunchedEffect }
-        if (safeItems.isNotEmpty()) gridState.scrollToItem(0)
+        if (resetKey != positionKey) {
+            positionKey = resetKey
+            if (safeItems.isNotEmpty()) gridState.scrollToItem(0)
+        }
     }
 
     // Endless pagination — trigger when the tail becomes visible.
