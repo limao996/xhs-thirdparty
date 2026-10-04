@@ -179,6 +179,9 @@ private fun FeedTab(
         initialPage = categoryIndex,
         pageCount = { state.categories.size }
     )
+    // Guards the two-way sync: while WE are the ones moving the pager (a chip tap), the
+    // page changes the animation produces must not be fed back as "the user swiped".
+    val syncingToChip = remember { androidx.compose.runtime.mutableStateOf(false) }
     LaunchedEffect(state.selectedCategory, state.categories) {
         val index = state.categories.indexOfFirst { it.id == state.selectedCategory }
         if (index >= 0) {
@@ -188,25 +191,27 @@ private fun FeedTab(
     // chip tap -> pager follows (the chip's own onClick already changed the selection)
     LaunchedEffect(categoryIndex, state.categories.size) {
         if (state.categories.isNotEmpty() && pagerState.currentPage != categoryIndex) {
-            pagerState.animateScrollToPage(categoryIndex)
+            syncingToChip.value = true
+            try {
+                pagerState.animateScrollToPage(categoryIndex)
+            } finally {
+                syncingToChip.value = false
+            }
         }
     }
-    // pager swipe -> selection follows.
+    // pager -> selection, but ONLY once the pager has stopped.
     //
-    // Keyed on SETTLED pages (`currentPage`), not on `targetPage`: the ViewModel keeps
-    // only ONE category's feed, and the page that is no longer selected falls back to a
-    // placeholder — switching early would blank the grid the user is still looking at
-    // mid-swipe. The incoming page shows the spinner until its own request lands.
-    //
-    // The state is read from the ViewModel INSIDE the collect, not captured: `collect`
-    // runs for the lifetime of this effect, so a captured `state` would freeze
-    // `selectedCategory` at its value when the effect launched (it did — every swipe
-    // back to the first category compared against a stale 0 and did nothing, leaving
-    // that page on its placeholder).
+    // This is the fix for "点击标签偶尔切到前一个/后一个": `animateScrollToPage` (and a
+    // fling) passes OVER the neighbouring pages, so `currentPage` changes to them on the
+    // way. Reacting to each of those re-selected a neighbour, which in turn re-ran the
+    // chip→pager effect and pulled the pager back — so the tap could settle on either
+    // side of the category the user picked. Requiring a settled, non-programmatic pager
+    // makes a tap land exactly where it was aimed.
     LaunchedEffect(pagerState) {
-        snapshotFlow { pagerState.currentPage }
+        snapshotFlow { pagerState.currentPage to pagerState.isScrollInProgress }
             .distinctUntilChanged()
-            .collect { page ->
+            .collect { (page, scrolling) ->
+                if (scrolling || syncingToChip.value) return@collect
                 val current = viewModel.ui.value
                 current.categories.getOrNull(page)?.let { cat ->
                     if (cat.id != current.selectedCategory) viewModel.selectCategory(cat.id)

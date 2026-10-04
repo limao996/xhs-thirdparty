@@ -76,13 +76,26 @@ class DetailViewModel(
             val cached = repo.cachedDetail(noteId)
             if (cached != null) {
                 _ui.value = DetailUiState(cached, loading = true, saved = repo.isSaved(noteId))
+                // Comments load from the CACHED note too.
+                //
+                // They used to be fetched only in the `fresh != null` branch below, so a
+                // note that was shown from the local DB while the note request was slow or
+                // failed showed its title, video and 介绍 — and no comments at all, no
+                // matter how many the note has. That is the "有时候缺少评论" half of the
+                // report.
+                loadComments()
             }
             val fresh = runCatching { repo.fetchDetail(noteId) }.getOrNull()
             if (fresh != null) {
                 val saved = repo.isSaved(noteId)
-                _ui.value = DetailUiState(fresh, loading = false, saved = saved)
+                // `copy`, NOT a fresh DetailUiState: a whole new state discards whatever the
+                // cached branch above already loaded — the comments arrived first and were
+                // then thrown away, and since the cached branch is the one that asked, the
+                // page ended up with no comments at all ("评论 668 / 还没有评论").
+                _ui.value = _ui.value.copy(item = fresh, loading = false, saved = saved)
                 loadAuthor(fresh.userId)
-                loadComments()
+                // only when the cached branch did not already ask (no double request)
+                if (cached == null) loadComments()
             } else if (cached == null) {
                 _ui.value = DetailUiState(loading = false, missing = true)
             }
