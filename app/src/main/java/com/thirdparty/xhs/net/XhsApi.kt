@@ -3,6 +3,8 @@ package com.thirdparty.xhs.net
 import android.content.Context
 import com.thirdparty.xhs.BuildConfig
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
@@ -65,26 +67,57 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
     var beforeAccountRequest: (suspend () -> Unit)? = null
 
     /**
-     * Re-entrancy guard for [beforeAccountRequest].
-     *
-     * The gate itself asks for the profile (`v2/mine/user-info`), which is a request
-     * like any other — without this it would call itself and never return.
+     * 身份（账号）真的换了的时候回调一次。用途：让上层重载按账号发放的数据
+     * （详情页的 media URL 就是按账号发的）。由 `XhsRepository` 接上去 bump `accountEpoch`。
      */
-    private var insideAccountGate = false
+    var onIdentityChanged: (() -> Unit)? = null
+
+    /** 最近一次闸门失败（诊断用；闸门本身是"尽力而为"的预处理，不阻断请求）。 */
+    @Volatile
+    var gateFailure: Throwable? = null
+        private set
+
+    /**
+     * The account gate: a single-flight, re-entrancy-safe wrapper around
+     * [beforeAccountRequest].
+     *
+     * 以前这里是一个普通的 `var insideAccountGate = false`，有两个真问题（见 docs/REVIEW.md 附录A）：
+     *  1. 多个协程可以同时读到 false → 一起跑闸门（而闸门里会**新建身份**，于是并发多建号）；
+     *  2. A 置位后、`finally` 复位前，B 直接**跳过**闸门就去发请求 —— 正是闸门要防的"带过期账号发请求"。
+     *
+     * 现在：`Mutex` 串行化（拿不到的会**等**），并用协程上下文里的 [AccountGateMarker] 做**同协程**
+     * 的重入判断 —— 闸门自己发的 `v2/mine/user-info` 不会再来排队（那会自锁）。
+     */
+    private val accountGateMutex = kotlinx.coroutines.sync.Mutex()
+
+    /** 标记"当前协程已经在闸门里"，闸门自己发的请求据此跳过。 */
+    private object AccountGateMarker : kotlin.coroutines.CoroutineContext.Element {
+        override val key: kotlin.coroutines.CoroutineContext.Key<*> get() = Key
+        object Key : kotlin.coroutines.CoroutineContext.Key<AccountGateMarker>
+    }
 
     /** Perform a POST to an API path with the given business params. */
     suspend fun call(path: String, params: Map<String, Any> = emptyMap()): JSONObject {
         // Account gate first: a lapsed VIP window is dealt with BEFORE the request that
         // needs it, so the caller never sees the failure. The login/init paths are
         // exempt (they are what ESTABLISH an account, so there is nothing to check yet),
-        // and so are the gate's own requests.
-        if (!insideAccountGate && path != LOGIN_PATH && path != APP_INIT_PATH) {
+        // and so is the gate's own work (said marker).
+        val alreadyInsideGate =
+            kotlin.coroutines.coroutineContext[AccountGateMarker.Key] != null
+        if (!alreadyInsideGate && path != LOGIN_PATH && path != APP_INIT_PATH) {
             beforeAccountRequest?.let { gate ->
-                insideAccountGate = true
-                try {
-                    runCatching { gate() }
-                } finally {
-                    insideAccountGate = false
+                // 串行化：并发请求在这里排队，第一个跑完（可能刚换了号并刷新了缓存），
+                // 后面的进去时闸门内的缓存判断会立刻返回 —— 这才是"一次尝试只建一个身份"。
+                accountGateMutex.withLock {
+                    withContext(AccountGateMarker) {
+                        runCatching { gate() }.onFailure { e ->
+                            // 不再静默吞掉：闸门失败要能查（否则"换号失败"看起来像"内容为空"）
+                            gateFailure = e
+                            if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+                                android.util.Log.w("XhsGate", "account gate failed: ${e.message}", e)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -103,8 +136,17 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
         var reestablished = false
         if (reauthMutex.tryLock()) {
             try {
-                runCatching { loginAsGuest() }
-                reestablished = true
+                val before = credentialStore.userToken to credentialStore.userHash
+                val ok = runCatching { loginAsGuest() }.getOrNull()?.optInt("result") == 1
+                val after = credentialStore.userToken to credentialStore.userHash
+                // 只有**真的登录成功且凭证确实变了**才算自愈成功。
+                // 原来是无条件 `reestablished = true`，即使 loginAsGuest 抛异常也当成功，
+                // 于是把第一次的失败响应原样返回给上层 → 界面把它渲染成"没有内容"。
+                reestablished = ok && after != before
+                if (reestablished) {
+                    // 身份变了要通知上层重载（详情页的 media URL 是按账号发放的）
+                    onIdentityChanged?.invoke()
+                }
             } finally {
                 reauthMutex.unlock()
             }

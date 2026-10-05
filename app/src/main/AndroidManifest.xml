@@ -24,7 +24,11 @@
             android:exported="true"
             android:supportsPictureInPicture="true"
             android:windowSoftInputMode="adjustResize"
+            android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden">
+            <!-- launchMode=singleTask：默认的 standard 会让「深链打开作品」新建**第二个**
+                 MainActivity 实例叠在任务上，于是 onNewIntent 永远收不到（代码里原先依赖它），
+                 两个实例还各自能进小窗。singleTask 保证复用同一实例并走 onNewIntent。 -->
             <!-- configChanges: Compose reads the configuration through
                  LocalConfiguration and re-lays out on its own, so the activity
                  does not need to be recreated for a rotation. Without this the

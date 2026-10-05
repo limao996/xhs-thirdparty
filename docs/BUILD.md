@@ -68,8 +68,8 @@ Get-FileHash $apk -Algorithm MD5                          # 分发时贴这个�
 | --- | --- |
 | 大小 / md5 | `3,306,226 B` / `6d799ca08d1fab281aef854961c70057` |
 | sha256 | `1c1cbdecf1cfb9bf96b00e3fb992c41c175dafa65ab9d1f69f30e75669e7e860` |
-| versionName / versionCode | `1.2.1` / `326862`（时间戳表达式，每次构建递增） |
-| minSdk / targetSdk / compileSdk | `24` / `37` / `37` |
+| versionName / versionCode | `1.3.0` / 时间戳表达式（每次构建递增） |
+| minSdk / targetSdk / compileSdk | `26` / `37` / `37` |
 | 签名 | v2 scheme（v1/v3 未启用），`CN=ThirdParty XHS Client`，RSA 2048 |
 | 权限（合并后） | `INTERNET`、`ACCESS_NETWORK_STATE`、`WAKE_LOCK` + `USE_BIOMETRIC`、`USE_FINGERPRINT`（biometric 库合入）+ `com.thirdparty.xhs.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`（androidx 合入） |
 | 可调试 | 否（manifest 里没有 `debuggable`） |

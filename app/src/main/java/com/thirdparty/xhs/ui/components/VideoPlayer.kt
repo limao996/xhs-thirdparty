@@ -266,6 +266,13 @@ fun PauseWhenNotStarted(player: Player?, pauseOnDispose: Boolean = true) {
             val p = current ?: return@LifecycleEventObserver
             when (event) {
                 Lifecycle.Event.ON_STOP -> {
+                    // 小窗接管时"停"不代表该停播：小窗的存在意义就是退到后台继续看。
+                    // 之前这里无条件 pause，正是"切到小窗后视频变成暂停"的原因
+                    // （进小窗过程中 Activity 会走一次 ON_STOP）。
+                    if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+                        android.util.Log.i("XhsPip", "PauseWhenNotStarted ON_STOP handedOver=${PipController.isHandedOver(p)}")
+                    }
+                    if (PipController.isHandedOver(p)) return@LifecycleEventObserver
                     resumeOnStart = p.playWhenReady
                     p.pause()
                 }
@@ -280,15 +287,16 @@ fun PauseWhenNotStarted(player: Player?, pauseOnDispose: Boolean = true) {
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
             // Never leave audio running when leaving the screen — but ONLY when
-            // this component owns the player.
+            // this component owns the player, and never when the player has been
+            // handed to the PiP window（那时它的所有权已经不是这一屏的了）。
             //
-            // This used to fire unconditionally, which broke things badly once the
-            // windowed and fullscreen layouts started sharing one player: toggling
-            // fullscreen disposed the outgoing layout, which paused the SHARED
-            // player, so entering/leaving fullscreen stopped the video and left the
-            // control bar showing a stale play/pause state. A shared player's
-            // lifetime (including pausing) belongs to its owner.
-            if (pauseOnDispose) current?.pause()
+            // 判据必须在**事件发生时**求值，所以这里用函数调用而不是构造时捕获的布尔值。
+            if (pauseOnDispose && !PipController.isHandedOver(current)) {
+                if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+                    android.util.Log.i("XhsPip", "PauseWhenNotStarted onDispose PAUSE")
+                }
+                current?.pause()
+            }
         }
     }
 }

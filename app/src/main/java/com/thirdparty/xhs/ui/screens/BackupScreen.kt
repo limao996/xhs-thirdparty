@@ -97,35 +97,46 @@ fun BackupScreen(onBack: () -> Unit) {
     val saveLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/gzip")
     ) { uri: Uri? ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        App.INSTANCE.systemPickerActive = false
-        run("正在写入本地文件") {
-            val bytes = BackupManager.exportCompressed(context)
-            withContext(Dispatchers.IO) {
-                context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
-                    ?: throw java.io.IOException("无法写入所选位置")
+        // 复位放在 finally 里、覆盖"用户取消"这条路径：原来的写法把复位写在判空 return 之后，
+        // 取消一次就永远置着 true，而 MainActivity 的自动加锁条件是 `!systemPickerActive`
+        // → 应用锁此后不再触发（docs/REVIEW.md 附录B-P0-5）。
+        try {
+            if (uri != null) {
+                run("正在写入本地文件") {
+                    val bytes = BackupManager.exportCompressed(context)
+                    withContext(Dispatchers.IO) {
+                        context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+                            ?: throw java.io.IOException("无法写入所选位置")
+                    }
+                    "已备份到本地（压缩后 ${bytes.size / 1024} KB）"
+                }
             }
-            "已备份到本地（压缩后 ${bytes.size / 1024} KB）"
+        } finally {
+            App.INSTANCE.systemPickerActive = false
         }
     }
 
     val openLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        App.INSTANCE.systemPickerActive = false
-        run("正在读取本地文件") {
-            // read as bytes and let BackupManager detect gzip, so backups written
-            // by an older uncompressed build still restore
-            val bytes = withContext(Dispatchers.IO) {
-                context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                    ?: throw java.io.IOException("无法读取所选文件")
+        try {
+            if (uri != null) {
+                run("正在读取本地文件") {
+                    // read as bytes and let BackupManager detect gzip, so backups written
+                    // by an older uncompressed build still restore
+                    val bytes = withContext(Dispatchers.IO) {
+                        context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                            ?: throw java.io.IOException("无法读取所选文件")
+                    }
+                    val text = BackupManager.decode(bytes)
+                    BackupManager.restore(context, text, merge).let {
+                        if (!it.ok) throw java.io.IOException(it.detail)
+                        it.detail
+                    }.also { App.INSTANCE.notifyDataRestored() }
+                }
             }
-            val text = BackupManager.decode(bytes)
-            BackupManager.restore(context, text, merge).let {
-                if (!it.ok) throw java.io.IOException(it.detail)
-                it.detail
-            }.also { App.INSTANCE.notifyDataRestored() }
+        } finally {
+            App.INSTANCE.systemPickerActive = false
         }
     }
 

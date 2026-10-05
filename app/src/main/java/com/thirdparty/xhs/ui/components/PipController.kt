@@ -12,6 +12,7 @@ import android.graphics.drawable.Icon
 import android.os.Build
 import android.util.Rational
 import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
 import androidx.media3.exoplayer.ExoPlayer
 import com.thirdparty.xhs.R
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -63,6 +64,8 @@ object PipController {
      * （用户实测过：不显式接着，小窗里会停在暂停状态）。
      */
     fun start(player: ExoPlayer, noteId: Long, title: String, playIntent: Boolean) {
+        // 同一个播放器第二次进来时，旧会话必须先收掉，否则没人 release 它（后台出声）
+        if (hasSession() && _session.value?.player !== player) closeAndRelease()
         detachListener()
         _session.value = Session(player, noteId, title)
         inPip.value = true
@@ -73,6 +76,13 @@ object PipController {
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
+                paramsVersion.value++
+            }
+
+            override fun onVideoSizeChanged(videoSize: VideoSize) {
+                // 小窗比例是按视频尺寸算的：尺寸是**进小窗之后**才探到的（尤其是先全屏
+                // 后切小窗的横屏片），所以这里必须再刷一次参数，否则小窗会沿用
+                // Activity 的比例 —— 看起来就是"横屏视频的小窗变成竖屏、画面被拉伸"。
                 paramsVersion.value++
             }
         }
@@ -88,8 +98,8 @@ object PipController {
 
     fun hasSession(): Boolean = _session.value != null
 
-    /** 播放器已经交给小窗，详情页销毁时不许 release。 */
-    fun isHandedOver(player: ExoPlayer): Boolean = _session.value?.player === player
+    /** 播放器已经交给小窗：详情页销毁/生命周期停止时都不许动它。 */
+    fun isHandedOver(player: Player?): Boolean = _session.value?.player === player
 
     /** 展开回详情页：把播放器交回给详情页（详情页通过 PlaybackHandoff 认领）。 */
     fun handBackForDetail(): Session? {
@@ -131,14 +141,35 @@ object PipController {
      */
     fun buildParams(activity: Activity, player: ExoPlayer?): PictureInPictureParams? {
         val builder = PictureInPictureParams.Builder()
-        player?.videoSize?.let { size ->
-            if (size.width > 0 && size.height > 0) {
-                builder.setAspectRatio(Rational(size.width, size.height))
+        player?.let { p ->
+            val aspect = videoAspectOf(p.videoSize)
+            if (aspect > 0f) {
+                // PiP 允许的比例是 [1/2.39, 2.39]，越界会被系统忽略（窗口就退回 Activity 比例）
+                val clamped = aspect.coerceIn(1f / MAX_PIP_RATIO, MAX_PIP_RATIO)
+                builder.setAspectRatio(Rational((clamped * 1000f).toInt(), 1000))
             }
+            builder.setActions(actions(activity, p))
         }
-        if (player != null) builder.setActions(actions(activity, player))
         return runCatching { builder.build() }.getOrNull()
     }
+
+    /**
+     * 视频的显示比例（宽/高），**含旋转修正**。
+     *
+     * 手机拍的横屏片常常是"1920×1080 的帧 + 旋转 90°"编码的，直接按 `width/height` 算，
+     * 得到的是一个旋转过的比例 —— 小窗就会是竖的、画面被拉伸。已知尺寸为 0 时返回 0（调用方跳过设置）。
+     */
+    fun videoAspectOf(size: VideoSize?): Float {
+        if (size == null) return 0f
+        val rotate = size.unappliedRotationDegrees == 90 || size.unappliedRotationDegrees == 270
+        val w = if (rotate) size.height else size.width
+        val h = if (rotate) size.width else size.height
+        if (w <= 0 || h <= 0) return 0f
+        return w.toFloat() / h.toFloat()
+    }
+
+    /** PiP 系统允许的最大比例（约 2.39:1）；超出的比例会被忽略 */
+    private const val MAX_PIP_RATIO = 2.39f
 
     private fun actions(activity: Activity, player: ExoPlayer): List<RemoteAction> {
         // 三种状态给三种图标：播完给「重播」，播放中给「暂停」，其余给「播放」

@@ -8,6 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 /**
  * 系统触感反馈的统一入口。
@@ -18,19 +19,56 @@ import androidx.compose.ui.platform.LocalHapticFeedback
  *
  * 语义与用法（每档都对应系统的触感常量，不要随意替换）：
  *  - [longPress]：长按 —— 弹作品菜单、开始拖动排序、进入多选
- *  - [tick]：**轻点** —— 按钮、列表项、切换开关这类"按下了"的反馈
+ *  - [tick]：**轻点** —— 按钮、列表项、开关、**返回 / 关闭 / 取消**这类屏幕上的控件
  *    （用 `ContextClick`：它是系统给"轻点/点击"的反馈，比 `TextHandleMove`
  *     ——那是文本光标移动用的——合适得多）
  *  - [segment]：**翻页/换挡** —— 上下滑换视频、翻图片、切分类
- *  - [confirm]：确认 —— 收藏、加入队列、拖动落位、清空
+ *  - [confirm]：确认 —— 收藏、加入队列、落位、清空
  *  - [reject]：取消 / 移除 —— 取消收藏、移出队列
+ *
+ * **版本门控**：后三档用的是 API 30/34 才有的常量，低版本上会被系统静默忽略
+ * （用户看到的症状就是"点了没感觉"）。所以这里按 `Build.VERSION.SDK_INT` 降级到
+ * 低版本就有的常量，保证**任何支持版本都有反馈**。
+ *
+ * **不加触感的是什么**：不是"返回/关闭按钮"，而是**系统的返回手势/按键** ——
+ * 那一下系统自己会给反馈，我们再抖一次就是重复。屏幕上我们自己画的按钮一律要有。
  */
 class Haptics(private val feedback: HapticFeedback) {
+
+    /**
+     * 系统触感常量各自的**最低可用 API**。
+     *
+     * 这三档在低版本上不存在（`HapticFeedbackConstants` 是普通 int 常量，用了不报错，
+     * 系统只是**静默忽略**——表现就是"点了没感觉"）。所以按版本降级到低版本就有的常量，
+     * 而不是直接把调用丢掉：宁可给一个略粗糙的反馈，也不要什么都不给。
+     *
+     * - `SEGMENT_TICK` = API 30
+     * - `CONFIRM`      = API 30
+     * - `REJECT`       = API 34
+     */
+    private val sdk: Int get() = android.os.Build.VERSION.SDK_INT
+
     fun longPress() = feedback.performHapticFeedback(HapticFeedbackType.LongPress)
+
     fun tick() = feedback.performHapticFeedback(HapticFeedbackType.ContextClick)
-    fun segment() = feedback.performHapticFeedback(HapticFeedbackType.SegmentTick)
-    fun confirm() = feedback.performHapticFeedback(HapticFeedbackType.Confirm)
-    fun reject() = feedback.performHapticFeedback(HapticFeedbackType.Reject)
+
+    /** 翻页/换挡：低版本没有 SegmentTick，用 ContextClick 代替。 */
+    fun segment() = feedback.performHapticFeedback(
+        if (sdk >= android.os.Build.VERSION_CODES.R) HapticFeedbackType.SegmentTick
+        else HapticFeedbackType.ContextClick
+    )
+
+    /** 确认：低版本没有 Confirm，用 LongPress（"落实了"的观感最接近）。 */
+    fun confirm() = feedback.performHapticFeedback(
+        if (sdk >= android.os.Build.VERSION_CODES.R) HapticFeedbackType.Confirm
+        else HapticFeedbackType.LongPress
+    )
+
+    /** 取消/移除：低版本没有 Reject，用 ContextClick（轻点一下，不抢注意力）。 */
+    fun reject() = feedback.performHapticFeedback(
+        if (sdk >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) HapticFeedbackType.Reject
+        else HapticFeedbackType.ContextClick
+    )
 
     /**
      * 包一层回调，省掉"每处 onClick 都手写 haptics.xxx()"的重复 —— 也正因为容易漏写，
@@ -62,6 +100,28 @@ fun Modifier.hapticClickable(
     enabled: Boolean = true,
     onClick: () -> Unit
 ): Modifier = this.clickable(enabled = enabled) { haptics.tick(); onClick() }
+
+/**
+ * **翻页触感的唯一实现**：页面**落定**时给一次 `segment()`。
+ *
+ * 之前图文有两处各自实现（嵌入画廊与全屏查看器），触发时机略有差别，用户反馈"两处手感不一样"。
+ * 现在两边都调这个函数 —— 要改一起改。
+ *
+ * 用 `settledPage` 而不是 `currentPage`：后者在拖动过程中跨过半页就会变，反馈会"提前"响；
+ * `settledPage` 是真正停下来那一页，手感更实。首帧不算翻页（那是恢复现场）。
+ */
+@Composable
+fun PagerPageHaptics(state: androidx.compose.foundation.pager.PagerState) {
+    val haptics = rememberHaptics()
+    androidx.compose.runtime.LaunchedEffect(state) {
+        var first = true
+        androidx.compose.runtime.snapshotFlow { state.settledPage }
+            .distinctUntilChanged()
+            .collect {
+                if (first) first = false else haptics.segment()
+            }
+    }
+}
 
 /**
  * **按下即触感**：手指一碰到就反馈一次，和拖动过程无关。

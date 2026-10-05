@@ -560,6 +560,28 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 ---
 
+### 阶段二十三 · 审查 P0 修复批次 + 小窗四个新问题
+
+> 按用户对 `docs/REVIEW.md` 的取舍执行：P0 第 1 项（仓库里的 token）**不修**，
+> 第 2~7 项全修（改 minSdk 获授权）；另修 4 个小窗/图文问题；触感常量按版本门控。
+
+| # | 来源 | 改动 | 证据 |
+| --- | --- | --- | --- |
+| 1 | 触感版本门控 | `Haptics` 的 `segment/confirm/reject` 用的常量是 API 30/34 才有的，低版本会被系统**静默忽略**。现在按 `SDK_INT` 降级：`segment`→低版本用 `ContextClick`，`confirm`→`LongPress`，`reject`→`ContextClick` | 代码；真机各档待实测 |
+| 2 | 审查 P0-2（可用性） | ①`RepoViewModelFactory` 改用 `parameterTypes.size`（`getParameterCount` 是 API 26 才有的，会在 7.x 抛 `NoSuchMethodError`）；②**`minSdk` 24 → 26**（用户授权），README / BUILD / CONTEXT 三处同步为「Android 8.0 及以上」 | `assembleDebug` 通过；AGENTS 新增硬约束 5b |
+| 3 | 审查 P0-3（核心机制） | ①`switchToVipAccount` 加 `Mutex` 单飞 + 成功/进行中都设 10s 短冷却（原来设成"当前秒"，判据恒 false）+ 失败计数改 `AtomicInteger`；②`XhsApi` 的身份闸门从"全局普通布尔"改为 **Mutex 串行 + 协程上下文标记重入**，并发请求会**排队**而不是各自冲或整体绕过；③闸门异常不再静默吞（记录 + DEBUG 日志）；④自愈重登只在**登录成功且凭证确实变了**才算成功，并回调 `onIdentityChanged` → 上层 bump epoch 重载 | 编译通过；`XhsApi` 新增 `onIdentityChanged` / `gateFailure` |
+| 4 | 审查 P0-4（数据安全） | ①恢复不再写 `settings.vipEnd`（导出从不写，写入可让换号永久停摆）；②`autoVip` 恢复改为"键存在才写"（否则缺键会静默关掉核心开关）；③清空 + 写入放进 **`withTransaction`**；④恢复的每条记录校验 `noteId > 0` 且 `rawJson` 可解析，非法跳过并计数；⑤`SavedNote/History/WatchLater → NoteItem` 三处读取点改成 `mapNotNull + runCatching`（坏行不再崩进程） | 编译通过；`docs/REVIEW.md` 附录A-P0-7/8、C-P0-3、C-P1-9 |
+| 5 | 审查 P0-5（安全） | 取消系统文件选择器时 `systemPickerActive` 现在**一定复位**（`try/finally` 覆盖取消路径），否则应用锁会永久失效 | 代码 + `docs/REVIEW.md` 附录B-P0-5 |
+| 6 | 审查 P0-6（交付） | ①`MainActivity` 加 `android:launchMode="singleTask"`（默认 standard 会让深链开第二个实例、`onNewIntent` 永不触发）；②`versionName` 1.2.1 → **1.3.0**（v1.2.1 之后已落地十几批功能），BUILD/CONTEXT 同步 | `processDebugMainManifest` 通过（首次插入注释时 XML 未闭合，已修） |
+| 7 | 审查 P0-7（规范） | ①「关于」页删掉「也不破解付费校验」这类与实现相反的措辞，改为照实描述（硬约束 12）；②作者页第 5 份自绘关注按钮改用 `FollowPill`（硬约束 21）；③**返回/关闭/取消这类屏幕上的按钮一律补回触感**（硬约束 19 重写：不加触感的只有系统返回手势本身） | 代码 |
+| 8 | 用户新问题 1：小窗关闭后仍后台播放 | 收尾判据改为 **"有会话 + 走到 `onStop`"**（小窗里的 Activity 可见、不会 stop），不再看 `isInPictureInPictureMode`（关闭时它可能仍是 true → 旧判据永不成立）；另加 500ms 宽限任务区分「展开 vs 关闭」、进小窗 2s 内不误判 | 日志实证：进小窗时确实会走 `ON_STOP`（`PauseWhenNotStarted ON_STOP handedOver=true`）；展开路径实测不误杀（展开后回到详情页） |
+| 9 | 用户新问题 2：全屏右上角关闭按钮缺触感 | 补 `haptics.click(onDismiss)` | 实机：点该按钮 → 触感记录 `17:14:40.868 TICK` |
+| 10 | 用户新问题 3：全屏与嵌入翻页手感不同 | 抽出**唯一实现** `PagerPageHaptics(pagerState)`（按 `settledPage`，落定才响），嵌入画廊与全屏查看器都改用它 | 实机：全屏内左滑后新增触感记录（`17:14:53`）；两处现在是同一段代码 |
+| 11 | 用户新问题 4：横屏视频切小窗变竖屏/拉伸 | ①比例按**旋转修正**后算（`unappliedRotationDegrees` 90/270 交换宽高）并夹到 PiP 允许的 `[1/2.39, 2.39]`；②`onVideoSizeChanged` 也 bump `paramsVersion`，尺寸是进小窗后才探到时自动重设；③小窗画面按视频比例**信箱式**绘制，不再拉满整窗 | 实机（横屏片 2010）：`进小窗后 started=1 paused=0`（在播）、隔 1.3s 两次截图 **md5 不同**（画面在动），截图 `p0-pip-landscape-final` / `p0-pip-final-ratio` |
+| 12 | 顺带修 | 进小窗时 `PauseWhenNotStarted` 的 `ON_STOP` 分支会给已交接给 PiP 的播放器 `pause()`（这就是"切到小窗里变暂停"的另一半原因），现在遇到已交接直接跳过；`PipController.start` 若已有别的会话先收掉旧的 | 日志：`ON_STOP handedOver=true`（跳过）；实测进小窗后 `started=1` |
+
+---
+
 ### 阶段十四 · 详情页去掉队列入口
 
 - 详情页不再渲染稍后观看浮动按钮（`DetailScreen` 的 `floatingActionButton` 清空，

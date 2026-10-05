@@ -79,15 +79,12 @@ fun ImageGallery(
     }
     // ...and report our own swipes back out
     LaunchedEffect(pagerState, images.size) {
-        var first = true
         snapshotFlow { pagerState.currentPage }
             .distinctUntilChanged()
-            .collect {
-                // 首帧不算"翻页"（那是恢复现场），只有真的换页才给反馈
-                if (first) first = false else haptics.segment()
-                onPageChange?.invoke(it)
-            }
+            .collect { onPageChange?.invoke(it) }
     }
+    // 翻页触感：与全屏查看器共用同一个实现（用户要求两处手感一致）
+    PagerPageHaptics(pagerState)
 
     if (images.isEmpty()) return
 

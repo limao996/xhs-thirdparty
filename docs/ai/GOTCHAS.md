@@ -345,6 +345,28 @@
   （有时要连点两次），再按坐标切 tab；切到普通页面后 dump 就正常了。
 - 教训：脚本报"控件找不到"时，先确认 dump 是不是空的，再怀疑应用（同 I1）。
 
+**H14 · 画中画"进/出"两个方向都会踩坑：进小窗会被 pause，关小窗可能不释放**
+- 进小窗：
+  - Activity 会走一次 `ON_STOP`（实测日志 `PauseWhenNotStarted ON_STOP`），
+    `PauseWhenNotStarted` 无条件 `pause()` → 小窗里停在暂停。
+    → 判据：`if (PipController.isHandedOver(player)) return` —— 交给小窗的播放器，生命周期事件不许动它。
+  - 交接后必须**显式接着** `playIntent`（`PipController.start(..., playIntent)`）。
+- 关小窗：
+  - **不要**用 `isInPictureInPictureMode` 当"还在小窗里"的判据：关闭时它可能仍是 true，
+    于是 `onStop` 里的释放判据永远不成立 → 后台一直出声（用户报过两次）。
+  - 正确判据：**"有会话 + 走到 `onStop`"**（小窗里的 Activity 是可见的，不会 stop）。
+    另加两条护栏：进小窗 2s 内的 `onStop` 不算（个别设备瞬停），
+    以及 `onPictureInPictureModeChanged(false)` 排一个 500ms 宽限任务区分"展开（会 onResume）vs 关闭"。
+- 比例：`videoSize` 要按 `unappliedRotationDegrees` 交换宽高再算比例（手机横拍片常是"横向帧 + 旋转 90°"），
+  并且夹到 PiP 允许的 `[1/2.39, 2.39]`；尺寸变化要重设参数；画面按比例信箱式画，别拉满整窗。
+
+**H15 · 小窗/全屏这些"同一播放器的两个布局"要防住实施侧的手"顺手 pause"**
+- 表现：点「全屏」或「小窗播放」后画面停住；或播完按钮状态不对。
+- 根因模式：布局切换会 dispose 掉上一个组合，而 dispose 里"顺手 pause 一下免得后台出声"就打在**共享**播放器上。
+- 规矩：`PauseWhenNotStarted(pauseOnDispose = ownsPlayer)`，并且判据在**事件发生时**求值
+  （`if (pauseOnDispose && !PipController.isHandedOver(current))`），不要用构造时捕获的布尔值。
+
+
 **I1 · `uiautomator dump` 失败时会读到上一次的旧文件**
 - 触发：脚本里 `uiautomator dump --compressed /sdcard/d.xml; cat /sdcard/d.xml`。
 - 症状（本次实测踩了十几分钟）：dump 失败会打印

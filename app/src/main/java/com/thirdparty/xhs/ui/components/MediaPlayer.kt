@@ -183,6 +183,9 @@ fun MediaPlayer(
     DisposableEffect(player) {
         onDispose {
             if (!ownsPlayer) return@onDispose
+            if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+                android.util.Log.i("XhsPip", "MediaPlayer component dispose RELEASE (owns)")
+            }
             player.stop()
             player.clearMediaItems()
             player.release()

@@ -7,6 +7,7 @@ import com.thirdparty.xhs.net.CredentialStore
 import com.thirdparty.xhs.ui.theme.ThemeMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import androidx.room.withTransaction
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -176,11 +177,15 @@ object BackupManager {
                     ThemeMode.entries.firstOrNull { it.key == k } ?: ThemeMode.SYSTEM
                 )
             }
-            store.autoSwitchOnVipExpiry = s.optBoolean("autoVip")
+            // 只有键存在才写：`autoVip` 是"VIP 到期自动切换"的总开关，缺键时无条件写 false
+            // 会**静默关掉核心机制**（见 docs/REVIEW.md 附录C-P1-9）。
+            if (s.has("autoVip")) store.autoSwitchOnVipExpiry = s.optBoolean("autoVip")
             // only trust these when the key is actually present, so restoring an
             // older backup (which lacked them) does not zero the user's settings
             if (s.has("historyLimit")) store.historyLimit = s.optInt("historyLimit")
-            if (s.has("vipEnd")) store.vipEnd = s.optLong("vipEnd")
+            // 不再从备份恢复 vipEnd：导出从来不写这个字段，所以它只可能来自旧版或被手工改过的
+            // 文件；写进去等于让外部文件决定"VIP 是否还有效"，填一个大值就能让自动换号**永久停摆**
+            // （见 docs/REVIEW.md 附录A-P0-7）。VIP 缓存只允许由 myProfile() 写入。
             if (s.has("biometricLock")) {
                 // Enabling the app lock on a device where no biometric/lock screen
                 // is enrolled would lock the user out of their own app, so the
@@ -211,70 +216,120 @@ object BackupManager {
             }
         }
 
-        if (!merge) {
-            db.savedDao().clearAll()
-            db.historyDao().clearAll()
-            db.followDao().clearLocal()
-        }
-
+        // 覆盖模式：清空 + 写入必须在**同一个事务**里。原来是一串独立的 suspend 写，
+        // 中途进程被杀/磁盘满就会停在"已清空、没写回"的状态（见 docs/REVIEW.md 附录C-P0-3）。
+        // 计数放在事务内累加，事务提交后才有意义。
         var saved = 0
-        root.optJSONArray("saved")?.let { arr ->
-            for (i in 0 until arr.length()) {
-                val o = arr.optJSONObject(i) ?: continue
-                db.savedDao().upsert(
-                    SavedNoteEntity(
-                        noteId = o.optLong("noteId"),
-                        title = o.optString("title"),
-                        userName = o.optString("userName"),
-                        cover = o.optString("cover"),
-                        noteType = o.optInt("noteType"),
-                        rawJson = o.optString("rawJson"),
-                        savedAt = o.optLong("savedAt")
-                    )
-                )
-                saved++
-            }
-        }
-
         var hist = 0
-        root.optJSONArray("history")?.let { arr ->
-            for (i in 0 until arr.length()) {
-                val o = arr.optJSONObject(i) ?: continue
-                db.historyDao().upsert(
-                    HistoryEntity(
-                        noteId = o.optLong("noteId"),
-                        title = o.optString("title"),
-                        userName = o.optString("userName"),
-                        cover = o.optString("cover"),
-                        noteType = o.optInt("noteType"),
-                        rawJson = o.optString("rawJson"),
-                        viewedAt = o.optLong("viewedAt")
-                    )
-                )
-                hist++
-            }
-        }
-        db.historyDao().trim(store.historyLimit)
-
         var follows = 0
-        root.optJSONArray("followed")?.let { arr ->
-            for (i in 0 until arr.length()) {
-                val o = arr.optJSONObject(i) ?: continue
-                db.followDao().upsert(
-                    FollowedEntity(
-                        userId = o.optInt("userId"),
-                        userName = o.optString("userName"),
-                        headImg = o.optString("headImg"),
-                        signature = o.optString("signature"),
-                        followedAt = o.optLong("followedAt")
+        var skipped = 0
+        db.withTransaction {
+            if (!merge) {
+                db.savedDao().clearAll()
+                db.historyDao().clearAll()
+                db.followDao().clearLocal()
+            }
+
+            root.optJSONArray("saved")?.let { arr ->
+                for (i in 0 until arr.length()) {
+                    val row = validRow(arr.optJSONObject(i)) ?: run { skipped++; null }
+                    if (row == null) continue
+                    db.savedDao().upsert(
+                        SavedNoteEntity(
+                            noteId = row.noteId,
+                            title = row.title,
+                            userName = row.userName,
+                            cover = row.cover,
+                            noteType = row.noteType,
+                            rawJson = row.rawJson,
+                            savedAt = row.savedAt
+                        )
                     )
-                )
-                follows++
+                    saved++
+                }
+            }
+
+            root.optJSONArray("history")?.let { arr ->
+                for (i in 0 until arr.length()) {
+                    val row = validRow(arr.optJSONObject(i)) ?: run { skipped++; null }
+                    if (row == null) continue
+                    db.historyDao().upsert(
+                        HistoryEntity(
+                            noteId = row.noteId,
+                            title = row.title,
+                            userName = row.userName,
+                            cover = row.cover,
+                            noteType = row.noteType,
+                            rawJson = row.rawJson,
+                            viewedAt = row.viewedAt
+                        )
+                    )
+                    hist++
+                }
+            }
+            db.historyDao().trim(store.historyLimit)
+
+            root.optJSONArray("followed")?.let { arr ->
+                for (i in 0 until arr.length()) {
+                    val o = arr.optJSONObject(i) ?: continue
+                    if (o.optInt("userId") <= 0) { skipped++; continue }
+                    db.followDao().upsert(
+                        FollowedEntity(
+                            userId = o.optInt("userId"),
+                            userName = o.optString("userName"),
+                            headImg = o.optString("headImg"),
+                            signature = o.optString("signature"),
+                            followedAt = o.optLong("followedAt")
+                        )
+                    )
+                    follows++
+                }
             }
         }
 
-        Result(true, "已恢复${counts}｜收藏 $saved｜浏览 $hist｜关注 $follows")
+        val tail = if (skipped > 0) "｜跳过无效 $skipped" else ""
+        return@withContext Result(
+            true,
+            "已恢复${counts}｜收藏 $saved｜浏览 $hist｜关注 $follows$tail"
+        )
     }
+
+    /**
+     * 校验一条笔记记录：`noteId > 0` 且 `rawJson` 能被解析成 JSON 对象。
+     *
+     * 不校验的后果是实打实的崩：列表面板会 `NoteItem(JSONObject(rawJson))`，
+     * 而 `JSONObject("")` 抛 `JSONException`，那条异常在 `viewModelScope.launch` 里没人接
+     * （见 docs/REVIEW.md 附录A-P0-8）。
+     */
+    private fun validRow(o: JSONObject?): Row? {
+        if (o == null) return null
+        val noteId = o.optLong("noteId")
+        val raw = o.optString("rawJson")
+        if (noteId <= 0L || raw.isBlank()) return null
+        val ok = runCatching { JSONObject(raw) }.isSuccess
+        if (!ok) return null
+        return Row(
+            noteId = noteId,
+            title = o.optString("title"),
+            userName = o.optString("userName"),
+            cover = o.optString("cover"),
+            noteType = o.optInt("noteType"),
+            rawJson = raw,
+            savedAt = o.optLong("savedAt"),
+            viewedAt = o.optLong("viewedAt")
+        )
+    }
+
+    private data class Row(
+        val noteId: Long,
+        val title: String,
+        val userName: String,
+        val cover: String,
+        val noteType: Int,
+        val rawJson: String,
+        val savedAt: Long,
+        val viewedAt: Long
+    )
 }
 
 /** The persisted 主题 key, read from the same prefs the app writes it to. */

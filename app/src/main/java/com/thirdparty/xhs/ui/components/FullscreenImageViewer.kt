@@ -123,10 +123,9 @@ fun FullscreenImageViewer(
     var lastTapPos by remember { mutableStateOf(Offset.Zero) }
     // zoom is per-page: carrying it across a swipe would leave the next image
     // mysteriously cropped
-    var segmentSeen by remember { mutableStateOf(-1) }
+    // 翻页触感与嵌入画廊共用同一个实现（用户要求两处一致）
+    PagerPageHaptics(pagerState)
     LaunchedEffect(pagerState.currentPage) {
-        if (segmentSeen != -1 && segmentSeen != pagerState.currentPage) haptics.segment()
-        segmentSeen = pagerState.currentPage
         scale = 1f
         offset = Offset.Zero
     }
@@ -292,8 +291,9 @@ fun FullscreenImageViewer(
                 style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier.weight(1f).padding(start = Spacing.s)
             )
-            // 关闭按钮不给触感：这是"返回"类操作，系统返回本身已经有反馈（用户要求去掉）
-            IconButton(onClick = onDismiss) {
+            // 屏幕上的关闭按钮要有触感（用户要求）：系统返回手势不用我们管，
+            // 但这是我们自己画的按钮，按下去得有反馈。
+            IconButton(onClick = haptics.click(onDismiss)) {
                 Icon(Icons.Filled.Close, contentDescription = "关闭", tint = Scrim.onMedia)
             }
         }

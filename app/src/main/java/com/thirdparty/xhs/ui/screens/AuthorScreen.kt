@@ -116,7 +116,10 @@ fun AuthorScreen(
                         )
                     }
                     Spacer(Modifier.width(Spacing.s))
-                    Surface(
+                    // 关注按钮只有一套实现（硬约束 21）：详情页 / 关注页 / 关注 tab / 粉丝圈 tab 都是
+                    // 这个 FollowPill，这里曾经是第 5 份自绘 Surface（尺寸与配色都不一样）。
+                    com.thirdparty.xhs.ui.components.FollowPill(
+                        followed = state.followed,
                         onClick = {
                             if (state.followed) {
                                 haptics.reject()
@@ -125,19 +128,8 @@ fun AuthorScreen(
                                 haptics.confirm()
                                 viewModel.toggleFollow()
                             }
-                        },
-                        shape = Corners.full,
-                        color = if (state.followed) MaterialTheme.colorScheme.secondaryContainer
-                        else MaterialTheme.colorScheme.primary,
-                        contentColor = if (state.followed) MaterialTheme.colorScheme.onSecondaryContainer
-                        else MaterialTheme.colorScheme.onPrimary
-                    ) {
-                        Text(
-                            if (state.followed) "已关注" else "+ 关注",
-                            Modifier.padding(horizontal = Spacing.m, vertical = Spacing.s),
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                    }
+                        }
+                    )
                 }
             }
 

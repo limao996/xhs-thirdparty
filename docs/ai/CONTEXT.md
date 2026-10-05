@@ -16,9 +16,9 @@
 | --- | --- |
 | 语言 / UI | Kotlin 2.1.21 / Jetpack Compose（BOM 2026.02.01）+ material3 **1.5.0-alpha29** |
 | 构建 | AGP 9.4.1 / Gradle 9.8.0 / KSP 2.1.21-2.0.2 / JDK 17 |
-| SDK | minSdk 24、targetSdk 37、compileSdk 37 |
+| SDK | minSdk 26、targetSdk 37、compileSdk 37 |
 | 包名 | release `com.thirdparty.xhs`，debug `com.thirdparty.xhs.debug` |
-| 版本 | `versionName 1.2.1`；`versionCode = 当前秒数 − 2026-10-01T00:00:00 的秒数` |
+| 版本 | `versionName 1.3.0`；`versionCode = 当前秒数 − 2026-10-01T00:00:00 的秒数` |
 | 模块 | 只有 `:app` 一个模块（`settings.gradle`） |
 | XML 布局 | 无。模块只有一个 `AndroidManifest.xml` + 图标资源 |
 | 第三方 UI 框架 | 无（不用 appcompat / material / 任何 UI 库） |

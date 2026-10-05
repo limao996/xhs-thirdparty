@@ -5,16 +5,16 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.getValue
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.rememberNavController
 import com.thirdparty.xhs.navigation.AppNavHost
@@ -145,6 +145,12 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
     /** 小窗控制栏的广播接收者；必须持有引用，否则会被回收掉而收不到按钮点击。 */
     private var pipReceiver: android.content.BroadcastReceiver? = null
 
+    /** 退出小窗后的"到底是展开还是关闭"判定任务，展开（onResume）时取消 */
+    private var pipExitCheck: kotlinx.coroutines.Job? = null
+
+    /** 进小窗的时刻：`onStop` 里用它跳过"刚进小窗那一下的瞬停" */
+    private var pipEnteredAtMs = 0L
+
     override fun onStart() {
         super.onStart()
         pipReceiver = com.thirdparty.xhs.ui.components.PipController.registerReceiver(
@@ -156,12 +162,27 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
     override fun onStop() {
         pipReceiver?.let { r -> runCatching { unregisterReceiver(r) } }
         pipReceiver = null
-        // 小窗被「关闭」时系统**不保证**销毁 Activity：实测只是 onStop，
-        // 于是那个看不见的 ExoPlayer 继续出声（用户反馈）。展开回详情页不会走 onStop
-        // （同一 Activity 回到前台），所以这里能安全区分：
-        //   不在小窗 + 还有会话 = 小窗已经结束且没人接手 → 自己收尾。
+        // 小窗被「关闭」时系统**不保证**销毁 Activity（实测只走 onStop），于是那个看不见的
+        // ExoPlayer 会继续出声（用户反馈过两次）。这里用**系统的** `isInPictureInPictureMode`
+        // 判断，不再看我们自己维护的 `inPip`：关闭小窗时那个回调有可能压根不来，`inPip` 会一直
+        // 停在 true，判据就永远不成立（这正是上一版"修了但没生效"的原因）。
         val pip = com.thirdparty.xhs.ui.components.PipController
-        if (!isChangingConfigurations && !isInPictureInPictureMode && !pip.inPip.value &&
+        val justEntered =
+            android.os.SystemClock.elapsedRealtime() - pipEnteredAtMs < PIP_ENTRY_GRACE_MS
+        if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+            android.util.Log.i(
+                "XhsPip",
+                "onStop pip=${isInPictureInPictureMode} session=${pip.hasSession()} " +
+                    "justEntered=$justEntered exitCheck=${pipExitCheck?.isActive}"
+            )
+        }
+        // 「有会话 + 走到 onStop」= 小窗已经没了：小窗里的 Activity 是**可见**的，不会 stop。
+        //
+        // 不再用 `isInPictureInPictureMode` 作判据：关闭小窗时这个值可能还停在 true，
+        // 于是旧判据永远不成立、播放器永远不释放 —— 这正是用户两次反馈"关闭后还在后台放"的原因。
+        // 三个例外：配置变更（转屏）、刚进小窗的过渡期（个别设备会瞬停一下）、
+        // 退出小窗的宽限任务还在跑（那是"展开"，由它和详情页交接处理）。
+        if (!isChangingConfigurations && !justEntered && pipExitCheck?.isActive != true &&
             pip.hasSession()
         ) {
             // 顺带把"待打开的作品"清掉：小窗是被关掉的，不该在下次回到前台时把人拽进详情页
@@ -169,6 +190,13 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
             pip.closeAndRelease()
         }
         super.onStop()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // 回到前台 = 展开（不是关闭）：取消"退出小窗后的收尾定时器"
+        pipExitCheck?.cancel()
+        pipExitCheck = null
     }
 
     /**
@@ -201,12 +229,33 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
     ) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         com.thirdparty.xhs.ui.components.PipController.inPip.value = isInPictureInPictureMode
+        if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+            android.util.Log.i("XhsPip", "pipModeChanged=$isInPictureInPictureMode")
+        }
         if (isInPictureInPictureMode) {
+            pipEnteredAtMs = android.os.SystemClock.elapsedRealtime()
             // 进小窗时把比例刷一遍：视频尺寸可能是在进小窗之后才探到的
             refreshPipParams()
         } else {
+            // 退出小窗的**同一个回调**既可能是"展开"、也可能是"关闭"，这里不能立刻下结论：
+            //   展开 → 同一 Activity 回到前台，会走 onResume；
+            //   关闭 → 不回来（随后 onStop/onDestroy，或者什么都不来）。
+            // 所以先按"展开"处理（把详情页排上队），再给一小段时间；没回到前台就按"关闭"收尾。
             com.thirdparty.xhs.ui.components.PipController.session.value?.let { s ->
                 com.thirdparty.xhs.ui.components.PipController.pendingDetailId.value = s.noteId
+            }
+            pipExitCheck?.cancel()
+            pipExitCheck = lifecycleScope.launch {
+                kotlinx.coroutines.delay(PIP_EXIT_GRACE_MS)
+                val pip = com.thirdparty.xhs.ui.components.PipController
+                if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+                    // 展开：播放器已经交回详情页（handBackForDetail 会把 session 清掉）
+                    return@launch
+                }
+                if (pip.hasSession()) {
+                    pip.pendingDetailId.value = null
+                    pip.closeAndRelease()
+                }
             }
         }
     }
@@ -377,8 +426,32 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
                             .collectAsStateWithLifecycle()
                     if (pipActive) {
                         pipSession?.let { s ->
+                            // 小窗里按**视频自己的比例**画（信箱式留边），不要拉满整窗：
+                            // 窗口比例是系统按 PiP 参数给的，两者不一定相等（尤其横屏视频
+                            // 切小窗时窗口可能仍是竖的），拉满就是用户看到的"画面被拉伸"。
+                            var pipAspect by androidx.compose.runtime.remember(s.player) {
+                                androidx.compose.runtime.mutableFloatStateOf(
+                                    com.thirdparty.xhs.ui.components.PipController
+                                        .videoAspectOf(s.player.videoSize)
+                                )
+                            }
+                            androidx.compose.runtime.DisposableEffect(s.player) {
+                                val l = object : androidx.media3.common.Player.Listener {
+                                    override fun onVideoSizeChanged(
+                                        videoSize: androidx.media3.common.VideoSize
+                                    ) {
+                                        pipAspect = com.thirdparty.xhs.ui.components.PipController
+                                            .videoAspectOf(videoSize)
+                                    }
+                                }
+                                s.player.addListener(l)
+                                pipAspect = com.thirdparty.xhs.ui.components.PipController
+                                    .videoAspectOf(s.player.videoSize)
+                                onDispose { s.player.removeListener(l) }
+                            }
                             com.thirdparty.xhs.ui.components.VideoSurface(
                                 player = s.player,
+                                videoAspect = pipAspect.takeIf { it > 0f },
                                 modifier = Modifier.fillMaxSize()
                             )
                         }
@@ -391,5 +464,11 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
     private companion object {
         /** last share link already offered, so the same clipboard does not re-prompt */
         const val KEY_LAST_CLIP = "last_clipboard_note"
+
+        /** 退出小窗后等多久判断"展开还是关闭"；展开会在这之前走 onResume */
+        const val PIP_EXIT_GRACE_MS = 500L
+
+        /** 进小窗后的这段时间内，`onStop` 不当作"小窗被关掉"（个别设备会瞬停一下） */
+        const val PIP_ENTRY_GRACE_MS = 2_000L
     }
 }

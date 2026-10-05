@@ -129,8 +129,9 @@ fun AboutScreen(
 
             Text(
                 "本应用是第三方客户端，与「小黄书」官方无任何关系，未获授权，仅供学习与技术研究。 " +
-                    "它不提供任何内容，也不破解付费校验：它做的是自动注册一次性游客身份，去领取" +
-                    "服务端发给新游客的体验权限。如有侵权，请到 GitHub 仓库提 Issue，作者会立即下架。",
+                    "它不提供任何内容；VIP 权限不是靠篡改校验骗出来的，而是自动注册新的游客身份、" +
+                    "领取服务端发放给新游客的体验窗口 —— 具体机制见仓库里的 AGENTS.md 与 docs/PROTOCOL.md。" +
+                    "如有侵权，请到 GitHub 仓库提 Issue，作者会立即下架。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = Spacing.l, vertical = Spacing.s)

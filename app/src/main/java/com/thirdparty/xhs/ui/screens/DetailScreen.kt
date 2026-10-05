@@ -344,9 +344,14 @@ fun DetailScreen(
             // 它归小窗所有，这里 release 会把用户正在看的视频直接掐掉。
             val p = sharedPlayer
             if (p != null && !com.thirdparty.xhs.ui.components.PipController.isHandedOver(p)) {
+                if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+                    android.util.Log.i("XhsPip", "DetailScreen dispose RELEASE player")
+                }
                 p.stop()
                 p.clearMediaItems()
                 p.release()
+            } else if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+                android.util.Log.i("XhsPip", "DetailScreen dispose SKIP (handedOver or null)")
             }
         }
     }

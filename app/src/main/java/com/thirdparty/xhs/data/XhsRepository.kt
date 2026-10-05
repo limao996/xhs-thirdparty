@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import org.json.JSONObject
@@ -243,14 +244,14 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
         }
 
     suspend fun savedList(): List<NoteItem> =
-        withContext(Dispatchers.IO) { savedDao.all().map { NoteItem(JSONObject(it.rawJson)) } }
+        withContext(Dispatchers.IO) { savedDao.all().mapNotNull { it.toNoteOrNull() } }
 
     /** Wipe all local favourites. */
     suspend fun clearSaved() = withContext(Dispatchers.IO) { savedDao.clearAll() }
 
     // ---- browsing history, purely local ------------------------------------
     suspend fun history(): List<NoteItem> =
-        withContext(Dispatchers.IO) { historyDao.recent(api.historyLimit).map { NoteItem(JSONObject(it.rawJson)) } }
+        withContext(Dispatchers.IO) { historyDao.recent(api.historyLimit).mapNotNull { it.toNoteOrNull() } }
 
     /** Wipe all local browsing history. */
     suspend fun clearHistory() = withContext(Dispatchers.IO) { historyDao.clearAll() }
@@ -344,6 +345,8 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
         // when the window has lapsed the request that would have failed instead goes out
         // with a fresh account.
         api.beforeAccountRequest = { ensureAccountForRequest() }
+        // 自愈重登（XhsApi 内部）也算换号：让上层重载按账号发放的数据
+        api.onIdentityChanged = { noteIdentityChanged() }
     }
 
     /**
@@ -391,20 +394,28 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
         // link and can flip the account mid-request on a flaky one.
         if (!hasNetwork()) return@withContext false
 
+        // 单飞：整段判断 + 建号 + 校验都在锁内。并发进来的第二个请求拿到锁时会**重新判断**，
+        // 此时 cachedVipEnd 已被第一个（成功的话）刷新 → 直接返回 false，不会再建号。
+        switchMutex.withLock {
+            switchToVipAccountLocked()
+        }
+    }
+
+    private suspend fun switchToVipAccountLocked(): Boolean {
         val nowS0 = System.currentTimeMillis() / 1000
         // Decide from the CACHED window first. A VIP end does not move on its own,
         // so a check must not spend a request every time — it only needs the
         // server when the local value says the window has lapsed (or is unknown).
         val cached = api.cachedVipEnd
-        if (cached > 0L && cached - nowS0 > VIP_MIN_REMAINING_S) return@withContext false
+        if (cached > 0L && cached - nowS0 > VIP_MIN_REMAINING_S) return false
 
         // Escalating cooldown. This used to create up to VIP_SWITCH_ATTEMPTS brand
         // new identities per check; on a weak link or when the backend stops
         // handing out VIP that produced a pile of junk accounts — which is exactly
         // what "创建多个账号" looked like.
-        if (nowS0 < nextSwitchAllowedAtS) return@withContext false
+        if (nowS0 < nextSwitchAllowedAtS) return false
 
-        val current = myProfile() ?: return@withContext false
+        val current = myProfile() ?: return false
         // "有效期不足" covers both an already-expired window and one about to
         // lapse: switching exactly at expiry would drop the user mid-action, so a
         // window with under a minute left counts as insufficient too.
@@ -412,19 +423,22 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
         val stillEnough = current.isVip &&
             (current.vipEnd <= 0L || (current.vipEnd - nowS) > VIP_MIN_REMAINING_S)
         if (stillEnough) {
-            switchFailStreak = 0
-            return@withContext false
+            switchFailStreak.set(0)
+            return false
         }
 
         // Exactly ONE new identity per attempt. Registering an identity makes it
         // the account in use, so trying several in a row leaves the user on the
         // last one and orphans the rest.
-        nextSwitchAllowedAtS = nowS
+        //
+        // 这里设的是"本次尝试正在进行"的短冷却（原来写的是 `nowS`，与判据用的 `nowS0` 同秒
+        // → 判据恒为 false，等于没设）。失败时 [backoffSwitch] 会把它改成真正的退避时间。
+        nextSwitchAllowedAtS = nowS + SWITCH_IN_FLIGHT_GRACE_S
         val id = api.freshRandomMac()
         val loggedIn = api.loginAsDevice(id).optInt("result") == 1
         if (!loggedIn) {
             backoffSwitch(nowS)
-            return@withContext false
+            return false
         }
         // The identity in use has changed — tell the UI, which is otherwise still
         // showing the previous account's id (the switch now happens inside a request,
@@ -432,14 +446,15 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
         noteIdentityChanged()
         val next = myProfile()
         if (next?.isVip == true) {
-            switchFailStreak = 0
-            nextSwitchAllowedAtS = 0L
-            return@withContext true
+            switchFailStreak.set(0)
+            // 换号成功也留一个短冷却：避免"刚换完又立刻被判过期"时连换两个身份
+            nextSwitchAllowedAtS = nowS + SWITCH_IN_FLIGHT_GRACE_S
+            return true
         }
         // Switched to a fresh account that still has no VIP: keep it (it is real
         // and usable) but wait longer before spending another identity.
         backoffSwitch(nowS)
-        false
+        return false
     }
 
     /**
@@ -451,8 +466,8 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
      * 30 minutes at most.
      */
     private fun backoffSwitch(nowS: Long) {
-        switchFailStreak = (switchFailStreak + 1).coerceAtMost(8)
-        val wait = (VIP_SWITCH_BACKOFF_BASE_S shl (switchFailStreak - 1))
+        val streak = switchFailStreak.updateAndGet { (it + 1).coerceAtMost(8) }
+        val wait = (VIP_SWITCH_BACKOFF_BASE_S shl (streak - 1))
             .coerceAtMost(VIP_SWITCH_BACKOFF_MAX_S)
         nextSwitchAllowedAtS = nowS + wait
     }
@@ -482,12 +497,24 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
          */
         const val VIP_SWITCH_BACKOFF_BASE_S = 60L
         const val VIP_SWITCH_BACKOFF_MAX_S = 30L * 60L
+        /** 一次换号尝试进行中的短冷却，防止紧接着又判过期而连换身份 */
+        const val SWITCH_IN_FLIGHT_GRACE_S = 10L
     }
 
+    /**
+     * Serialises [switchToVipAccount].
+     *
+     * 没有它的时候：`cachedVipEnd` 判断、冷却、失败计数都是"读—判断—写"三步且无同步，
+     * 而闸门由每个请求触发（首屏并发十几个），于是 VIP 窗口刚过期时**多个协程会各建一个身份**，
+     * 只留最后一个在用、其余成为孤儿号。见 docs/REVIEW.md 附录A-P0-1。
+     */
+    private val switchMutex = kotlinx.coroutines.sync.Mutex()
+
     /** consecutive unsuccessful automatic switches, drives the cooldown */
-    private var switchFailStreak = 0
+    private val switchFailStreak = java.util.concurrent.atomic.AtomicInteger(0)
 
     /** epoch seconds before which no automatic switch may run */
+    @Volatile
     private var nextSwitchAllowedAtS = 0L
 
     /** Drop anything beyond the configured 最近浏览 limit, right away. */
@@ -724,8 +751,24 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
 
     /** The queue in playing order. */
     suspend fun watchLaterList(): List<NoteItem> = withContext(Dispatchers.IO) {
-        watchLaterDao.all().map { NoteItem(JSONObject(it.rawJson)) }
+        watchLaterDao.all().mapNotNull { it.toNoteOrNull() }
     }
+
+    /**
+     * 一行本地记录 → [NoteItem]；`rawJson` 坏了就丢掉这一行，而不是让整个列表崩。
+     *
+     * 触发场景很实际：恢复备份时 `rawJson` 来自外部文件（可能为空/被截断），
+     * 而 `JSONObject("")` 抛的 `JSONException` 在这些读取点全是 `viewModelScope.launch` 里
+     * 没人接的异常 —— 直接崩进程（docs/REVIEW.md 附录A-P0-8）。
+     */
+    private fun SavedNoteEntity.toNoteOrNull(): NoteItem? =
+        runCatching { NoteItem(JSONObject(rawJson)) }.getOrNull()
+
+    private fun HistoryEntity.toNoteOrNull(): NoteItem? =
+        runCatching { NoteItem(JSONObject(rawJson)) }.getOrNull()
+
+    private fun WatchLaterEntity.toNoteOrNull(): NoteItem? =
+        runCatching { NoteItem(JSONObject(rawJson)) }.getOrNull()
 
     /** Add to the tail of the queue, or remove it when it is already there. */
     suspend fun toggleWatchLater(item: NoteItem): Boolean = withContext(Dispatchers.IO) {
