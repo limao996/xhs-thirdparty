@@ -151,4 +151,14 @@ object PlaybackHandoff {
      */
     @Synchronized
     fun isHandedOver(player: ExoPlayer): Boolean = owned.containsKey(player)
+
+    /**
+     * 这台播放器是**刚刚由小窗交回详情页**的那一台（`givePlayer` 之后、详情页认领之前）。
+     *
+     * 与 [isHandedOver] 的区别：那个是"曾经交给过别的屏幕"（信息流 → 详情页，标记会一直留着，
+     * 用来防误 release）；这个只覆盖"展开小窗"那一瞬间，用来防 `ON_STOP` 误暂停 ——
+     * 详情页切后台/锁屏该暂停时它必须是 false。
+     */
+    @Synchronized
+    fun isHeldForHandBack(player: ExoPlayer): Boolean = held?.player === player
 }

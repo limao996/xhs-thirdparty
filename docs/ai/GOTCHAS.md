@@ -375,6 +375,13 @@
   收掉会话、`inPip` 置 false，解锁后那个窗口就按导航内容重组 → 用户看到"小窗里是视频外面套着详情页"。
   判据：`!PowerManager.isInteractive || KeyguardManager.isKeyguardLocked` 时不动会话；
   另在 `onResume` 里做幂等兜底：`isInPictureInPictureMode && hasSession()` → `inPip = true`。
+- **播放器归属要分成两档，别用同一个判据**（踩过）：
+  - `PipController.isHandedOver(p)` = **只算小窗会话**（`_session.value?.player === p`）——用于
+    "要不要暂停 / 要不要 release"。**不要**把 `PlaybackHandoff` 的持有并进来：那个标记是"曾经
+    交给过别的屏幕"，信息流交给详情页的那台会**永远**留着它，一合并详情页切后台/锁屏就永远不暂停
+    （用户反馈"详情页切后台还在放"），而且返回时也不会被释放（泄漏）。
+  - `PipController.isReturningToDetail(p)` / `PlaybackHandoff.isHeldForHandBack(p)` = **只覆盖
+    "展开小窗刚交回详情页"那一瞬间**（`givePlayer` 之后、详情页认领之前），专门用来放过那次 `ON_STOP`。
 - **锁屏不是关小窗，但也不该继续播**：息屏/锁屏时 Activity 也会 `onStop`，
   ①把它当"小窗没了"会收掉会话 → 解锁后窗口里变成"视频外面套着详情页 UI"；
   ②完全不动又会让视频在锁屏后继续出声（`PauseWhenNotStarted` 对已交接的播放器是跳过的，

@@ -115,16 +115,21 @@ object PipController {
     }
 
     /**
-     * 播放器归小窗、或者刚从小窗交回详情页（`PlaybackHandoff`）——两种情况都不许
-     * 生命周期/销毁逻辑去 pause 或 release 它。
+     * 播放器**正归小窗所有**（会话还在）。生命周期/销毁逻辑用它来判断"这台别动"。
      *
-     * 后一种情况是必需的：展开小窗时 `handBackForDetail()` 会把会话清掉，此时若只看本对象，
-     * 判定就变成"没人管"了 —— 展开那一瞬间的 ON_STOP 会把刚交回去的播放器暂停掉
-     * （实测：`PauseWhenNotStarted ON_STOP handedOver=false` 紧跟在 handback 之后）。
+     * 注意**只算小窗会话**，不要把 `PlaybackHandoff` 的持有也算进来：那个标记是"曾经交给过别的
+     * 屏幕"（信息流 → 详情页）用的，用来防止**误 release**。把它并进来会让详情页切后台/锁屏
+     * 时也被"放过"——用户反馈"详情页切后台还在放"就是这么来的（不合并才有正确的暂停）。
      */
-    fun isHandedOver(player: Player?): Boolean =
-        _session.value?.player === player ||
-            (player is ExoPlayer && PlaybackHandoff.isHandedOver(player))
+    fun isHandedOver(player: Player?): Boolean = _session.value?.player === player
+
+    /**
+     * 播放器**刚刚被交回详情页**（展开小窗那一刻）：这时 `handBackForDetail()` 已经清了会话，
+     * 所以 [isHandedOver] 会返回 false —— 但那一瞬间的组合销毁/`ON_STOP` 不该把它暂停。
+     * 只认 `givePlayer` 这一次交接（`held`），不认信息流那次"曾经交给过"的标记。
+     */
+    fun isReturningToDetail(player: Player?): Boolean =
+        player is ExoPlayer && PlaybackHandoff.isHeldForHandBack(player)
 
     /** 展开回详情页：把播放器交回给详情页（详情页通过 PlaybackHandoff 认领）。 */
     fun handBackForDetail(): Session? {

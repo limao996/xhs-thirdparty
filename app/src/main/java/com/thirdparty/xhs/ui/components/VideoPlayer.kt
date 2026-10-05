@@ -273,10 +273,19 @@ fun PauseWhenNotStarted(player: Player?, pauseOnDispose: Boolean = true) {
                     // 小窗接管时"停"不代表该停播：小窗的存在意义就是退到后台继续看。
                     // 之前这里无条件 pause，正是"切到小窗后视频变成暂停"的原因
                     // （进小窗过程中 Activity 会走一次 ON_STOP）。
+                    // 另一种例外是"刚从小窗交回详情页"的那台（展开瞬间的一次 ON_STOP）。
+                    //
+                    // 其余情况（普通详情页/信息流）就该在切后台、锁屏时停下来 —— 用户要求。
+                    val keepPlaying = PipController.isHandedOver(p) ||
+                        PipController.isReturningToDetail(p)
                     if (com.thirdparty.xhs.BuildConfig.DEBUG) {
-                        android.util.Log.i("XhsPip", "PauseWhenNotStarted ON_STOP handedOver=${PipController.isHandedOver(p)}")
+                        android.util.Log.i(
+                            "XhsPip",
+                            "PauseWhenNotStarted ON_STOP handedOver=${PipController.isHandedOver(p)} " +
+                                "returning=${PipController.isReturningToDetail(p)}"
+                        )
                     }
-                    if (PipController.isHandedOver(p)) return@LifecycleEventObserver
+                    if (keepPlaying) return@LifecycleEventObserver
                     resumeOnStart = p.playWhenReady
                     p.pause()
                 }

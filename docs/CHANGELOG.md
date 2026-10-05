@@ -631,7 +631,13 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 
 
-### 阶段二十九 · 小窗锁屏后仍在播放
+### 阶段三十 · 详情页切后台/锁屏应暂停（且不影响小窗）
+
+| # | 现象 | 根因 | 改动 | 证据 |
+| --- | --- | --- | --- | --- |
+| 1 | 从推荐页进入详情后切后台或锁屏，视频**不暂停**（继续出声） | 早前为修"展开小窗瞬间被暂停"，把 `PipController.isHandedOver` 放宽成"小窗会话 **或** `PlaybackHandoff` 持有"。而信息流交给详情页的那台播放器**永远**留在 `PlaybackHandoff` 里（那个标记是防误 release 用的），于是详情页的生命周期暂停判据永远为 false —— 谁都不去暂停它。同一个放宽还顺带让"从信息流进详情的那台播放器返回时不被释放"（泄漏） | 把两种归属**拆开**：①`PipController.isHandedOver` 收窄回"**只算小窗会话**"（暂停/释放判据用它）；②新增 `PipController.isReturningToDetail` + `PlaybackHandoff.isHeldForHandBack`，只覆盖"展开小窗刚交回详情页那一瞬间"（防那次 `ON_STOP` 误暂停）。`PauseWhenNotStarted` 的 `ON_STOP` 用两者取或，`onDispose` 只用前者 | 实机 A 组（推荐页 → 详情，无小窗）：进详情 `started=1` → 锁屏 `started=0 paused=1` → 解锁 `started=1`（沿用既有习惯：回前台续播）→ HOME `started=0 paused=1`。实机 B 组（小窗）：小窗在播 `started=1` → 锁屏 `started=0 paused=1`（`pauseForScreenOff playing=true`，会话保留）→ 解锁保持暂停 → 展开回详情 `started=1`、`route=detail/2010` 未导航 |
+
+
 
 | # | 现象 | 根因 | 改动 | 证据 |
 | --- | --- | --- | --- | --- |
