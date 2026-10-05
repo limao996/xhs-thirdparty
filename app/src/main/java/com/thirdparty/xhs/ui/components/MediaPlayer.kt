@@ -65,8 +65,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.height
@@ -98,7 +97,14 @@ fun MediaPlayer(
     /** start with the control bar hidden; a tap reveals it */
     controlsHiddenInitially: Boolean = false,
     /** shown in the fullscreen top bar */
-    title: String = ""
+    title: String = "",
+    /**
+     * 「小窗播放」（画中画）入口；为 null 时不显示这一项。
+     *
+     * 入口放在**播放器自己的菜单**里（菜单本身就是对话框），因为它是"对当前这段视频"的操作，
+     * 不属于页面级动作；页面右上角那个「更多」曾经放过它，用户要求挪到这里。
+     */
+    onEnterPip: (() -> Unit)? = null
 ) {
     val context = LocalContext.current.applicationContext
     val ownsPlayer = externalPlayer == null
@@ -231,7 +237,8 @@ fun MediaPlayer(
         )
         AutoHideController(
             player, fullscreen, onToggleFullscreen, controlsHiddenInitially, title,
-            topClearance = cutoutTop
+            topClearance = cutoutTop,
+            onEnterPip = onEnterPip
         )
         // Buffering feedback — but never together with the error panel: the
         // player keeps retrying in BUFFERING while the panel is up, so both
@@ -302,7 +309,9 @@ private fun AutoHideController(
     startHidden: Boolean = false,
     title: String = "",
     /** status-bar height remembered while the bars were visible; see MediaPlayer */
-    topClearance: androidx.compose.ui.unit.Dp = 0.dp
+    topClearance: androidx.compose.ui.unit.Dp = 0.dp,
+    /** 「小窗播放」入口；为 null 时菜单里没有这一项 */
+    onEnterPip: (() -> Unit)? = null
 ) {
     var visible by remember(player) { mutableStateOf(!startHidden) }
     // Seeded FROM the player, not from zero/false.
@@ -545,27 +554,52 @@ private fun AutoHideController(
                     IconButton(onClick = { menuOpen = true; interaction++ }) {
                         Icon(Icons.Filled.MoreVert, "更多", tint = Scrim.onMedia)
                     }
-                    DropdownMenu(
-                        expanded = menuOpen,
-                        onDismissRequest = { menuOpen = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text(if (fineStep) "微调：±1 秒" else "微调：±5 秒") },
-                            onClick = { fineStep = !fineStep; menuOpen = false; interaction++ }
+                    // 菜单用**对话框**而不是 DropdownMenu：下拉面板没有半透明遮罩、也没有
+                    // 入场动画，铺在全屏视频上时还容易被边缘裁掉（用户明确要求）
+                    if (menuOpen) {
+                        AlertDialog(
+                            onDismissRequest = { menuOpen = false },
+                            title = {
+                                Text(
+                                    title.ifBlank { "播放设置" },
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            },
+                            text = {
+                                Column {
+                                    PlayerMenuRow(
+                                        label = if (fineStep) "微调：±1 秒 ✓" else "微调：±1 秒"
+                                    ) {
+                                        fineStep = !fineStep
+                                        menuOpen = false
+                                        interaction++
+                                    }
+                                    HorizontalDivider()
+                                    SPEEDS.forEachIndexed { i, s ->
+                                        PlayerMenuRow(
+                                            label = if (i == speedIdx) "$s x  ✓" else "$s x",
+                                            highlighted = i == speedIdx
+                                        ) {
+                                            speedIdx = i
+                                            menuOpen = false
+                                            interaction++
+                                        }
+                                    }
+                                    if (onEnterPip != null) {
+                                        HorizontalDivider()
+                                        PlayerMenuRow(label = "小窗播放") {
+                                            menuOpen = false
+                                            interaction++
+                                            onEnterPip()
+                                        }
+                                    }
+                                }
+                            },
+                            confirmButton = {
+                                TextButton(onClick = { menuOpen = false }) { Text("关闭") }
+                            }
                         )
-                        HorizontalDivider()
-                        SPEEDS.forEachIndexed { i, s ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        if (i == speedIdx) "$s x  ✓" else "$s x",
-                                        color = if (i == speedIdx) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurface
-                                    )
-                                },
-                                onClick = { speedIdx = i; menuOpen = false; interaction++ }
-                            )
-                        }
                     }
                 }
             }
@@ -653,8 +687,23 @@ private fun AutoHideController(
     }
 }
 
-/** Playback speed steps offered by the speed button. */
-private val SPEEDS = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
+/** 播放器菜单对话框里的一行（样式与作品长按对话框保持一致）。 */
+@Composable
+private fun PlayerMenuRow(label: String, highlighted: Boolean = false, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable { onClick() }.padding(vertical = Spacing.m),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (highlighted) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+/** Playback speed steps offered by the speed button. */private val SPEEDS = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
 private const val DEFAULT_SPEED_IDX = 2
 
 private fun fmt(ms: Long): String {

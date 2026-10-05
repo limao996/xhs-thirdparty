@@ -346,9 +346,19 @@ private fun VideoPage(
         // info bar (bottom, toggled by single tap) — tapping it opens detail.
         // Lifted above the bottom navigation bar so it stays tappable.
         if (infoVisible) {
+            // 信息条 + 信息栏：**两段**，信息条在外（自己的背景、自己的留白），
+            // 不要塞进信息栏的背景里 —— 塞进去就变成"信息栏的一部分"了（用户要求放外面）。
             Column(
                 Modifier.align(Alignment.BottomStart).fillMaxWidth()
                     .padding(bottom = BottomNavHeight + navBarInset)
+            ) {
+                WatchLaterBar(
+                    onOpen = onOpenWatchLater,
+                    modifier = Modifier.padding(horizontal = Spacing.l)
+                )
+                Spacer(Modifier.height(Spacing.s))
+                Column(
+                Modifier.fillMaxWidth()
                     .background(Scrim.strong)
                     // Single tap opens the detail; a DOUBLE tap must still reach the
                     // player. This strip sits over the video, so a plain `clickable`
@@ -394,8 +404,6 @@ private fun VideoPage(
                     )
                     .padding(Spacing.l)
             ) {
-                // 稍后观看信息条：排在标题上面（队列为空时它自己不画东西）
-                WatchLaterBar(onOpen = onOpenWatchLater)
                 Text(
                     item.title.ifEmpty { "(无标题)" },
                     color = Scrim.onMedia,
@@ -409,6 +417,7 @@ private fun VideoPage(
                     color = Scrim.onMediaVariant,
                     style = MaterialTheme.typography.bodySmall
                 )
+            }
             }
             // fee tag at top-right — pushed below the translucent header so it
             // never collides with the search icon.

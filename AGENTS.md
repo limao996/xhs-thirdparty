@@ -22,6 +22,9 @@
 | 12 | 文档里**不要写"不破解付费 / 不绕过付费限制"这类与事实相反的声明** | 本 App 的机制就是自动化领取新游客 VIP 福利，描述必须与实现一致 |
 | 13 | 缓存清理**一项勾选只清一项**：`AppCaches.clear()` 按 `CacheKind` 分别调用，`XhsRepository.clearHttpCache()` 只清磁盘、不得顺手清内存位图缓存 | 之前清磁盘会连带清内存，确认框列的是 2 项、实际清了 3 项，与用户勾选不符 |
 | 14 | 启动自动检查更新**只在真有新版时弹窗**，其余（无正式版 / 限流 / 断网 / 已是最新）一律静默；「跳过这个版本」必须持久化到 `settings` | 每次启动都弹会骚扰用户；GitHub 匿名 API 只有 60 次/小时/IP，实测会 403 |
+| 15 | 自动检查更新**12 小时一次**（`settings.update_checked_at`），且只有**成功**的检查才写时间戳 | 每次冷启动都查既打扰用户、也会把匿名额度烧光（实测 403） |
+| 16 | 任何菜单 / 弹窗一律用**对话框**（`AlertDialog`，带遮罩与动画），不要用 `DropdownMenu`；队列排序用**长按拖动**，不加「上移 / 下移」按钮 | 下拉面板没有半透明遮罩、没有入场动画，铺在瀑布流卡片或全屏视频上还容易被边缘裁掉；队列顺序本来就是拖出来的 |
+| 17 | 画中画：播放器交给 `PipController` 后**详情页销毁不得 release**（`PipController.isHandedOver`）；「展开」用 `PlaybackHandoff.givePlayer` 交回详情页，「关闭」在 `MainActivity.onDestroy` 里 `closeAndRelease()`；入口在**播放器的菜单**（`MediaPlayer(onEnterPip=…)`）里，控制栏只放 播放/暂停 + 播放顺序（**不要**把稍后观看队列塞进小窗） | 缺交接登记 = 小窗黑屏（播放器被详情页销毁）；不销毁 = 关掉小窗后还有声音；PiP 最多显示 3 个自定义按钮，且队列属于主界面（见 `docs/ai/GOTCHAS.md` H 节） |
 
 ## 1. 项目一句话
 
@@ -43,13 +46,14 @@
 | `app/build.gradle` | 版本号、签名、`buildConfigField`、依赖矩阵 | 版本号规则见 `docs/BUILD.md` |
 | `app/src/main/AndroidManifest.xml` | 权限、Activity、深链 `xhstp://note` | 新增权限要在 `README.md` 的隐私/权限说明与 `docs/PROTOCOL.md` 里同步（清单里只声明 INTERNET / ACCESS_NETWORK_STATE / WAKE_LOCK；合并后的 APK 还会带 biometric 库的 USE_BIOMETRIC / USE_FINGERPRINT 与 androidx 的 DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION） |
 | `data/XhsRepository.kt` | **单一数据源**，所有网络读写都在这里 | 新接口先加在这里，不要在 UI 直接调 `XhsApi` |
-| `data/XhsDatabase.kt` | Room 数据库 `xhs_local.db`（v2） | 改 schema 必须 bump version；当前是 destructive migration |
+| `data/XhsDatabase.kt` | Room 数据库 `xhs_local.db`（v3：saved / history / followed / watch_later） | 改 schema 必须 bump version **并加真迁移**（v2→v3 的 `watch_later` 迁移就是范例：已发布版本上的收藏/浏览/关注只有本机一份，不能靠 destructive 兜底） |
 | `data/BackupManager.kt` | 备份/恢复内容与格式 | 改字段要同步 `docs/ai/CONTEXT.md` 的备份清单 |
 | `net/XhsApi.kt` | 请求封装、重试、会话自愈 | 重试次数/退避在这里（`NETWORK_ATTEMPTS` / `RETRY_BACKOFF_MS`） |
 | `net/XhsCrypto.kt` | AES/CBC 加解密 + CDN 图片 AES/ECB | 参数见 `docs/PROTOCOL.md`，不要"顺手"改 |
 | `net/WebDavClient.kt` | WebDAV 客户端 | 备份固定写 `xhs/` 子目录 |
 | `net/UpdateChecker.kt` | 检查更新（GitHub Releases，**全应用唯一不经 AES 的请求**） | 必须用**独立的 OkHttpClient**（共用的带 64 MB 磁盘缓存会把应答缓存住），且必须带 `User-Agent`（否则 GitHub 403）；见 `docs/ai/GOTCHAS.md` G1。启动时由 `App.checkUpdateOnLaunch()` 自动查一次，仅 `Newer` 且不等于「已跳过版本」时才写 `App.pendingUpdate` → `MainActivity` 弹 `ui/components/UpdateAvailableDialog.kt`；GitHub 匿名 API 上限 60 次/小时/IP，超了是 403（映射成 `Failed`，UI 如实显示"检查失败：GitHub 限流"） |
 | `data/AppCaches.kt` | 可清理缓存的枚举、逐项体积与清理（含顶层 `formatBytes`） | 每种缓存**各自一个 `CacheKind`、各自一个勾选框**，清理必须一一对应（硬约束 13）；`IMAGE_DISK` 走 `XhsRepository.clearHttpCache()`，`IMAGE_MEMORY` 走 `ui/components/XhsAsyncImage.kt` 的 `clearImageMemoryCache()`；`TEMP_FILES` 只含 `cache/` 下除 `http_cache/` 与 SQLite 锁文件 `xhs_local.db.lck` 之外的文件（`isClearableTemp`） |
+| `ui/components/PipController.kt` + `ui/components/WatchLaterFab.kt` / `WatchLaterBar.kt` + `ui/screens/WatchLaterScreen.kt` | 画中画小窗的持有者（会话 / 控制栏 `RemoteAction` / 展开与关闭）与稍后观看队列的三种入口 | 画中画的播放器所有权见硬约束 17 与 `docs/ai/GOTCHAS.md` H 节；队列页的顺序只能靠**长按拖动**改（硬约束 16） |
 | `navigation/AppNavHost.kt` + `Routes.kt` | 唯一路由注册处 | 新页面必须同时登记 `Routes` 常量与 `HomeTab`（如属底部页） |
 | `ui/screens/*.kt` | 页面级组合函数 | 每个 screen 对应一个 `ui/viewmodel/`；子 tab 内容要包 `rememberSaveableStateHolder()`，列表滚动状态要按 `resetKey` 分组（`key(resetKey) { … }`），身份位同名却是新列表时必须单调递增（GOTCHAS C2/C8） |
 | `ui/components/*.kt` | 可复用组件（瀑布流/播放器/画廊/对话框/水印状态…） | 组件不要直接访问 Room |
@@ -87,7 +91,7 @@ adb shell am start -n com.thirdparty.xhs.debug/com.thirdparty.xhs.MainActivity
 4. **编译**：编辑落盘后再启动构建（顺序反了会测到旧代码）。
 5. **验证**：`docs/VERIFY.md` 的最小回路；UI 改动给截图或 `DumpUi` 文本。
 6. **同步档案**：动了结构/约束/坑，就更新 `AGENTS.md` 与 `docs/ai/GOTCHAS.md`。
-7. **提交**：中文提交信息 + 前缀；一次提交一个关注点。
+7. **提交**：中文提交信息 + 前缀；一次提交一个关注点。**默认只做本地提交 —— 用户明确说"推上去"才 `git push`。**
 
 ## 5. 汇报格式（用户要求的）
 

@@ -253,3 +253,53 @@
 - 正确做法：临时验证版本要发成正式 release（`prerelease=false`、`draft=false`），验证完立刻
   `gh release delete <tag> --yes --cleanup-tag`，并清掉设备上 `shared_prefs/settings.xml` 里的
   `ignored_update_version`（否则那台设备永远不会再弹这个版本号）。
+
+## H. 稍后观看、长按菜单与画中画
+
+**H1 · 作品长按菜单用对话框，不用 `DropdownMenu`**
+- 触发：给瀑布流卡片加长按菜单。
+- 正确做法：`ui/components/NoteActionDialog.kt`（`AlertDialog`：标题是作品名，正文是动作行）。
+  下拉面板以卡片为锚点，而瀑布流卡片只有半屏宽、菜单会被边缘裁掉；推荐页更是整屏视频，压根没有锚点。
+- 这是用户明确提过的要求（阶段十反馈），见硬约束 16。
+
+**H2 · 队列拖动排序：手势要和 `clickable` 挂在同一个节点，且 `cancel` 也要落库**
+- 触发：给队列行加 `detectDragGesturesAfterLongPress`。
+- 症状 1：长按拖动毫无反应 —— 手势挂在行外面那层 `Box` 上，行内 `clickable` 先把事件吃掉了。
+- 症状 2：拖完顺序又弹回去 —— 注入事件流被打断时走的是 `onDragCancel`，而 cancel 分支只清了 preview。
+- 正确做法：`Modifier.clickable { … }.then(dragModifier)`（同一节点，拖动声明在后）；
+  `onDragCancel` 与 `onDragEnd` 一样把 preview 顺序写回库（实测 `adb shell input draganddrop` 走 cancel）。
+
+**H3 · 画中画：播放器所有权只有一份，交接必须登记**
+- 触发：详情页把 `ExoPlayer` 交给 PiP 小窗（`PipController.start`）后退出详情页。
+- 症状：小窗里黑屏（播放器被详情页的 `onDispose` release 了）；或者关掉小窗之后声音还在放。
+- 正确做法：`PipController.isHandedOver(player)` 为真时详情页不得 release；
+  「展开」= `onPictureInPictureModeChanged(false)` → `pendingDetailId` → `PlaybackHandoff.givePlayer` → 回详情页；
+  「关闭」= Activity 销毁 → `MainActivity.onDestroy` 里 `PipController.closeAndRelease()`（见硬约束 17）。
+
+**H4 · 画中画控制栏最多 3 个自定义按钮，而且不要往里面塞队列**
+- 触发：需求写「播放/暂停、播放顺序、稍后观看队列、全屏」四个。
+- 现实：`PictureInPictureParams.setActions` 在手机上只显示 3 个；三个按钮挤在一行也不好按，
+  而队列是主界面的东西（小窗里点它还得把 Activity 拉起来）。
+- 做法（用户确认过的最终形态）：只放两个 —— 播放/暂停、播放顺序（顺序 ⇄ 单集循环），
+  「全屏」交给系统自带的展开按钮；入口在**播放器自己的菜单**里（`MediaPlayer(onEnterPip = …)`，
+  那个菜单本身是 `AlertDialog`），不要在页面顶栏再放一个「更多」。
+  图标必须是资源或 Bitmap，所以有 `res/drawable/ic_pip_play|pause|repeat.xml`。
+
+**H5 · 自动化验证的系统边界（本次踩到的两条）**
+- 画中画窗口的「关闭 / 展开」是系统覆盖层，**不吃 `adb shell input tap`**（注入触摸被忽略）。
+  验证「展开」改用 `am start --activity-reorder-to-front`（等于把任务拉到前台），
+  「关闭」只能做代码路径确认，如实写进 `docs/CHANGELOG.md`。
+- 全屏页面（图文查看器、视频真全屏）上 `uiautomator dump` 经常返回空串
+  （`Failed to write while dumping service user: Broken pipe`）。此时改用截图 + 查库取证；
+  要确保打开的是**图文**作品，先
+  `run-as <pkg> sqlite3 databases/xhs_local.db "select noteId from history where noteType=1"`
+  拿 id，再 `am start -a android.intent.action.VIEW -d "xhstp://note/<id>"` 直接打开。
+
+**H6 · 动画"不生效"先查 `animator_duration_scale`**
+- 触发：给双击缩放接了 `animateFloatAsState` + `tween(240ms)`，实机上却像瞬变。
+- 症状：在渲染值上挂探针，`logcat` 只得到 `1.0` 与 `2.5` 两个值（没有任何中间值）。
+- 原因：模拟器/开发者选项把 **动画时长比例设成了 0**（`settings get global animator_duration_scale`
+  → `0`），Compose 的动画会遵守这个比例，于是瞬间完成。代码本身没问题。
+- 正确做法：`settings put global animator_duration_scale 1` 再测；要抓中间帧而截图太慢
+  （`screencap` 单次接近秒级）时，把动画时长临时调到 10s 以上、在渲染值上挂一行 `Log.d`
+  数中间值，取证完**必须移除探针并把时长还原**（同时把 `animator_duration_scale` 改回去）。

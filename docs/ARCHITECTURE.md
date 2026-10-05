@@ -58,14 +58,17 @@ app/src/main/java/com/thirdparty/xhs/
 ├── ui/
 │   ├── screens/                  Home / DiscoverTab / Detail / VideoFeed / Search /
 │   │                             Author / Followed / UserList / LocalList / Profile /
-│   │                             Backup / Settings / About / Update / Cache
+│   │                             Backup / Settings / About / Update / Cache / WatchLater
 │   ├── components/               XhsWaterfall（真实比例瀑布流）/ VideoPlayer / VideoSurface /
 │   │                             ImageGallery / FullscreenImageViewer / BufferedSlider /
 │   │                             CommentRepliesDialog / ConfirmActionDialog / EmptyState /
-│   │                             UpdateAvailableDialog / FeeBadge / FollowedAuthorRow / PlaybackHandoff /
+│   │                             UpdateAvailableDialog / NoteActionDialog（长按菜单）/ FeeBadge /
+│   │                             FollowedAuthorRow / PlaybackHandoff / PipController（画中画）/
+│   │                             WatchLaterFab / WatchLaterBar /
 │   │                             BiometricLock / XhsAsyncImage / MediaPlayer / ResetZoomButton
 │   ├── viewmodel/                Home / Discover / Detail / VideoFeed / Search / Author /
-│   │                             Followed / UserList / LocalList / Profile / Guest / PagingGuard / Update / Cache
+│   │                             Followed / UserList / LocalList / Profile / Guest /
+│   │                             PagingGuard / Update / Cache / WatchLater
 │   └── theme/                    Theme.kt（M3 Expressive）+ Tokens.kt（设计令牌）
 └── res/                          仅图标与基础资源（values/values-night/自适应图标/背景色）
 ```
@@ -127,16 +130,20 @@ app/src/main/java/com/thirdparty/xhs/
 
 ## 4. 持久化
 
-Room 数据库 `xhs_local.db`，`@Database(version = 2)`，实体三张：
+Room 数据库 `xhs_local.db`，`@Database(version = 3)`，实体四张：
 
 | 实体 | 表用途 | 相关 DAO |
 | --- | --- | --- |
 | `SavedNoteEntity` | 收藏 | `XhsDao`（`savedDao()`） |
 | `HistoryEntity` | 最近浏览（不记录未观看的视频） | `XhsDao`（`historyDao()`） |
 | `FollowedEntity` | 我关注的作者 | `FollowDao`（`followDao()`） |
+| `WatchLaterEntity` | 稍后观看队列（`position` 从 0 起，顺序就是队列顺序） | `XhsDao`（`watchLaterDao()`） |
 
-- 当前使用 `fallbackToDestructiveMigration()`：**改 schema 必须升级 version，升级后本地数据会被清空**。
-  因此"必须保留"的数据依靠备份（`BackupManager`）而不是默认迁移。
+- **迁移**：`2 → 3` 是**真迁移**（`MIGRATION_2_3` 只 `CREATE TABLE watch_later`）。已发布版本上的
+  收藏 / 最近浏览 / 关注只有本机一份，靠 `fallbackToDestructiveMigration()` 兜底等于升级时删用户数据；
+  destructive 只留给其它跨版本跳变（例如 `1 → 3`，本地缓存可以重新拉）。
+- 队列顺序只由 `position` 表达：拖动结束整段重写（`setWatchLaterOrder`），增删之后 `renumberWatchLater()`
+  压紧，不留空洞 —— 队列只有几十条，比维护链表/浮点 position 简单且不会积累误差。
 - 备份内容：收藏、最近浏览、关注、设置项、搜索记录、WebDAV 配置（**含 URL、用户名与密码**，JSON 明文；备份文件本身要放好）。**不包含账号凭据**（identity / token / user_hash / VIP 窗口都不导出）。
 - 备份落点：本地文件（用户选择）或 WebDAV 的 `xhs/` 子目录（固定，便于恢复时定位）。
 
@@ -144,8 +151,11 @@ Room 数据库 `xhs_local.db`，`@Database(version = 2)`，实体三张：
 
 - `Routes.kt` 是唯一路由常量表：`home`、`detail/{noteId}`、`search`、`profile`、`author/{userId}`、
   `saved`、`history`、`followed`、`following`（关注，走 `member/follow-list`）、`fans`（粉丝，走 `member/fun-list`）、
-  `backup`、`settings`、`cache`（清除缓存）、`about`（关于）、`update`（检查更新）；辅助构造函数 `detail(noteId)` / `author(userId)`。
+  `backup`、`settings`、`cache`（清除缓存）、`about`（关于）、`update`（检查更新）、`watch_later`（稍后观看队列）；
+  辅助构造函数 `detail(noteId)` / `author(userId)`。
   关于与检查更新是**两个独立页面**，入口都在「我的 → 其他」；设置页只放偏好项与数据相关入口（备份与恢复、清除缓存）。
+  稍后观看队列没有独立入口图标：队列非空且不在画中画小窗时，推荐页在视频信息栏上方显示一条信息条，
+  其余带瀑布流的页面（发现 / 我的 / 搜索 / 作者页 / 收藏 / 最近浏览 / 详情页）用浮动按钮（`WatchLaterFab`）。
 - 底部三 tab 由 `HomeTab` 枚举定义：`FEED("tab/feed","推荐")`、`DISCOVER("tab/discover","发现")`、
   `PROFILE("tab/profile","我的")`。
 - 深链 `xhstp://note/<id>`（`DeepLink.kt` + Manifest 的 `VIEW/DEFAULT/BROWSABLE` 过滤器）→ 直接进入详情。
@@ -195,7 +205,7 @@ Room 数据库 `xhs_local.db`，`@Database(version = 2)`，实体三张：
 | material3 钉在 alpha | M3 Expressive 只在 alpha 线公开；稳定优先于"用最新"（已逐版本验证） |
 | 自签名 keystore 入库 | 让任何人都能构建可覆盖安装的 release 包（学习与自用优先）；因此**不能**用于上架 |
 | `versionCode` 用时间戳 | 手工维护版本号在本项目反复出错；时间戳单调递增且落在 32 位内（自 2026-10-01 起的秒数） |
-| destructive migration | 本地数据都可重建（缓存/收藏都能从服务端或备份恢复），写迁移脚本的复杂度不值得 |
+| schema 变更加**真迁移**（`MIGRATION_2_3`），destructive 只做兜底 | 已发布版本上的收藏 / 最近浏览 / 关注只有本机一份，升级时清库等于删用户数据；本次只是加一张表，迁移成本极低 |
 | 播放实例交接而非重建 | 推荐页 → 详情页切换时保留播放位置与缓冲，避免黑屏与断点丢失；代价是释放责任必须显式管理（见 GOTCHAS D3） |
 | 账号续期用"请求前门控"而非定时轮询 | 曾经的 5 秒轮询会在后台空转、也会把用户刚手动选的账号顶掉；挂在 `XhsApi.call()` 的一个 choke point 上后，只在"真的要用账号"时判断，缓存命中时是纯本地读（0 次请求） |
 | `org.json` 而非 gson/kotlinx-serialization | 包体形态简单且已在加密层处理字节；少一个反射依赖 |
@@ -203,6 +213,11 @@ Room 数据库 `xhs_local.db`，`@Database(version = 2)`，实体三张：
 | 应用锁用 `biometric` + `fragment-ktx ≥ 1.8.9` | 低版本 fragment-ktx 会触发 requestCode 上限崩溃 |
 | 缓存按类型列出、可逐项勾选清理（`data/AppCaches.kt`） | 只有"清"一个按钮时用户不知道会清掉什么；按 `CacheKind` 拆成 磁盘图片 / 内存位图 / 其它临时文件 后，每项都能显示真实体积与代价。一项勾选只清一项 —— 清磁盘不再顺手清内存（见 GOTCHAS D8） |
 | 启动时后台自动检查更新，**仅在有新版时弹窗** | 用户要求"进入软件自动检查更新"；但限流 / 断网 / 没有正式版 / 已是最新都不该打扰用户，因此只在 `Newer` 且未被「跳过这个版本」时弹（见 GOTCHAS G4/G5）。失败后由 `App.bump()` 在网络恢复时补查一次 |
+| 自动检查更新**12 小时一次**（`settings.update_checked_at`） | 每次冷启动都查会打扰用户，也会把 GitHub 匿名额度（60 次/小时/IP）烧光；只有**成功**的检查才写时间戳，失败保持窗口打开 |
+| 所有菜单 / 弹窗用**对话框**而不是 `DropdownMenu` | 下拉面板没有半透明遮罩、没有入场动画，瀑布流卡片只有半屏宽会被裁掉，推荐页是整屏视频没有锚点；作品长按菜单（`NoteActionDialog`）与播放器菜单（`MediaPlayer` 内，含微调/倍速/小窗播放）都走 `AlertDialog`（用户明确要求，见 GOTCHAS H1） |
+| 图文全屏的双击缩放**动画化**，捏合/拖动不动画 | 双击是"跳到"另一个倍率，瞬变很硬；捏合与拖动必须逐帧跟手。所以 `scale`/`offset` 仍是手势的真理源，渲染值在 `tween(240ms)` 与 `snap()` 两套 spec 之间切换（双击与「恢复」按钮打开动画）。注意模拟器把 `animator_duration_scale` 设成 0 时动画会瞬间完成（GOTCHAS H6） |
+| 队列排序用**长按拖动**，不加"上移 / 下移"按钮 | 队列是"拖成我想要的顺序"，不是列表管理；手势与 `clickable` 必须同一节点，`cancel` 也要落库（GOTCHAS H2） |
+| 画中画用**系统原生 PiP**，播放器交接给小窗；入口在播放器菜单，控制栏只放 2 个按钮 | 不用 `SYSTEM_ALERT_WINDOW` 悬浮窗：原生 PiP 有系统级的窗口管理 / 关闭 / 展开，也不需要额外权限；代价是播放器所有权要在 `PipController` 与详情页之间显式交接（硬约束 17、GOTCHAS H3）。控制栏最多 3 个自定义按钮（H4），只放 播放/暂停 与 播放顺序，「全屏」用系统展开按钮；**稍后观看队列不放进小窗**（队列属于主界面） |
 
 ## 8. 不在范围内
 

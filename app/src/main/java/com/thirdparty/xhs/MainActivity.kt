@@ -132,10 +132,6 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         consumeDeepLink(intent)
-        // 小窗控制栏点了「稍后观看队列」：这个 intent 就是把应用从画中画里拉出来
-        if (intent.getBooleanExtra(EXTRA_OPEN_WATCH_LATER, false)) {
-            com.thirdparty.xhs.ui.components.PipController.pendingOpenQueue.value = true
-        }
     }
 
     // ---- 画中画（小窗） ----------------------------------------------------
@@ -147,20 +143,7 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
         super.onStart()
         pipReceiver = com.thirdparty.xhs.ui.components.PipController.registerReceiver(
             activity = this,
-            onUpdateParams = { refreshPipParams() },
-            onOpenQueue = {
-                // 队列在应用里，不在小窗里：用 intent 把 Activity 拉到前台，
-                // 由 onNewIntent 记下「要打开队列」
-                startActivity(
-                    android.content.Intent(this, MainActivity::class.java).apply {
-                        addFlags(
-                            android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                                android.content.Intent.FLAG_ACTIVITY_NEW_TASK
-                        )
-                        putExtra(EXTRA_OPEN_WATCH_LATER, true)
-                    }
-                )
-            }
+            onUpdateParams = { refreshPipParams() }
         )
     }
 
@@ -352,18 +335,6 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
                         com.thirdparty.xhs.ui.components.PipController.pendingDetailId.value = null
                         navController.navigate(com.thirdparty.xhs.navigation.Routes.detail(id))
                     }
-                    // 小窗控制栏的「稍后观看队列」：回到应用并打开队列页
-                    val pipOpenQueue by
-                        com.thirdparty.xhs.ui.components.PipController.pendingOpenQueue
-                            .collectAsStateWithLifecycle()
-                    androidx.compose.runtime.LaunchedEffect(pipOpenQueue) {
-                        if (!pipOpenQueue) return@LaunchedEffect
-                        com.thirdparty.xhs.ui.components.PipController.pendingOpenQueue.value =
-                            false
-                        navController.navigate(
-                            com.thirdparty.xhs.navigation.Routes.WATCH_LATER
-                        )
-                    }
                     // 小窗里只画视频：系统把整个 Activity 缩成小窗，其余 chrome 一律不要。
                     val pipSession by
                         com.thirdparty.xhs.ui.components.PipController.session
@@ -387,7 +358,5 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
     private companion object {
         /** last share link already offered, so the same clipboard does not re-prompt */
         const val KEY_LAST_CLIP = "last_clipboard_note"
-        /** 从画中画控制栏回来时要打开的页面：稍后观看队列 */
-        const val EXTRA_OPEN_WATCH_LATER = "open_watch_later"
     }
 }

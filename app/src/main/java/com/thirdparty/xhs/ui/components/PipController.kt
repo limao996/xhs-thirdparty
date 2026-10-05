@@ -42,9 +42,6 @@ object PipController {
     /** 展开小窗后要跳回的详情页（MainActivity 消费一次） */
     val pendingDetailId = MutableStateFlow<Long?>(null)
 
-    /** 展开小窗后要打开的页面：稍后观看队列 */
-    val pendingOpenQueue = MutableStateFlow(false)
-
     // ---- 生命周期 ----------------------------------------------------------
 
     /** 详情页按下「小窗播放」：把播放器交出去。 */
@@ -83,7 +80,6 @@ object PipController {
 
     const val ACTION_PLAY_PAUSE = "com.thirdparty.xhs.pip.PLAY_PAUSE"
     const val ACTION_REPEAT = "com.thirdparty.xhs.pip.REPEAT"
-    const val ACTION_QUEUE = "com.thirdparty.xhs.pip.QUEUE"
 
     /**
      * 小窗控制栏的三个按钮。
@@ -120,7 +116,6 @@ object PipController {
             R.drawable.ic_pip_repeat,
             if (looping) "单集循环" else "顺序播放"
         )
-        out += remoteAction(activity, ACTION_QUEUE, 3, R.drawable.ic_pip_queue, "稍后观看队列")
         return out
     }
 
@@ -153,8 +148,7 @@ object PipController {
      */
     fun registerReceiver(
         activity: Activity,
-        onUpdateParams: () -> Unit,
-        onOpenQueue: () -> Unit
+        onUpdateParams: () -> Unit
     ): BroadcastReceiver {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
@@ -166,7 +160,6 @@ object PipController {
                     } else {
                         Player.REPEAT_MODE_ONE
                     }
-                    ACTION_QUEUE -> onOpenQueue()
                 }
                 onUpdateParams()
             }
@@ -174,7 +167,6 @@ object PipController {
         val filter = IntentFilter().apply {
             addAction(ACTION_PLAY_PAUSE)
             addAction(ACTION_REPEAT)
-            addAction(ACTION_QUEUE)
         }
         // Android 13+ 要求显式声明是否导出；这是应用内广播
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

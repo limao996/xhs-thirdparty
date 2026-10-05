@@ -45,6 +45,11 @@ import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateOffsetAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -98,6 +103,19 @@ fun FullscreenImageViewer(
 
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
+    // 双击缩放要"平滑"（用户要求），但捏合与拖动必须逐帧跟手：所以渲染用的值在
+    // 「动画」与「立即」两套 spec 之间切换，只有双击和「恢复」按钮打开动画。
+    var smooth by remember { mutableStateOf(false) }
+    val zoomSpec = if (smooth) tween(ZOOM_ANIM_MS) else snap<Float>()
+    val panSpec = if (smooth) tween(ZOOM_ANIM_MS) else snap<Offset>()
+    val renderScale by animateFloatAsState(scale, animationSpec = zoomSpec, label = "zoom")
+    val renderOffset by animateOffsetAsState(offset, animationSpec = panSpec, label = "pan")
+    LaunchedEffect(smooth) {
+        if (smooth) {
+            delay(ZOOM_ANIM_MS.toLong() + 40)
+            smooth = false
+        }
+    }
     var viewSize by remember { mutableStateOf(IntSize.Zero) }
     // 双击放大/恢复：记住上一次「干净」的点击，两次够快、位置够近就算双击
     var lastTapAt by remember { mutableStateOf(0L) }
@@ -195,6 +213,9 @@ fun FullscreenImageViewer(
                                 (lastPos - lastTapPos).getDistance() < DOUBLE_TAP_SLOP_PX
                             if (doubled) {
                                 lastTapAt = 0L
+                                // 双击是"跳到"另一个倍率，动画化（捏合/拖动必须跟手，见下面的
+                                // smooth 开关：只有双击和「恢复」按钮会打开它）
+                                smooth = true
                                 if (scale > 1.01f) {
                                     scale = 1f
                                     offset = Offset.Zero
@@ -224,9 +245,9 @@ fun FullscreenImageViewer(
                     contentDescription = null,
                     contentScale = ContentScale.Fit,
                     modifier = Modifier.fillMaxSize().graphicsLayer(
-                        scaleX = if (active) scale else 1f,
-                        scaleY = if (active) scale else 1f,
-                        translationX = if (active) offset.x else 0f,
+                        scaleX = if (active) renderScale else 1f,
+                        scaleY = if (active) renderScale else 1f,
+                        translationX = if (active) renderOffset.x else 0f,
                         translationY = if (active) offset.y else 0f
                     )
                 )
@@ -242,7 +263,7 @@ fun FullscreenImageViewer(
                     .padding(bottom = Spacing.l),
                 contentAlignment = Alignment.Center
             ) {
-                ResetZoomButton(onClick = { scale = 1f; offset = Offset.Zero })
+                ResetZoomButton(onClick = { smooth = true; scale = 1f; offset = Offset.Zero })
             }
         }
 
@@ -295,7 +316,8 @@ private const val MAX_ZOOM = 5f
 
 /** 双击放大的倍率（再双击一次回到 1x）。 */
 private const val DOUBLE_TAP_ZOOM = 2.5f
-
+/** 双击缩放/「恢复」的动画时长（捏合与拖动不用动画，必须跟手）。 */
+private const val ZOOM_ANIM_MS = 240
 /** 识别双击用的窗口：单击最长时长、两次点击最大间隔、允许的位移。 */
 private const val TAP_MAX_MS = 260L
 private const val DOUBLE_TAP_MS = 300L

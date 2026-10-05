@@ -30,8 +30,6 @@ import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.ModeComment
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ListItem
@@ -150,9 +148,7 @@ fun DetailScreen(
     // 这个 composable。
     var confirmUnsave by remember { mutableStateOf(false) }
     var confirmUnfollow by remember { mutableStateOf(false) }
-    /** 「更多」菜单（小窗播放住在这里） */
-    var moreOpen by remember { mutableStateOf(false) }
-    /** 画中画要 API 26+；低版本不显示这个菜单项 */
+    /** 画中画要 API 26+；低版本就不给播放器菜单加「小窗播放」这一项 */
     val pipSupported = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O
 
     // ---- media plumbing, hoisted OUT of the metadata branch -------------------
@@ -405,33 +401,8 @@ fun DetailScreen(
                                 "全屏"
                             )
                         }
-                        // 小窗播放住在「更多」菜单里：它只有视频可用，摆成第四个图标太挤，
-                        // 而且它不是高频操作（用户明确要求放在菜单里）。
-                        if (videoNote && pipSupported) {
-                            Box {
-                                IconButton(onClick = { moreOpen = true }) {
-                                    Icon(Icons.Filled.MoreVert, contentDescription = "更多")
-                                }
-                                androidx.compose.material3.DropdownMenu(
-                                    expanded = moreOpen,
-                                    onDismissRequest = { moreOpen = false }
-                                ) {
-                                    androidx.compose.material3.DropdownMenuItem(
-                                        text = { Text("小窗播放") },
-                                        leadingIcon = {
-                                            Icon(
-                                                Icons.Filled.PictureInPictureAlt,
-                                                contentDescription = null
-                                            )
-                                        },
-                                        onClick = {
-                                            moreOpen = false
-                                            enterPip()
-                                        }
-                                    )
-                                }
-                            }
-                        }
+                        // 「小窗播放」不在这里：它是对当前视频的操作，入口在播放器自己的菜单里
+                        // （MediaPlayer 的「更多」→ 对话框，见 onEnterPip）
                     }
                 )
             }
@@ -469,6 +440,7 @@ fun DetailScreen(
                     pad = pad,
                     isVideo = isVideoNote,
                     onEnterFullscreen = { fullscreen = true },
+                    onEnterPip = if (isVideoNote && pipSupported) enterPip else null,
                     openImage = openImage,
                     imagePage = imagePage,
                     onImagePage = { imagePage = it },
@@ -540,6 +512,8 @@ private fun DetailContent(
     imagePage: Int,
     onImagePage: (Int) -> Unit,
     onEnterFullscreen: () -> Unit = {},
+    /** 「小窗播放」（画中画）入口，交给播放器菜单；为 null 表示不支持/不显示 */
+    onEnterPip: (() -> Unit)? = null,
     sharedPlayer: androidx.media3.exoplayer.ExoPlayer? = null,
     /** width/height of the video, or 0 while it is not known yet */
     videoAspect: Float = 0f,
@@ -625,6 +599,8 @@ private fun DetailContent(
                     onAspect = onAspect,
                     // windowed playback starts with the bar hidden; a tap reveals it
                     controlsHiddenInitially = true,
+                    // 「小窗播放」住在播放器自己的菜单里（低版本没有画中画，传 null 就不显示）
+                    onEnterPip = onEnterPip,
                     modifier = when {
                         fullscreen -> Modifier.fillMaxSize()
                         // aspectRatio(0) throws, and 0 means "not known yet"
