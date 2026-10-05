@@ -123,7 +123,10 @@ fun FullscreenImageViewer(
     var lastTapPos by remember { mutableStateOf(Offset.Zero) }
     // zoom is per-page: carrying it across a swipe would leave the next image
     // mysteriously cropped
+    var segmentSeen by remember { mutableStateOf(-1) }
     LaunchedEffect(pagerState.currentPage) {
+        if (segmentSeen != -1 && segmentSeen != pagerState.currentPage) haptics.segment()
+        segmentSeen = pagerState.currentPage
         scale = 1f
         offset = Offset.Zero
     }

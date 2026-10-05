@@ -258,20 +258,9 @@ fun HomeScreen(
                 }
             }
 
-            // 稍后观看入口：**我的**这类普通标签页用浮动按钮；推荐页不用浮动按钮，改成视频
-            // 信息栏上方的一条信息条；发现页的右下角归 DiscoverTabScreen 自己管（那里要和
-            // 刷新按钮叠在一起，见 CornerFabStack）。
-            AnimatedVisibility(
-                visible = !immersive && tab != HomeTab.DISCOVER,
-                enter = fadeIn(),
-                exit = fadeOut(),
-                modifier = Modifier.align(Alignment.BottomEnd)
-            ) {
-                WatchLaterFab(
-                    onOpen = onOpenWatchLater,
-                    modifier = Modifier.padding(end = Spacing.l, bottom = bottomNavClearance())
-                )
-            }
+            // 「我的」页不放入口：那里是账号与本地数据的入口清单，浮一个队列按钮只会碍事
+            // （用户明确要求）。队列入口的归属现在是：推荐页 = 视频信息栏上方的信息条，
+            // 发现页 = 右下角与刷新按钮同排的那一个（见 DiscoverTabScreen 的 CornerFabStack）。
 
             // bottom nav — translucent scrim over the video on the 推荐 tab.
             // Hidden together with the header when the feed's chrome is retired:

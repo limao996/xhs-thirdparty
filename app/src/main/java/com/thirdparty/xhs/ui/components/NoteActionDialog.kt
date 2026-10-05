@@ -78,7 +78,7 @@ fun NoteActionDialog(
                 }
                 if (onEnterSelection != null) {
                     ActionRow(icon = Icons.Filled.Checklist, label = "多选") {
-                        haptics.longPress()
+                        haptics.tick()
                         onDismiss()
                         onEnterSelection()
                     }

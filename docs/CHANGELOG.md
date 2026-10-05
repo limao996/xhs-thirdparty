@@ -442,6 +442,23 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 > 所以第 3 项验证到"actions 已注册 + 接收者代码路径"为止；此前一版构建里曾观测到按钮点击
 > 触发参数刷新（`onTaskInfoChanged`），链路本身是通的。
 
+### 阶段十三 · 小窗播放状态、队列项观感、粉丝圈长按、触感补齐（同日第四轮反馈）
+
+| # | 反馈 | 改动 | 证据 |
+| --- | --- | --- | --- |
+| 1 | 小窗没继承播放状态；播完按钮不更新、点了也不重播 | `PipController.start(..., playIntent)`：交出去那一刻"在播/暂停"显式接着；控制栏图标改为按**真实状态**三选一（`STATE_ENDED` → 重播、`playWhenReady` → 暂停、其余 → 播放）；接收者里播完再点走 `seekTo(0) + play()`；挂 `Player.Listener` 在播放状态变化时刷新按钮 | `dumpsys audio`：小窗会话期间本应用 `AudioTrack(USAGE_MEDIA/CONTENT_TYPE_MOVIE)` 有 `event:started`（在播）；图标/重播属代码路径 + 上面这条状态来源 |
+| 2 | 队列项作者名前的序号去掉 | `QueueRow` 去掉 `"$position. "`，作者名只留 `@昵称`（序号不再显示，顺序由拖动本身表达） | `DumpUi`：`… \| VIP \| @老司机 \| 调教 \| 免费 \| @欲临君 \| …`；断言 `\d+\. @` 为 **False** |
+| 3 | 播放器菜单对话框列表要能滚动 | `MediaPlayer` 菜单正文包 `verticalScroll` + `heightIn(max = 360.dp)`，倍速/微调/小窗播放共 8 行在小屏上也能滚 | 截图 `v3-3-player-menu.png`；`DumpUi`：`微调：±1 秒 \| 0.5 x … 2.0 x \| 小窗播放 \| 关闭` |
+| 4 | 粉丝圈的作品也要长按菜单 | `FanGroupNoteCard` 由 `Surface(onClick)` 改为 `combinedClickable`，`FanGroupTab` 里接 `rememberNoteFlags/rememberNoteActions` 并渲染 `NoteActionDialog` | 长按作品缩略图：`想看我露出吗 深田咏美【娱乐篇】 \| 收藏 \| 稍后观看 \| 关闭` |
+| 5 | 触感很多该用的没用、有的不合理 | `Haptics.tick()` 从 `TextHandleMove`（文本光标用的）改成 **`ContextClick`**，新增 `segment()`（`SegmentTick`，滑视频/翻图片）；补上：详情页 分享/收藏/全屏、推荐页换视频、图片查看器翻页、我的页每个入口、作品对话框动作、队列行点击、清空队列 | `dumpsys vibrator_manager`：紧随点击出现 `opPkg=com.thirdparty.xhs.debug … -> TICK`（长时间对比前后两次采样） |
+| 6 | 我的界面不要稍后观看浮动按钮 | 外壳（`HomeScreen`）不再渲染稍后观看 FAB；入口归属：推荐页 = 信息条、发现页 = `CornerFabStack`，我的页 = 无 | `DumpUi`（我的页）：整页无 `稍后观看` 文本 |
+| 7 | 队列拖动松手后会闪 | 落库后先按**刚写回的顺序**渲染（`committed` 本地顺序），等 Room 读回的顺序对上再撤掉；否则会先按旧顺序画一帧、再跳成新顺序 | 代码路径 + 说明；顺序正确性在阶段十一已实测（1 → 4 格） |
+| 8 | 队列项要有作品标签 | `QueueRow` 用与瀑布流同一个 `FeeBadge(item, compact = true)`：图文 / 粉丝圈 / VIP / 免费 | `DumpUi`：`骚妈妈 \| 免费 \| @玉凤妈妈`、`抖音风 抖音18+ (125) \| VIP \| @老司机` |
+
+> 顺带修掉一个**验证工具**的坑：`tools/verify.ps1` 的 `DumpUi` 过去是
+> `uiautomator dump …; cat d.xml`，dump 偶发失败（`Broken pipe`）时 `cat` 会读回**上一次的旧文件**，
+> 于是"界面明明变了、dump 一直返回同一份内容"。现在先 `rm -f` 再 dump（详见 GOTCHAS I1）。
+
 ---
 
 ## 统计

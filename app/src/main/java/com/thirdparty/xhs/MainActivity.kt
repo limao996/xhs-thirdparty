@@ -346,6 +346,14 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
                     val pipSession by
                         com.thirdparty.xhs.ui.components.PipController.session
                             .collectAsStateWithLifecycle()
+                    // 播放状态变了（播放/暂停/播完）就重设一次窗口参数：
+                    // 小窗按钮的图标必须跟着真实状态走，播完要变成「重播」
+                    val pipParamsVersion by
+                        com.thirdparty.xhs.ui.components.PipController.paramsVersion
+                            .collectAsStateWithLifecycle()
+                    androidx.compose.runtime.LaunchedEffect(pipParamsVersion) {
+                        refreshPipParams()
+                    }
                     val pipActive by
                         com.thirdparty.xhs.ui.components.PipController.inPip
                             .collectAsStateWithLifecycle()

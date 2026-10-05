@@ -197,7 +197,11 @@ fun DetailScreen(
         if (p != null && act != null && pipSupported) {
             haptics.tick()
             com.thirdparty.xhs.ui.components.PipController.start(
-                p, noteId, state.item?.title.orEmpty()
+                p,
+                noteId,
+                state.item?.title.orEmpty(),
+                // 交出去那一刻的播放意图：小窗要接着这个状态，而不是自己停在暂停
+                playIntent = runCatching { p.playWhenReady }.getOrDefault(false)
             )
             val params = com.thirdparty.xhs.ui.components.PipController.buildParams(act, p)
             if (params != null) {
@@ -360,12 +364,21 @@ fun DetailScreen(
                         }
                     },
                     actions = {
-                        IconButton(onClick = { shareNote(context, state.item) }) {
+                        IconButton(onClick = {
+                            haptics.tick()
+                            shareNote(context, state.item)
+                        }) {
                             Icon(Icons.Filled.Share, contentDescription = "分享")
                         }
                         IconButton(onClick = {
                             // only the removal asks first; 收藏 stays one tap
-                            if (state.saved) confirmUnsave = true else viewModel.toggleSave()
+                            if (state.saved) {
+                                haptics.reject()
+                                confirmUnsave = true
+                            } else {
+                                haptics.confirm()
+                                viewModel.toggleSave()
+                            }
                         }) {
                             Icon(
                                 if (state.saved) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
@@ -388,6 +401,7 @@ fun DetailScreen(
                         // viewer on a video for those first seconds.
                         val videoNote = isVideoNote
                         IconButton(onClick = {
+                            haptics.tick()
                             // `fullscreen` hides the app bar and the system bars; the
                             // image branch used to set only `openImage`, so the viewer
                             // came up with 内容详情 still sitting above it — not

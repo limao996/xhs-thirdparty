@@ -3,6 +3,8 @@
 package com.thirdparty.xhs.ui.screens
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -395,6 +397,21 @@ private fun FanGroupTab(
     resetKey: Int = 0
 ) {
     val clear = com.thirdparty.xhs.ui.theme.bottomNavClearance()
+    // 粉丝圈里的作品长按出菜单（与瀑布流那套一致：收藏 / 稍后观看）
+    var menuFor by remember { mutableStateOf<com.thirdparty.xhs.data.NoteItem?>(null) }
+    val haptics = com.thirdparty.xhs.ui.components.rememberHaptics()
+    val noteFlags = com.thirdparty.xhs.ui.components.rememberNoteFlags()
+    val noteActions = com.thirdparty.xhs.ui.components.rememberNoteActions()
+    menuFor?.let { note ->
+        com.thirdparty.xhs.ui.components.NoteActionDialog(
+            title = note.title,
+            saved = note.noteId in noteFlags.savedIds,
+            inWatchLater = note.noteId in noteFlags.watchLaterIds,
+            onToggleSave = { noteActions.toggleSave(note) },
+            onToggleWatchLater = { noteActions.toggleWatchLater(note) },
+            onDismiss = { menuFor = null }
+        )
+    }
     if (loading && recommended.isEmpty()) {
         // same clearance rule as the feed branch: centre in the space the floating
         // NavigationBar leaves, not in the whole screen
@@ -504,6 +521,11 @@ private fun FanGroupTab(
                             FanGroupNoteCard(
                                 item = n,
                                 onClick = { onOpenDetail(n.noteId) },
+                                // 粉丝圈里的作品也要能长按出菜单（收藏 / 稍后观看）
+                                onLongClick = {
+                                    haptics.longPress()
+                                    menuFor = n
+                                },
                                 modifier = Modifier.weight(1f)
                             )
                         }
@@ -546,13 +568,19 @@ private fun FanGroupTab(
 private fun FanGroupNoteCard(
     item: com.thirdparty.xhs.data.NoteItem,
     onClick: () -> Unit,
+    /** 长按：弹作品菜单（收藏 / 稍后观看），由 [FanGroupTab] 渲染 */
+    onLongClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Surface(
-        onClick = onClick,
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = modifier
+        modifier = modifier.combinedClickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null,
+            onClick = onClick,
+            onLongClick = onLongClick
+        )
     ) {
         Column {
             Box {

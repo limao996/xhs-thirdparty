@@ -109,6 +109,8 @@ fun VideoFeedScreen(
 ) {
     val state by viewModel.ui.collectAsStateWithLifecycle()
     val pagerState = rememberPagerState(initialPage = 0) { state.items.size }
+    // 换挡触感用在下面「落定页变了」的地方
+    val haptics = rememberHaptics()
 
     LaunchedEffect(Unit) {
         if (state.items.isEmpty() && !state.firstLoading) viewModel.loadMore()
@@ -203,7 +205,13 @@ fun VideoFeedScreen(
     // Every video starts with its chrome showing, the way the first one does.
     // Without this, retiring the overlays on one clip left every following clip
     // bare as well, and the only way back was to tap blind.
+    // 换到下一个视频（滑动落定）给一次"换挡"触感
     LaunchedEffect(pagerState.settledPage) { onInfoVisibleChange(true) }
+    var pipSegmentSeen by remember { mutableStateOf(-1) }
+    LaunchedEffect(pagerState.settledPage) {
+        if (pipSegmentSeen != -1 && pipSegmentSeen != pagerState.settledPage) haptics.segment()
+        pipSegmentSeen = pagerState.settledPage
+    }
 
     // pagination driven by the settled page (side-effect free, runs off composition)
     LaunchedEffect(pagerState.settledPage, state.items.size) {

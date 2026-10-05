@@ -58,8 +58,15 @@ function EnsureDevice {
 
 # 一次 uiautomator dump。贵（2-3.5s），所以每个界面状态只调用一次，
 # 拿到结果后在其中断言所有条件 —— 不要在循环里调它。
+#
+# 先删掉上一次的 dump 文件：`uiautomator dump` 偶发失败时会打印
+# "Failed to write while dumping service user: Broken pipe"（屏幕正在转场、
+# 或者处于全屏/画中画），此时紧跟着的 `cat` 会把**上一次的旧文件**读出来 ——
+# 界面明明已经变了，dump 却一直返回同一份内容，让人以为"点了没反应"（实测踩过）。
 function DumpUi {
-    return (& $script:ADB shell 'uiautomator dump --compressed /sdcard/d.xml >/dev/null 2>&1; cat /sdcard/d.xml') -join ''
+    & $script:ADB shell 'rm -f /sdcard/d.xml' | Out-Null
+    & $script:ADB shell 'uiautomator dump --compressed /sdcard/d.xml >/dev/null 2>&1' | Out-Null
+    return (& $script:ADB shell 'cat /sdcard/d.xml 2>/dev/null') -join ''
 }
 
 # 便宜的就绪探测（49ms）。用 dumpsys window 看焦点是否已经落在本应用。

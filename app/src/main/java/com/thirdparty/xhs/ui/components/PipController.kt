@@ -11,6 +11,7 @@ import android.content.IntentFilter
 import android.graphics.drawable.Icon
 import android.os.Build
 import android.util.Rational
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.thirdparty.xhs.R
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,12 +43,47 @@ object PipController {
     /** 展开小窗后要跳回的详情页（MainActivity 消费一次） */
     val pendingDetailId = MutableStateFlow<Long?>(null)
 
+    /**
+     * 播放状态变了就 +1：MainActivity 据此重设窗口参数。
+     *
+     * 小窗上那三个按钮的图标必须跟着**真实状态**走 —— 播放中显示暂停、暂停中显示播放、
+     * 播完显示重播；否则就会出现"播完了按钮还是暂停、点了也没反应"（用户实测）。
+     */
+    val paramsVersion = MutableStateFlow(0)
+
+    /** 监听播放器状态，用于刷新小窗按钮（随会话建立/结束挂上/摘掉）。 */
+    private var stateListener: Player.Listener? = null
+
     // ---- 生命周期 ----------------------------------------------------------
 
-    /** 详情页点「小窗播放」：把播放器交出去。 */
-    fun start(player: ExoPlayer, noteId: Long, title: String) {
+    /**
+     * 详情页点「小窗播放」：把播放器交出去。
+     *
+     * [playIntent] 是交出去那一刻"是不是在播"，进小窗后按它把播放状态**接着**下去
+     * （用户实测过：不显式接着，小窗里会停在暂停状态）。
+     */
+    fun start(player: ExoPlayer, noteId: Long, title: String, playIntent: Boolean) {
+        detachListener()
         _session.value = Session(player, noteId, title)
         inPip.value = true
+        runCatching { if (playIntent) player.play() else player.pause() }
+        val listener = object : Player.Listener {
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                paramsVersion.value++
+            }
+
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                paramsVersion.value++
+            }
+        }
+        player.addListener(listener)
+        stateListener = listener
+        paramsVersion.value++
+    }
+
+    private fun detachListener() {
+        stateListener?.let { l -> _session.value?.player?.let { p -> runCatching { p.removeListener(l) } } }
+        stateListener = null
     }
 
     fun hasSession(): Boolean = _session.value != null
@@ -58,6 +94,7 @@ object PipController {
     /** 展开回详情页：把播放器交回给详情页（详情页通过 PlaybackHandoff 认领）。 */
     fun handBackForDetail(): Session? {
         val s = _session.value ?: return null
+        detachListener()
         _session.value = null
         inPip.value = false
         return s
@@ -65,6 +102,7 @@ object PipController {
 
     /** 用户关掉小窗（或 Activity 被销毁）：停止并销毁播放器。 */
     fun closeAndRelease() {
+        detachListener()
         _session.value?.player?.let { p ->
             runCatching {
                 p.stop()
@@ -103,15 +141,25 @@ object PipController {
     }
 
     private fun actions(activity: Activity, player: ExoPlayer): List<RemoteAction> {
-        val playing = player.playWhenReady
+        // 三种状态给三种图标：播完给「重播」，播放中给「暂停」，其余给「播放」
+        val ended = player.playbackState == Player.STATE_ENDED
+        val playing = player.playWhenReady && !ended
         return listOf(
             remoteAction(activity, ACTION_REWIND, 1, R.drawable.ic_pip_rewind, "后退 10 秒"),
             remoteAction(
                 activity,
                 ACTION_PLAY_PAUSE,
                 2,
-                if (playing) R.drawable.ic_pip_pause else R.drawable.ic_pip_play,
-                if (playing) "暂停" else "播放"
+                when {
+                    ended -> R.drawable.ic_pip_replay
+                    playing -> R.drawable.ic_pip_pause
+                    else -> R.drawable.ic_pip_play
+                },
+                when {
+                    ended -> "重播"
+                    playing -> "暂停"
+                    else -> "播放"
+                }
             ),
             remoteAction(activity, ACTION_FORWARD, 3, R.drawable.ic_pip_forward, "前进 10 秒")
         )
@@ -144,7 +192,16 @@ object PipController {
             override fun onReceive(context: Context?, intent: Intent?) {
                 val player = _session.value?.player ?: return
                 when (intent?.action) {
-                    ACTION_PLAY_PAUSE -> if (player.playWhenReady) player.pause() else player.play()
+                    // 播完之后再点，`playWhenReady` 仍是 true 而状态是 ENDED：
+                    // 这时不能走 pause 分支（点了没反应），要从头重播
+                    ACTION_PLAY_PAUSE -> if (player.playbackState == Player.STATE_ENDED) {
+                        player.seekTo(0L)
+                        player.play()
+                    } else if (player.playWhenReady) {
+                        player.pause()
+                    } else {
+                        player.play()
+                    }
                     ACTION_REWIND -> player.seekTo(
                         (player.currentPosition - SEEK_STEP_MS).coerceAtLeast(0L)
                     )

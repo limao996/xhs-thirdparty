@@ -69,6 +69,9 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.size
 
 /**
@@ -571,7 +574,13 @@ private fun AutoHideController(
                                 )
                             },
                             text = {
-                                Column {
+                                // 倍速 + 微调 + 小窗播放一共 8 行，小屏上会顶出对话框：
+                                // 列表本身要能滚（用户实测反馈）
+                                Column(
+                                    Modifier
+                                        .heightIn(max = 360.dp)
+                                        .verticalScroll(rememberScrollState())
+                                ) {
                                     PlayerMenuRow(
                                         label = if (fineStep) "微调：±1 秒 ✓" else "微调：±1 秒"
                                     ) {

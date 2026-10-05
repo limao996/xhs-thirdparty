@@ -301,12 +301,27 @@
 
 **H7 · 触感反馈用系统 API，验证靠 `dumpsys vibrator_manager`**
 - 触发：要给长按、切换、落位加振动。
-- 做法：`ui/components/Haptics.kt` 包一层 `LocalHapticFeedback`（`HapticFeedbackType.LongPress /
-  TextHandleMove / Confirm / Reject`），**不要** `Vibrator`（系统 API 尊重用户的触感开关，
-  也不需要 `VIBRATE` 权限）。
+- 做法：`ui/components/Haptics.kt` 包一层 `LocalHapticFeedback`，四档语义别用错：
+  `LongPress`（长按/开始拖动）、**`ContextClick`（轻点，别用 `TextHandleMove` —— 那是文本光标移动的）**、
+  `SegmentTick`（滑视频/翻图片这类换挡）、`Confirm` / `Reject`（收藏与移除）。
+  **不要** `Vibrator`（系统 API 尊重用户的触感开关，也不需要 `VIBRATE` 权限）。
 - 验证：`adb shell dumpsys vibrator_manager | grep xhs` 能看到 `opPkg=com.thirdparty.xhs…`
-  的 `VibrationRecord`（长按那一下是 `Prebaked{effect=HEAVY_CLICK} … Usage=TOUCH`）。
-  模拟器上 `scale: 0.00` 是正常的 —— 没有可用触感硬件/关掉了触感，调用本身已生效。
+  的记录（长按是 `Prebaked{effect=HEAVY_CLICK}`，轻点是 `TICK`）。模拟器上 `scale: 0.00` 正常 ——
+  没有可用触感硬件/关掉了触感，调用本身已生效。
+
+## I. 验证工具本身的坑
+
+**I1 · `uiautomator dump` 失败时会读到上一次的旧文件**
+- 触发：脚本里 `uiautomator dump --compressed /sdcard/d.xml; cat /sdcard/d.xml`。
+- 症状（本次实测踩了十几分钟）：dump 失败会打印
+  `ERROR: null root node returned by UiTestAutomationBridge` 或
+  `Failed to write while dumping service user: Broken pipe`（屏幕转场中、全屏、画中画时更容易），
+  紧接着的 `cat` 把**上一次的文件**读出来 —— 界面明明已经切走了，dump 却一直返回同一份内容，
+  看起来像"点了完全没反应"。
+- 正确做法：`DumpUi` 先 `rm -f /sdcard/d.xml`，再 dump，再 `cat`（`tools/verify.ps1` 已改成这样）。
+  界面"卡住不动"时先确认 dump 是不是旧文件，再去怀疑应用。
+- 相关：整机焦点丢失时（`mCurrentFocus` / `mResumedActivity` 都为空）`uiautomator` 会一直失败，
+  按一次 `KEYCODE_WAKEUP` + `KEYCODE_HOME` 就能恢复，不必重启模拟器。
 
 **H5 · 自动化验证的系统边界（本次踩到的两条）**
 - 画中画窗口的「关闭 / 展开」是系统覆盖层，**不吃 `adb shell input tap`**（注入触摸被忽略）。

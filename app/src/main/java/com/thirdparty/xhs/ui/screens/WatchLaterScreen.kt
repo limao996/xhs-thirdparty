@@ -31,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -52,6 +53,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.thirdparty.xhs.common.RepoViewModelFactory
 import com.thirdparty.xhs.data.NoteItem
+import com.thirdparty.xhs.ui.components.FeeBadge
 import com.thirdparty.xhs.ui.components.XhsAsyncImage
 import com.thirdparty.xhs.ui.components.rememberHaptics
 import com.thirdparty.xhs.ui.theme.Corners
@@ -78,6 +80,7 @@ fun WatchLaterScreen(
 ) {
     val state by viewModel.ui.collectAsStateWithLifecycle()
     var confirmClear by remember { mutableStateOf(false) }
+    val haptics = rememberHaptics()
 
     Scaffold(
         topBar = {
@@ -126,9 +129,19 @@ fun WatchLaterScreen(
         var dragFrom by remember { mutableIntStateOf(-1) }
         var dragTarget by remember { mutableIntStateOf(-1) }
         var dragOffset by remember { mutableFloatStateOf(0f) }
-        val items = state.items
+        // 刚落库的顺序。落库后要等 Room 重新读出来（一次磁盘往返），这段时间里如果直接渲染
+        // 旧列表，被拖的那一行会先弹回旧位置、再跳到新位置 —— 就是用户看到的"松开后闪一下"。
+        // 所以先按这份顺序渲染，等库里读回来的顺序对上再撤掉。
+        var committed by remember { mutableStateOf<List<Long>?>(null) }
+        val items = committed?.let { ids ->
+            val byId = state.items.associateBy { it.noteId }
+            ids.mapNotNull { byId[it] }.takeIf { it.size == ids.size }
+        } ?: state.items
+        LaunchedEffect(state.items, committed) {
+            val want = committed ?: return@LaunchedEffect
+            if (state.items.map { it.noteId } == want) committed = null
+        }
         val rowHeightPx = with(LocalDensity.current) { QueueRowHeight.toPx() }
-        val haptics = rememberHaptics()
 
         fun land() {
             val from = dragFrom
@@ -136,6 +149,7 @@ fun WatchLaterScreen(
             if (from >= 0 && to >= 0 && to != from) {
                 val ids = items.map { it.noteId }.toMutableList()
                 ids.add(to, ids.removeAt(from))
+                committed = ids
                 viewModel.setOrder(ids)
                 haptics.confirm()
             }
@@ -199,10 +213,12 @@ fun WatchLaterScreen(
                 ) {
                     QueueRow(
                         item = item,
-                        position = index + 1,
                         dragging = isDragging,
                         dragModifier = dragModifier,
-                        onClick = { onOpenDetail(item.noteId) },
+                        onClick = {
+                            haptics.tick()
+                            onOpenDetail(item.noteId)
+                        },
                         onRemove = {
                             haptics.reject()
                             viewModel.remove(item.noteId)
@@ -221,6 +237,7 @@ fun WatchLaterScreen(
             text = { Text("将移除队列里全部 ${state.items.size} 件作品。收藏不受影响。") },
             confirmButton = {
                 TextButton(onClick = {
+                    haptics.reject()
                     confirmClear = false
                     viewModel.clearAll()
                 }) { Text("清空") }
@@ -235,7 +252,6 @@ fun WatchLaterScreen(
 @Composable
 private fun QueueRow(
     item: NoteItem,
-    position: Int,
     dragging: Boolean,
     /** 长按拖动的手势修饰符：必须接在 clickable 之后，同一个节点上 */
     dragModifier: Modifier = Modifier,
@@ -279,12 +295,18 @@ private fun QueueRow(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text(
-                    "$position. @${item.userName}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // 作品标签（图文 / 粉丝圈 / VIP / 免费）——和瀑布流卡片用同一个组件，
+                    // 队列里也一眼能看出这条是什么
+                    FeeBadge(item, compact = true)
+                    Spacer(Modifier.width(Spacing.s))
+                    Text(
+                        "@${item.userName}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
+                }
             }
             IconButton(onClick = onRemove) {
                 Icon(Icons.Filled.DeleteOutline, contentDescription = "移出队列")

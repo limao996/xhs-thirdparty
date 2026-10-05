@@ -312,6 +312,7 @@ private fun ProfileEntry(
     supporting: String,
     onClick: () -> Unit
 ) {
+    val haptics = com.thirdparty.xhs.ui.components.rememberHaptics()
     ListItem(
         headlineContent = { Text(title) },
         supportingContent = { Text(supporting) },
@@ -332,7 +333,10 @@ private fun ProfileEntry(
         modifier = Modifier
             .padding(horizontal = Spacing.m, vertical = 2.dp)
             .clip(Corners.large)
-            .clickable { onClick() }
+            .clickable {
+                haptics.tick()
+                onClick()
+            }
     )
 }
 
