@@ -459,6 +459,14 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 > `uiautomator dump …; cat d.xml`，dump 偶发失败（`Broken pipe`）时 `cat` 会读回**上一次的旧文件**，
 > 于是"界面明明变了、dump 一直返回同一份内容"。现在先 `rm -f` 再 dump（详见 GOTCHAS I1）。
 
+### 阶段十四 · 详情页去掉队列入口
+
+- 详情页不再渲染稍后观看浮动按钮（`DetailScreen` 的 `floatingActionButton` 清空，
+  `onOpenWatchLater` 参数一并删除，`AppNavHost` 不再传）。入口只留：推荐页信息条、发现页 `CornerFabStack`、
+  搜索 / 作者页 / 收藏 / 最近浏览的浮动按钮。
+- 证据：详情页 dump 里没有 `稍后观看 N` 文本（断言 `text="稍后观看 \d+"` = False）；
+  返回推荐页后信息条 `稍后观看 4 件 · 点这里查看` 仍在。
+
 ---
 
 ## 统计

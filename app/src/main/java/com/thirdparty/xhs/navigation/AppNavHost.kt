@@ -355,8 +355,7 @@ fun AppNavHost(
             DetailScreen(
                 noteId = noteId,
                 onBack = { nav.popBackStack() },
-                onOpenAuthor = { uid -> nav.navigate(Routes.author(uid)) },
-                onOpenWatchLater = { nav.navigate(Routes.WATCH_LATER) }
+                onOpenAuthor = { uid -> nav.navigate(Routes.author(uid)) }
             )
         }
 

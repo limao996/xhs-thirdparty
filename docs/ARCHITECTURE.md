@@ -154,8 +154,10 @@ Room 数据库 `xhs_local.db`，`@Database(version = 3)`，实体四张：
   `backup`、`settings`、`cache`（清除缓存）、`about`（关于）、`update`（检查更新）、`watch_later`（稍后观看队列）；
   辅助构造函数 `detail(noteId)` / `author(userId)`。
   关于与检查更新是**两个独立页面**，入口都在「我的 → 其他」；设置页只放偏好项与数据相关入口（备份与恢复、清除缓存）。
-  稍后观看队列没有独立入口图标：队列非空且不在画中画小窗时，推荐页在视频信息栏上方显示一条信息条，
-  其余带瀑布流的页面（发现 / 我的 / 搜索 / 作者页 / 收藏 / 最近浏览 / 详情页）用浮动按钮（`WatchLaterFab`）。
+  稍后观看队列没有独立入口图标：队列非空且不在画中画小窗时，**推荐页**在视频信息栏上方显示一条信息条
+  （`WatchLaterBar`），**发现页**在右下角用 `CornerFabStack`（刷新在上、稍后观看在下），
+  搜索 / 作者页 / 收藏 / 最近浏览用浮动按钮（`WatchLaterFab`）。
+  **我的页与详情页不摆这个入口**（用户明确要求：那两处是账号/正文的地盘，浮一个队列按钮只会挡东西）。
 - 底部三 tab 由 `HomeTab` 枚举定义：`FEED("tab/feed","推荐")`、`DISCOVER("tab/discover","发现")`、
   `PROFILE("tab/profile","我的")`。
 - 深链 `xhstp://note/<id>`（`DeepLink.kt` + Manifest 的 `VIEW/DEFAULT/BROWSABLE` 过滤器）→ 直接进入详情。

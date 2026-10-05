@@ -102,7 +102,6 @@ fun DetailScreen(
     noteId: Long,
     onBack: () -> Unit,
     onOpenAuthor: (Int) -> Unit,
-    onOpenWatchLater: () -> Unit,
     viewModel: DetailViewModel = viewModel(
         key = "detail-$noteId",
         factory = object : androidx.lifecycle.ViewModelProvider.Factory {
@@ -423,12 +422,9 @@ fun DetailScreen(
                 )
             }
         },
-        // 稍后观看：全屏时不叠这个按钮（整屏都是媒体，浮动按钮只会挡住画面）
-        floatingActionButton = {
-            if (!fullscreen) com.thirdparty.xhs.ui.components.WatchLaterFab(
-                onOpen = onOpenWatchLater
-            )
-        }
+        // 详情页不摆稍后观看浮动按钮：它挡在正文/媒体上（用户明确要求去掉）。
+        // 队列入口的归属：推荐页 = 视频信息栏上方的信息条，发现页 = 右下角与刷新同排的那一个。
+        floatingActionButton = { }
     ) { pad ->
         when {
             // `inherited == null` on both: with a player in hand there is something to
