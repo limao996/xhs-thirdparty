@@ -111,7 +111,7 @@ app/src/main/java/com/thirdparty/xhs/
 | 解压版 Gradle（快） | `%USERPROFILE%\.gradle\wrapper\dists\gradle-9.8.0-bin\*\gradle-9.8.0\bin\gradle.bat` |
 | 模拟器 AVD | `xhs_test`（API 34、1080×2400、420dpi），位于 `%USERPROFILE%\.android\avd`，**不在仓库里** |
 | 构建产物 | `app/build/outputs/apk/{debug,release}/`（不入库） |
-| 最近一次实测 | 2026-10-04：`assembleRelease` 成功（Gradle 9.8.0 / AGP 9.4.1 / JDK 17），产物 `app-release.apk` 3,306,226 B、md5 `6d799ca08d1fab281aef854961c70057`、versionName `1.2.1` / versionCode `326862`；模拟器上装正式包实测通过（冷启动注册游客身份并拿到 VIP、设置 → 清除缓存逐项勾选与清理、关于页显示 `v1.2.1（build 326862）`、检查更新页正常），全程 `crash: 0` |
+| 最近一次实测 | 2026-10-04：`assembleRelease` 成功（Gradle 9.8.0 / AGP 9.4.1 / JDK 17），产物 `app-release.apk` 3,306,226 B、md5 `6d799ca08d1fab281aef854961c70057`（那一版是 `1.2.1` / versionCode `326862`；当前源码已是 `1.3.0`）；模拟器上装正式包实测通过（冷启动注册游客身份并拿到 VIP、设置 → 清除缓存逐项勾选与清理、关于页显示 `v1.2.1（build 326862）`、检查更新页正常），全程 `crash: 0` |
 
 ## 7. 当前状态
 

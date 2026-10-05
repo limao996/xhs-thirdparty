@@ -203,8 +203,14 @@ fun DetailScreen(
                 playIntent = runCatching { p.playWhenReady }.getOrDefault(false)
             )
             val params = com.thirdparty.xhs.ui.components.PipController.buildParams(act, p)
-            if (params != null) {
-                runCatching { act.enterPictureInPictureMode(params) }
+            // 返回值必须看：系统可能拒绝（画中画权限被关 / 多窗口策略）。被拒绝时不会再有任何
+            // PiP 回调，而 start() 已经把 inPip 置 true —— 不回滚就会把导航内容永久藏起来
+            // （屏幕只剩视频、后退直接退出应用；审计 F3）。
+            val entered = params != null &&
+                runCatching { act.enterPictureInPictureMode(params) }.getOrDefault(false)
+            if (!entered) {
+                com.thirdparty.xhs.ui.components.PipController.abortStart()
+                    ?: run { com.thirdparty.xhs.ui.components.PipController.inPip.value = false }
             }
             // **不要**在这里退出详情页（原来调 onBack()）。退出去会把这条导航记录弹掉，
             // 于是：①用户关掉小窗后详情页也"没了"；②展开时只能重新 navigate 一条新记录

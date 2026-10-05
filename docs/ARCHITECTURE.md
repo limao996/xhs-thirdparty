@@ -37,7 +37,7 @@ app/src/main/java/com/thirdparty/xhs/
 ├── common/RepoViewModelFactory.kt  所有 ViewModel 的构造入口
 ├── data/
 │   ├── XhsRepository.kt          ★ 全部接口调用、缓存写入、DTO→UI 模型映射
-│   ├── XhsDatabase.kt            Room 数据库（xhs_local.db，version 2）
+│   ├── XhsDatabase.kt            Room 数据库（xhs_local.db，version 3）
 │   ├── XhsEntity.kt              收藏 / 历史的实体
 │   ├── XhsDao.kt / FollowDao.kt  各表 DAO
 │   ├── Models.kt / NoteItem.kt   DTO 与 UI 模型
@@ -50,7 +50,7 @@ app/src/main/java/com/thirdparty/xhs/
 │   ├── OkHttpAwait.kt            OkHttp → 协程
 │   ├── CredentialStore.kt        账号 / 设备标识持久化
 │   ├── IdentityGuess.kt          设备身份（MAC）生成与猜测试探
-│   ├── WebDavClient.kt           WebDAV（PROPFIND / PUT / GET / MKCOL / DELETE）
+│   ├── WebDavClient.kt           WebDAV（PUT / GET / MKCOL）
 │   └── UpdateChecker.kt          检查更新（GitHub Releases；全应用唯一不经 AES 的请求，自带独立 OkHttpClient）
 ├── navigation/
 │   ├── Routes.kt                 路由常量 + HomeTab 枚举
@@ -125,7 +125,7 @@ app/src/main/java/com/thirdparty/xhs/
 
 - **触发时机**：`beforeAccountRequest` 挂在 `XhsApi.call()` 这个所有请求的必经点上，所以检查发生在"下一个真正要用账号的请求"之前，界面感知不到，也没有任何轮询（曾经是 5 秒轮询，已移除）。因此界面**空闲时不会产生任何建号请求**；代价是"挂了很久没动、窗口过期后再点开某个页面"会先经历一次换号。
 - **账号变化的通知**：换号发生在请求内部、没有用户操作，因此 `XhsRepository.noteIdentityChanged()` 会 `bump _accountEpoch`，`GuestViewModel` 据此刷新「游客ID」标签与 VIP 状态。
-- **手动换号**：「我的」页的「切换游客账号」走 `XhsRepository.rotateGuest()` → `api.loginAsGuest()`（同一个建号链路）。
+- **手动换号**：「我的」页的「切换游客账号」走 `XhsRepository.switchGuestTo(mac)` → `api.loginAsDevice()`（同一个建号链路）；`rotateGuest()` 只用于启动与网络恢复时的重新登录。
 - **备份刻意不含账号**：identity / token / hash / VIP 窗口都不导出（旧号恢复时窗口早已过期，没有意义）；只备份「自动切换」这个开关本身。
 
 ## 4. 持久化
@@ -141,15 +141,16 @@ Room 数据库 `xhs_local.db`，`@Database(version = 3)`，实体四张：
 
 - **迁移**：`2 → 3` 是**真迁移**（`MIGRATION_2_3` 只 `CREATE TABLE watch_later`）。已发布版本上的
   收藏 / 最近浏览 / 关注只有本机一份，靠 `fallbackToDestructiveMigration()` 兜底等于升级时删用户数据；
-  destructive 只留给其它跨版本跳变（例如 `1 → 3`，本地缓存可以重新拉）。
-- 队列顺序只由 `position` 表达：拖动结束整段重写（`setWatchLaterOrder`），增删之后 `renumberWatchLater()`
+  **刻意不再挂 `fallbackToDestructiveMigration()`**：漏写迁移时宁可启动就报错，也不能静默清空用户的收藏 / 浏览 / 关注 / 队列。跨版本一律写真迁移（现存 `MIGRATION_1_2`、`MIGRATION_2_3`）。
+- 队列顺序只由 `position` 表达：**不提供排序**（按加入时间），增删之后 `renumberWatchLater()`
   压紧，不留空洞 —— 队列只有几十条，比维护链表/浮点 position 简单且不会积累误差。
 - 备份内容：收藏、最近浏览、关注、设置项、搜索记录、WebDAV 配置（**含 URL、用户名与密码**，JSON 明文；备份文件本身要放好）。**不包含账号凭据**（identity / token / user_hash / VIP 窗口都不导出）。
 - 备份落点：本地文件（用户选择）或 WebDAV 的 `xhs/` 子目录（固定，便于恢复时定位）。
 
 ## 5. 导航与深链
 
-- `Routes.kt` 是唯一路由常量表：`home`、`detail/{noteId}`、`search`、`profile`、`author/{userId}`、
+- `Routes.kt` 是唯一路由常量表：`home`、`detail/{noteId}`、`search`、`author/{userId}`、
+  （注：`Routes.PROFILE` 这个常量**没有注册任何 composable**，属历史遗留；底部「我的」走的是 `HomeTab` 的 `tab/profile`）
   `saved`、`history`、`followed`、`following`（关注，走 `member/follow-list`）、`fans`（粉丝，走 `member/fun-list`）、
   `backup`、`settings`、`cache`（清除缓存）、`about`（关于）、`update`（检查更新）、`watch_later`（稍后观看队列）；
   辅助构造函数 `detail(noteId)` / `author(userId)`。
@@ -207,7 +208,7 @@ Room 数据库 `xhs_local.db`，`@Database(version = 3)`，实体四张：
 | material3 钉在 alpha | M3 Expressive 只在 alpha 线公开；稳定优先于"用最新"（已逐版本验证） |
 | 自签名 keystore 入库 | 让任何人都能构建可覆盖安装的 release 包（学习与自用优先）；因此**不能**用于上架 |
 | `versionCode` 用时间戳 | 手工维护版本号在本项目反复出错；时间戳单调递增且落在 32 位内（自 2026-10-01 起的秒数） |
-| schema 变更加**真迁移**（`MIGRATION_2_3`），destructive 只做兜底 | 已发布版本上的收藏 / 最近浏览 / 关注只有本机一份，升级时清库等于删用户数据；本次只是加一张表，迁移成本极低 |
+| schema 变更加**真迁移**（`MIGRATION_1_2` / `MIGRATION_2_3`），刻意不挂 destructive 兜底 | 已发布版本上的收藏 / 最近浏览 / 关注只有本机一份，升级时清库等于删用户数据；本次只是加一张表，迁移成本极低 |
 | 播放实例交接而非重建 | 推荐页 → 详情页切换时保留播放位置与缓冲，避免黑屏与断点丢失；代价是释放责任必须显式管理（见 GOTCHAS D3） |
 | 账号续期用"请求前门控"而非定时轮询 | 曾经的 5 秒轮询会在后台空转、也会把用户刚手动选的账号顶掉；挂在 `XhsApi.call()` 的一个 choke point 上后，只在"真的要用账号"时判断，缓存命中时是纯本地读（0 次请求） |
 | `org.json` 而非 gson/kotlinx-serialization | 包体形态简单且已在加密层处理字节；少一个反射依赖 |
@@ -220,7 +221,7 @@ Room 数据库 `xhs_local.db`，`@Database(version = 3)`，实体四张：
 | 同一角落的浮动按钮一起排（`CornerFabStack`） | 发现页同时需要「刷新」和「稍后观看」两个入口；各画各的会互相盖住，现在竖排 —— 小号刷新在上、扩展稍后观看在下（GOTCHAS H9） |
 | 触感反馈走系统 API（`Haptics` + `LocalHapticFeedback`） | 系统 API 尊重用户的触感开关与强度、不需要 `VIBRATE` 权限；自定义 `Vibrator` 会绕过这些设置。语义分四档：长按 / 轻点 / 确认 / 取消，见 GOTCHAS H7 |
 | 图文全屏的双击缩放**动画化**，捏合/拖动不动画 | 双击是"跳到"另一个倍率，瞬变很硬；捏合与拖动必须逐帧跟手。所以 `scale`/`offset` 仍是手势的真理源，渲染值在 `tween(240ms)` 与 `snap()` 两套 spec 之间切换（双击与「恢复」按钮打开动画）。注意模拟器把 `animator_duration_scale` 设成 0 时动画会瞬间完成（GOTCHAS H6） |
-| 队列排序用**长按拖动**，不加"上移 / 下移"按钮 | 队列是"拖成我想要的顺序"，不是列表管理；手势与 `clickable` 必须同一节点，`cancel` 也要落库（GOTCHAS H2） |
+| 队列**不提供排序**：按加入时间排列，没有序号、没有上移/下移按钮、也不做拖动 | 三种排序交互都被用户否掉了（见 AGENTS 硬约束 20 与 GOTCHAS H2）；队列顺序不是用户要的功能，而每种交互都带来一类新问题 |
 | 画中画用**系统原生 PiP**，播放器交接给小窗；入口在播放器菜单，控制栏用标准的三个按钮 | 不用 `SYSTEM_ALERT_WINDOW` 悬浮窗：原生 PiP 有系统级的窗口管理 / 关闭 / 展开，也不需要额外权限；代价是播放器所有权要在 `PipController` 与详情页之间显式交接（硬约束 17、GOTCHAS H3）。控制栏最多 3 个自定义按钮（H4），放 后退 10 秒 / 播放暂停 / 前进 10 秒，「全屏」用系统展开按钮；**稍后观看队列不放进小窗**（队列属于主界面） |
 
 ## 8. 不在范围内

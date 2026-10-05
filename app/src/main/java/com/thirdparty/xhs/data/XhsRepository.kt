@@ -247,7 +247,24 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
         withContext(Dispatchers.IO) { savedDao.all().mapNotNull { it.toNoteOrNull() } }
 
     /** Wipe all local favourites. */
-    suspend fun clearSaved() = withContext(Dispatchers.IO) { savedDao.clearAll() }
+    suspend fun clearSaved() = withContext(Dispatchers.IO) {
+        savedDao.clearAll()
+        // 必须 bump：别的已组合页面（长按菜单的"取消收藏"、我的页计数）靠它刷新 ——
+        // clearWatchLater 一直有，这里漏了（审计 P1）。
+        _savedVersion.value++
+    }
+
+    /**
+     * 本地的收藏 / 关注 / 队列被**整体改写**之后调一次（备份恢复就是这种情况）。
+     *
+     * 这三个版本号是各页面刷新标签与计数的唯一信号；恢复走的是 Room 直接写入，
+     * 不经过这里的增删方法，所以必须显式通知（审计 P1：恢复后长按菜单标签与计数不刷新）。
+     */
+    fun bumpLocalVersions() {
+        _savedVersion.value++
+        _followVersion.value++
+        _watchLaterVersion.value++
+    }
 
     // ---- browsing history, purely local ------------------------------------
     suspend fun history(): List<NoteItem> =
@@ -531,7 +548,18 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
     fun currentDeviceMac(): String = api.currentDeviceMac()
 
     // ---- guest session ------------------------------------------------------
-    suspend fun rotateGuest() = withContext(Dispatchers.IO) { api.loginAsGuest() }
+    /**
+     * 重新登录拿一份新的游客凭据（启动时、网络恢复时用）。
+     *
+     * 与"手动换号"（[switchGuestTo]）的区别：这里**不换设备身份**，只是重新登录。
+     * 但登录成功同样会改 token/hash，所以也要通知身份变化 —— 否则页面上顶栏的游客 ID
+     * 与已缓存资料不会刷新（审计 P2：`noteIdentityChanged()` 的注释声称"每条改身份的路径都调它"）。
+     */
+    suspend fun rotateGuest() = withContext(Dispatchers.IO) {
+        val res = api.loginAsGuest()
+        if (res.optInt("result") == 1) noteIdentityChanged()
+        res
+    }
 
     /** Current guest identity (the user_hash the backend echoes for our account). */
     fun currentGuestHash(): String = api.currentUserHash()

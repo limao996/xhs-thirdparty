@@ -106,6 +106,11 @@ class DetailViewModel(
                 if (cached == null) loadComments()
             } else if (cached == null) {
                 _ui.value = DetailUiState(loading = false, missing = true)
+            } else {
+                // 有缓存、但新请求失败（离线打开收藏 / 最近浏览必现）：**必须**把 loading 收掉，
+                // 否则页面永远停在转圈、缓存内容永不渲染（审计 P1）。这里保留 `missing=false`，
+                // 让页面照常展示缓存内容，只是不再转圈。
+                _ui.value = _ui.value.copy(loading = false)
             }
         }
     }

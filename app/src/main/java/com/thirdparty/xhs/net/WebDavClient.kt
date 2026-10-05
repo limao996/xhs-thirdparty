@@ -14,10 +14,13 @@ import java.io.IOException
  * Minimal WebDAV client — enough to keep a backup file on a personal cloud drive.
  *
  * Only PUT / GET / MKCOL are needed, so this talks plain HTTP with Basic auth
- * rather than pulling in a WebDAV library. The base URL, user and password are
- * kept in the app's own prefs and are deliberately NOT part of the backup
- * payload (the file that gets uploaded should not carry the credentials that
- * guard it).
+ * rather than pulling in a WebDAV library. The base URL, user and password live in
+ * the app's own prefs.
+ *
+ * **注意**：WebDAV 配置（含密码）**会**写进备份文件（见 `BackupManager` 的 `webdav` 段）——
+ * 理由是整个备份本来就是用户自己的、又已经带着账号 token，排除密码只会让人每次恢复后重输。
+ * 所以备份文件本身要放在可信位置。另外 Basic 认证走明文：公网地址必须是 https，
+ * 只有私网地址才允许 http（见 [WebDavConfig.validate]）。
  */
 class WebDavClient(
     private val client: OkHttpClient,

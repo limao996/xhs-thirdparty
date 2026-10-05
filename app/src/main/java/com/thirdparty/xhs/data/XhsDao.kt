@@ -29,7 +29,7 @@ interface SavedNoteDao {
 }
 
 /**
- * 最近浏览：本地记录查看过的内容，去重后按时间倒序，最多保留 100 条。
+ * 最近浏览：本地记录查看过的内容，去重后按时间倒序；条数由设置里的「最近浏览上限」决定（默认 2000，见 `CredentialStore.historyLimit`）。
  */
 @Dao
 interface HistoryDao {

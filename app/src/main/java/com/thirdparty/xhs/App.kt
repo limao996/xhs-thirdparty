@@ -33,7 +33,12 @@ class App : Application() {
      */
     val dataEpoch = MutableStateFlow(0)
 
-    fun notifyDataRestored() { dataEpoch.value = dataEpoch.value + 1 }
+    fun notifyDataRestored() {
+        dataEpoch.value = dataEpoch.value + 1
+        // 恢复是直接写 Room，不经过仓库的增删方法，所以这里显式通知三个本地版本号，
+        // 让收藏/关注/队列的标签与计数跟着刷新（审计 P1）。
+        runCatching { repository.bumpLocalVersions() }
+    }
 
     /**
      * Bumped when the app-lock toggle changes, so the lock state can take effect
@@ -74,11 +79,11 @@ class App : Application() {
 
     /**
      * Bridge for the settings screen to toggle VIP auto-switch on the SAME
-     * GuestViewModel instance HomeScreen owns — that instance drives the 5s poll,
+     * GuestViewModel instance HomeScreen owns — 那个实例负责把开关真写进仓库，
      * so writing the pref directly would leave the running loop out of step.
      * HomeScreen registers the setter while it is composed.
      */
-    var autoVipSetter: ((Boolean) -> Unit)? = null
+    var autoVipSetter: ((Boolean) -> Unit)? = null // 无定时轮询：开关变化时由这个回调落库
 
     /**
      * True while one of our own system pickers (the file/folder chooser) is in

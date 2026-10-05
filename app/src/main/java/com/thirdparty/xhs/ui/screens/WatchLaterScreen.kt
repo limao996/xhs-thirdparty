@@ -56,11 +56,11 @@ import com.thirdparty.xhs.ui.theme.Spacing
 import com.thirdparty.xhs.ui.viewmodel.WatchLaterViewModel
 import kotlin.math.roundToInt
 
-/** 一行的高度（拖动排序按它换算目标位置，所以必须固定）。 */
+/** 一行的高度（固定值，列表布局用）。 */
 private val QueueRowHeight = 88.dp
 
 /**
- * 稍后观看队列：按队列顺序排列，**长按拖动**调整顺序，点一行进详情。
+ * 稍后观看队列：按加入时间排列（**不提供排序**，硬约束 20），点一行进详情。
  *
  * 排序不走「上移/下移」按钮：那是列表管理的做法，而队列本来就是「拖成我想要的顺序」。
  * 拖动过程只改内存里的顺序（[preview]），松手才整段写回数据库 —— 拖动中每挪一格就写一次

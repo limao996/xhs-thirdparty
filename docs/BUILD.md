@@ -81,7 +81,7 @@ Get-FileHash $apk -Algorithm MD5                          # 分发时贴这个�
 
 | 名称 | 规则 | 当前值 |
 | --- | --- | --- |
-| `appVersionName` | 给人看的版本，按功能批次手动推进 | `1.2.1` |
+| `appVersionName` | 给人看的版本，按功能批次手动推进 | `1.3.0` |
 | `appVersionCode` | `(int)(System.currentTimeMillis()/1000L - versionEpochSeconds)`，`versionEpochSeconds` = 2026-10-01T00:00:00 本地时区的 epoch 秒 | 随时间递增 |
 | `CLIENT_VERSION`（buildConfigField） | 与服务端对齐的**协议版本** | `2.6.0` |
 | `CLIENT_CHANNEL`（buildConfigField） | 渠道号 | `1333` |

@@ -178,6 +178,12 @@ class SearchViewModel(private val repo: XhsRepository) : ViewModel() {
         viewModelScope.launch {
             val next = page + 1
             val list = runCatching { repo.searchNote(q, next) }.getOrNull()
+            // 换关键词 / 清空之后，这一页已经不属于当前查询了：必须丢弃，否则旧关键词的第 N 页
+            // 会被 append 进新结果里（审计 P2）。runSearch 顶部也有同样的守卫。
+            if (_ui.value.query.trim() != q) {
+                loading = false
+                return@launch
+            }
             if (list != null) {
                 if (list.isNotEmpty()) page = next
                 _ui.update {

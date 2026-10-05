@@ -169,19 +169,9 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
 
     override fun onStart() {
         super.onStart()
-        pipReceiver = com.thirdparty.xhs.ui.components.PipController.registerReceiver(
-            activity = this,
-            onUpdateParams = { refreshPipParams() }
-        )
     }
 
     override fun onStop() {
-        pipReceiver?.let { r -> runCatching { unregisterReceiver(r) } }
-        pipReceiver = null
-        // 小窗被「关闭」时系统**不保证**销毁 Activity（实测只走 onStop），于是那个看不见的
-        // ExoPlayer 会继续出声（用户反馈过两次）。这里用**系统的** `isInPictureInPictureMode`
-        // 判断，不再看我们自己维护的 `inPip`：关闭小窗时那个回调有可能压根不来，`inPip` 会一直
-        // 停在 true，判据就永远不成立（这正是上一版"修了但没生效"的原因）。
         val pip = com.thirdparty.xhs.ui.components.PipController
         val justEntered =
             android.os.SystemClock.elapsedRealtime() - pipEnteredAtMs < PIP_ENTRY_GRACE_MS
@@ -197,29 +187,28 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
                     "exitCheck=${pipExitCheck?.isActive} screenOff=$screenOff"
             )
         }
-        // 「有会话 + 走到 onStop + 屏幕是亮的」= 小窗已经没了：小窗里的 Activity 是**可见**的、
-        // 不会 stop（锁屏那一类例外已由 screenOff 排除）。
-        //
-        // 不再用 `isInPictureInPictureMode` 作判据：关闭小窗时这个值可能还停在 true，
-        // 于是旧判据永远不成立、播放器永远不释放 —— 这正是用户两次反馈"关闭后还在后台放"的原因。
-        //
-        // 三种情况：
-        //   ① 配置变更 / 刚进小窗的过渡期 → 不动；
-        //   ② **已经收到退出回调又走到 onStop** → 几乎肯定是被关掉了，但为了不和"展开过程中
-        //      系统先给一次 onStop"打架，这里只是把判定窗口缩短（onResume 一到就取消）；
-        //   ③ 其余（亮屏、没有退出回调，直接 stop）= 小窗没了 → 立刻收尾。
-        //
-        // 锁屏/息屏单独处理：**停播但保留会话**（用户反馈锁屏后还在放；窗口解锁后还要继续用，
-        // 所以不能 release）。解锁后不自动续播 —— 锁屏本来就是要让它停下来。
-        if (screenOff && pip.hasSession()) {
-            pip.pauseForScreenOff()
-        } else if (!isChangingConfigurations && !justEntered && pip.hasSession()) {
-            if (pipExitPending) {
-                schedulePipExitCheck(PIP_STOP_CONFIRM_MS)
-            } else if (pipExitCheck?.isActive != true) {
-                // 顺带把"待打开的作品"清掉：小窗是被关掉的，不该在下次回到前台时把人拽进详情页
-                pip.pendingDetailId.value = null
-                pip.closeAndRelease()
+        // 走到 onStop 时怎么处理，按下面的顺序判断（**不要**用 `isInPictureInPictureMode` 当
+        // "小窗还在不在"的唯一判据：关闭小窗时它可能仍是 true；反之只要它还是 true，就说明窗口
+        // 还在（被来电/别的应用遮住这类不算关闭））：
+        //   ① 已经收到退出回调 → 多半是关闭：用 300ms 确认窗口（onResume 一到就取消）
+        //   ② 刚进小窗的瞬停 → 什么都不做
+        //   ③ 锁屏/息屏 → 只暂停、保留会话（用户要求锁屏别再出声）
+        //   ④ 系统说还在 PiP 里（被别的应用遮住/来电）→ 暂停 + 复查（真没了才收尾）
+        //   ⑤ 其余（亮屏、没有退出回调、也不在 PiP）→ 小窗没了，立刻收尾
+        if (!isChangingConfigurations && pip.hasSession()) {
+            when {
+                pipExitPending -> schedulePipExitCheck(PIP_STOP_CONFIRM_MS)
+                justEntered -> Unit
+                screenOff -> pip.pauseForScreenOff()
+                isInPictureInPictureMode -> {
+                    pip.pauseForScreenOff()
+                    schedulePipExitCheck(PIP_LOST_CHECK_MS)
+                }
+                else -> {
+                    // 顺带把"待打开的作品"清掉：小窗是被关掉的，不该在下次回到前台时把人拽进详情页
+                    pip.pendingDetailId.value = null
+                    pip.closeAndRelease()
+                }
             }
         }
         super.onStop()
@@ -242,8 +231,15 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
                     com.thirdparty.xhs.ui.components.PipController.hasSession()
             )
         }
-        // 回到前台 = 展开（不是关闭）：先把播放器交回详情页，再取消收尾任务
-        if (pipExitPending) returnFromPipToDetail()
+        // 回到前台：只有"窗口确实不在了"才按展开处理（先交接、再恢复）。窗口还在却带着待定标记
+        // （比如刚被来电遮过）就只清标记 —— 否则会把活着的小窗会话误交回去（审计 F14）。
+        if (pipExitPending) {
+            if (isInPictureInPictureMode) {
+                pipExitPending = false
+            } else {
+                returnFromPipToDetail()
+            }
+        }
         pipExitCheck?.cancel()
         pipExitCheck = null
     }
@@ -266,22 +262,24 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
     /**
      * 小窗状态切换。
      *
-     * 进入小窗：详情页已经退出（点「小窗播放」时就退了），画面由 Compose 侧的小窗宿主
-     * 接手（见 setContent 里的 VideoSurface）。
+     * **进小窗**：详情页不再退出（返回栈记录留着），只是把导航内容整体从组合里摘掉
+     * （`setContent` 里 `if (!pipActive) AppNavHost(...)`），小窗窗口里只画视频。
      *
-     * 离开小窗：用户按了系统自带的展开按钮 → 把播放器交回给详情页并跳回那个作品。
-     * 「关闭小窗」不会走这里，而是直接把 Activity 销毁掉（见 [onDestroy]）。
+     * **出小窗**：这个回调在"展开"和"关闭"时都会来，所以这里只挂"待定"标记 + 宽限任务
+     * （见 [schedulePipExitCheck]）；真正的收尾在 `onResume`（展开：先交接再恢复）、
+     * `onStop`（关闭）或 `onDestroy`（兜底）。
      */
     override fun onPictureInPictureModeChanged(
         isInPictureInPictureMode: Boolean,
         newConfig: android.content.res.Configuration
     ) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
-        com.thirdparty.xhs.ui.components.PipController.inPip.value = isInPictureInPictureMode
         if (com.thirdparty.xhs.BuildConfig.DEBUG) {
             android.util.Log.i("XhsPip", "pipModeChanged=$isInPictureInPictureMode")
         }
         if (isInPictureInPictureMode) {
+            // 只有"进"的时候同步这个标记。
+            com.thirdparty.xhs.ui.components.PipController.inPip.value = true
             pipEnteredAtMs = android.os.SystemClock.elapsedRealtime()
             // 进小窗时把比例刷一遍：视频尺寸可能是在进小窗之后才探到的
             refreshPipParams()
@@ -291,9 +289,10 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
             //   关闭 → 不回来（随后 onStop/onDestroy，或者什么都不来）。
             // 所以先挂上"待定"标记 + 宽限任务，等 onResume 或超时再决定。
             //
-            // 注意**不在这里**就把 `inPip` 置 false / 排 pendingDetailId：那会让导航内容提前
-            // 重新组合，而播放器还没交回去 —— 详情页会新建一个播放器，小窗那个就变成没人管的
-            // 后台音频。交回顺序必须是：先 handBack + givePlayer，再让导航内容回来。
+            // **不要在这里动 `inPip`**：它是"导航内容要不要参与组合"的开关，一旦提前置 false，
+            // 详情页会立刻重组、`PlaybackHandoff.takeForDetail()` 那时还是空的 → 自建一台新播放器
+            // 从头播，而小窗那台被遗弃（审计 F1）。置 false 只能由交回（`handBackForDetail`）或
+            // 收尾（`closeAndRelease`）来做，顺序是"先交接、再恢复"。
             pipExitPending = true
             schedulePipExitCheck(PIP_EXIT_GRACE_MS)
         }
@@ -314,25 +313,28 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
             val resumed = lifecycle.currentState.isAtLeast(
                 androidx.lifecycle.Lifecycle.State.RESUMED
             )
+            val stillInPip = isInPictureInPictureMode
             if (com.thirdparty.xhs.BuildConfig.DEBUG) {
                 android.util.Log.i(
                     "XhsPip",
-                    "宽限任务到期(${delayMs}ms) resumed=$resumed session=${pip.hasSession()}"
+                    "宽限任务到期(${delayMs}ms) resumed=$resumed inPip=$stillInPip " +
+                        "session=${pip.hasSession()}"
                 )
             }
-            if (resumed) {
-                // 展开：回到详情页（同一导航记录，状态不丢）
-                returnFromPipToDetail()
-                return@launch
-            }
-            if (pip.hasSession()) {
-                if (com.thirdparty.xhs.BuildConfig.DEBUG) {
-                    android.util.Log.i("XhsPip", "判定为关闭 → closeAndRelease")
+            when {
+                // 回到前台 = 展开（不是关闭）：先交接、再让导航内容回来
+                resumed -> returnFromPipToDetail()
+                // 窗口还活着（比如只是被来电/别的应用遮住）→ 既不是展开也不是关闭，只清标记
+                stillInPip && pip.hasSession() -> pipExitPending = false
+                pip.hasSession() -> {
+                    if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+                        android.util.Log.i("XhsPip", "判定为关闭 → closeAndRelease")
+                    }
+                    pip.pendingDetailId.value = null
+                    pip.closeAndRelease()
                 }
-                pip.pendingDetailId.value = null
-                pip.closeAndRelease()
+                else -> pipExitPending = false
             }
-            pipExitPending = false
         }
     }
 
@@ -371,6 +373,8 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        pipReceiver?.let { r -> runCatching { unregisterReceiver(r) } }
+        pipReceiver = null
         // 关掉小窗 = 没有界面了：播放器必须销毁，否则会留下一个看不见的 ExoPlayer
         // 继续放声音。展开回详情页时 session 已经交回去了（pendingDetailId 被消费），
         // 所以这里不会误伤。
@@ -404,6 +408,13 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 小窗控制栏的接收者**在 onCreate 注册、onDestroy 注销**（原来挂在 onStart/onStop）：
+        // 窗口能不能点并不取决于 Activity 是否 STARTED —— 挂在 onStart 上会在"窗口可见但
+        // Activity 已 stop"的机型上让小窗三个按钮失灵（审计 F12）。
+        pipReceiver = com.thirdparty.xhs.ui.components.PipController.registerReceiver(
+            activity = this,
+            onUpdateParams = { refreshPipParams() }
+        )
         consumeDeepLink(intent)
         enableEdgeToEdge()
         // Paint the launch window with the colour the user will actually land on,
@@ -430,10 +441,17 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
                         androidx.compose.runtime.mutableStateOf(biometricLockEnabled())
                     }
                     val owner = LocalLifecycleOwner.current
+                    // 小窗标记：既要给下面的"导航内容要不要组合"用，也要给应用锁判断用
+                    // （进小窗必然先走一次 ON_PAUSE，不排除就会在小窗里弹指纹/锁屏封面；
+                    // 审计 F2），所以这里先收集一次。
+                    val pipActive by
+                        com.thirdparty.xhs.ui.components.PipController.inPip
+                            .collectAsStateWithLifecycle()
                     androidx.compose.runtime.DisposableEffect(owner) {
                         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
                             if (event == androidx.lifecycle.Lifecycle.Event.ON_PAUSE &&
                                 !App.INSTANCE.systemPickerActive &&
+                                !pipActive &&
                                 biometricLockEnabled()
                             ) {
                                 locked = true
@@ -452,10 +470,8 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
                     }
                     // 小窗里只画视频：系统把整个 Activity 缩成小窗，其余 chrome 一律不要。
                     // 注意这里是**跳过**导航内容的组合（不是盖在上面）——所以详情页的
-                    // ViewModel 留在返回栈里、组合被销毁，展开时重建但状态还在（不再重新加载）。
-                    val pipActive by
-                        com.thirdparty.xhs.ui.components.PipController.inPip
-                            .collectAsStateWithLifecycle()
+                    // ViewModel 留在返回栈里、组合被销毁，展开时重建但 ViewModel 状态还在。
+                    // （已知局限：`rememberSaveable` 那几个值随组合一起丢，展开回来滚动位置会回到顶部。）
                     if (!pipActive) {
                         AppNavHost(navController, deepLinkNoteId = pendingNote.value) {
                             pendingNote.value = null
@@ -478,7 +494,8 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
                             }
                         }
                     }
-                    if (locked) {
+                    // 全屏封面与各类对话框都**不能画进小窗**（小窗口里只有视频；审计 F2）
+                    if (locked && !pipActive) {
                         // swallow the back gesture: the cover must not be dismissible
                         androidx.activity.compose.BackHandler { }
                         com.thirdparty.xhs.ui.components.BiometricLockCover(
@@ -486,7 +503,7 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
                         )
                     }
                     // 复制口令回流：回到应用时发现剪贴板里有分享链接就询问是否跳转
-                    clipboardNote.value?.let { noteId ->
+                    clipboardNote.value?.takeIf { !pipActive }?.let { noteId ->
                         androidx.compose.material3.AlertDialog(
                             onDismissRequest = { clipboardNote.value = null },
                             title = { Text("检测到分享内容") },
@@ -512,7 +529,7 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
                     // App.checkUpdateOnLaunch）。锁着的时候不弹，否则对话框会浮在
                     // 解锁页上面。
                     val pendingUpdate by App.INSTANCE.pendingUpdate.collectAsStateWithLifecycle()
-                    if (!locked) {
+                    if (!locked && !pipActive) {
                         pendingUpdate?.let { info ->
                             UpdateAvailableDialog(
                                 info = info,
@@ -602,6 +619,15 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
 
         /** 已经收到退出回调、又走到 onStop 时的确认窗口（几乎肯定是被关掉了） */
         const val PIP_STOP_CONFIRM_MS = 300L
+
+        /**
+         * 系统说"还在小窗里"但 Activity 被 stop（来电、别的应用全屏）时的复查窗口。
+         *
+         * 够长是有意的：真正被关掉时窗口会消失、`isInPictureInPictureMode` 很快变 false，
+         * 由复查收尾；而还活着的小窗一直报 true，复查就什么都不做（早先"有会话 + onStop 就收尾"
+         * 会把来电这种情况误当关闭，回到小窗时里面成了详情页 UI）。
+         */
+        const val PIP_LOST_CHECK_MS = 15_000L
 
         /** 进小窗后的这段时间内，`onStop` 不当作"小窗被关掉"（个别设备会瞬停一下） */
         const val PIP_ENTRY_GRACE_MS = 2_000L

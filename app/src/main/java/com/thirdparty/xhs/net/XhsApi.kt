@@ -190,7 +190,8 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
     private suspend fun doCallOnce(
         path: String,
         params: Map<String, Any>,
-        // Overrides used by the account scanner, which must probe other identities
+        // Overrides 目前没有调用方（曾经的账号扫描器已移除）。保留是因为 doCallOnce 的签名
+        // 还要给自愈重登留一个"换身份试一次"的口子；注释里不要再提不存在的 scanner。
         // WITHOUT disturbing the session currently stored in CredentialStore.
         userIdOverride: String? = null,
         tokenOverride: String? = null

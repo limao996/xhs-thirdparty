@@ -140,6 +140,19 @@ object PipController {
         return s
     }
 
+    /**
+     * 进入小窗**失败**时的回滚（系统拒绝：画中画权限被关、多窗口策略不允许…）。
+     *
+     * `enterPictureInPictureMode()` 返回 false 时不会再有 `onPictureInPictureModeChanged`，
+     * 而 [start] 已经把 `inPip` 置成 true —— 不收回就等于把导航内容永久藏起来（屏幕只剩视频、
+     * 返回也回不去；审计 F3）。处理方式与"展开"一致：把播放器按交回详情页登记，再恢复导航内容。
+     */
+    fun abortStart(): Session? {
+        val s = handBackForDetail() ?: return null
+        PlaybackHandoff.givePlayer(s.noteId, s.player)
+        return s
+    }
+
     /** 用户关掉小窗（或 Activity 被销毁）：把进度交出去，然后停止并销毁播放器。 */
     fun closeAndRelease() {
         detachListener()
@@ -290,11 +303,17 @@ object PipController {
                     ACTION_REWIND -> player.seekTo(
                         (player.currentPosition - SEEK_STEP_MS).coerceAtLeast(0L)
                     )
-                    ACTION_FORWARD -> player.seekTo(
-                        (player.currentPosition + SEEK_STEP_MS).coerceAtMost(
-                            player.duration.coerceAtLeast(0L)
-                        )
-                    )
+                    ACTION_FORWARD -> {
+                        // 时长还没探到时 media3 返回 C.TIME_UNSET（负值），`coerceAtLeast(0)` 会变成
+                        // 0 → seek 到开头（审计 F8：刚进小窗点前进，画面跳回 0:00）。
+                        val d = player.duration
+                        val target = if (d <= 0L || d == androidx.media3.common.C.TIME_UNSET) {
+                            player.currentPosition + SEEK_STEP_MS
+                        } else {
+                            (player.currentPosition + SEEK_STEP_MS).coerceAtMost(d)
+                        }
+                        player.seekTo(target)
+                    }
                 }
                 onUpdateParams()
             }

@@ -631,6 +631,37 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 
 
+### 阶段三十一 · 全面复审（两份只读审计 → 修复 + 未修清单）
+
+审计方式：两个只读子代理分别审「播放器 / 画中画子系统」与「其余代码 + 文档一致性」，逐条给 file:line 证据；本轮先修 P0/P1 与廉价 P2，未修的逐条列在末尾（不假装修完）。
+
+| # | 严重度 | 问题 | 修复 | 证据 |
+| --- | --- | --- | --- | --- |
+| 1 | **P0** | 展开小窗时**退出回调里就把 `inPip` 同步成 false** → 导航内容提前重组、详情页自建播放器从 0:00 播，小窗那台被遗弃（与硬约束 17 的"先交接、再恢复"字面冲突） | `onPictureInPictureModeChanged` **只在"进"时**置 `inPip=true`；退出分支只挂待定标记 + 宽限任务，`inPip` 只由 `handBackForDetail()` / `closeAndRelease()` 翻转 | 实机：进详情 / 进小窗 / 展开三点的 `ExoPlayerImpl Init` 计数 **1 → 1 → 1**（修前 1 → 2 → 3）；展开后 `route=detail/2010` 未导航、单条在播音轨 |
+| 2 | P1 | 系统**拒绝**画中画（权限关闭 / 多窗口策略）时 `enterPictureInPictureMode` 的返回值被丢弃 → `inPip` 永久 true、导航内容被永久藏起来（只剩视频，后退直接退应用） | 检查返回值；失败即 `PipController.abortStart()`（按"交回详情页"处理并恢复导航内容） | 代码 + 编译 |
+| 3 | P1 | 进小窗 2s 内关掉小窗：`onStop` 的 `justEntered` 分支把退出回调分支也一起跳过 → 会话与声音都留下、`inPip` 卡 true | `onStop` 改成有序 `when`：退出回调优先（300ms 确认）→ 刚进小窗瞬停 → 锁屏只暂停 → **系统说还在 PiP**（被来电/别的应用遮住）则暂停 + 15s 复查 → 其余才收尾 | 代码；`PIP_LOST_CHECK_MS` 注释写明为什么够长 |
+| 4 | P1 | `pipExitPending` 可能长期残留在 true，下一次 `onResume` 会把**还活着的小窗**误交回详情页 | `onResume` 交接前先确认窗口确实不在了（仍在 PiP 就只清标记）；宽限任务到期同样按"仍在 PiP → 只清标记"处理 | 代码 |
+| 5 | P1 | 开启应用锁后点「小窗播放」，指纹 / 锁屏封面会画进小窗；剪贴板对话框与更新对话框也没有 `!pipActive` 门禁 | 应用锁触发条件加 `!pipActive`；封面与两个对话框统一 `if (!pipActive)` | 代码 |
+| 6 | P1 | 详情页「有缓存 + 取新失败」时 `loading` 永不复位 → **永久转圈、缓存内容永不渲染**（离线打开收藏 / 最近浏览必现） | `load()` 的 `cached != null && fresh == null` 分支补 `copy(loading = false)` | 代码 |
+| 7 | P1 | 备份恢复**不通知**收藏 / 关注 / 队列三个版本号 → 长按菜单标签与「我的」计数保持旧值 | 新增 `XhsRepository.bumpLocalVersions()`，由 `App.notifyDataRestored()` 统一调用（覆盖本地与 WebDAV 两条恢复路径） | 代码 |
+| 8 | P1 | `clearSaved()` 不 bump `savedVersion`（`clearWatchLater` 有）→ 清空收藏后其它页面标签不刷新 | 补 bump | 代码 |
+| 9 | P1 | 只注册 `MIGRATION_2_3`、**没有 1→2**，而 destructive 兜底被刻意去掉 → 停在 v1 的库启动即崩 | 补 `MIGRATION_1_2`（重建三张本地缓存表；v1 从未发布，注释写清代价与理由） | 代码 + 安装后冷启动无崩溃 |
+| 10 | P2 | `SearchViewModel.loadMore` 无 query 守卫 → 换关键词后旧页结果被 append 进新结果 | 收尾比对 `q`，不一致即丢弃（并复位 `loading`） | 代码 |
+| 11 | P2 | `UpdateViewModel.check` 无 try/finally → 意外异常时按钮永久禁用 | `try/finally` 复位 `checking` | 代码 |
+| 12 | P2 | `rotateGuest()` 不改 `accountEpoch`，但注释声称"每条改身份的路径都调它" | 登录成功后调 `noteIdentityChanged()` | 代码 |
+| 13 | P2 | 小窗「前进 10 秒」在时长未知时 `coerceAtLeast(0)` 变成 0 → 跳回开头 | 时长无效（`C.TIME_UNSET` / ≤0）时按 `current + 10s` | 代码 |
+| 14 | P2 | 小窗控制栏 receiver 挂在 `onStart/onStop` → "窗口可见但 Activity 已 stop"的机型上按钮失灵 | 改到 `onCreate/onDestroy` 注册 | 代码（插入时我曾把 `super.onCreate` 写重复导致启动崩溃，同一轮内定位并修好，见下） |
+| 15 | 文档 | 20 条「文档说 X、代码是 Y」全部核对修正：`ARCHITECTURE`（库版本 v2→v3、WebDAV 去掉不存在的 PROPFIND/DELETE、手动换号走 `switchGuestTo`、destructive 已刻意去掉、队列不排序、`Routes.PROFILE` 未注册、`MIGRATION_1_2`）、`BUILD`/`PROTOCOL`/`CONTEXT`/`CHANGELOG` 的 `1.2.1`→`1.3.0`、`README` 徽章 7.0→8.0、`docs/README` 标注 `REVIEW.md` 证据已失效、`XhsDao`「100 条」→ 默认 2000 可配、`WatchLaterScreen` KDoc 去掉拖动、`App.autoVipSetter` 去掉 5s 轮询、`XhsApi` 去掉不存在的 account scanner、GOTCHAS H2/H11 标注实现已删除 | 23 处文本替换 | `git diff` + `assembleDebug` 通过 |
+
+**本轮未修（如实列出，等你决定优先级）**：
+- **F6**：小窗期间导航内容不参与组合 → 展开回来**滚动位置 / 全屏状态 / 图片页码会回顶部**（ViewModel 状态在，`rememberSaveable` 的丢失）。真修要把 `SaveableStateHolder` 提到 `MainActivity`，或小窗期间用 `alpha=0` 保留组合。
+- **F7**：`PlaybackHandoff.stash/take` 是全局单槽，且 `onDestroy` 路径写入的进度没有消费者（可能跨会话残留）。
+- **F9**：比例判据两套 —— 小窗用旋转修正后的比例，详情页 / 信息流仍用原始 `w/h`（手机横拍片会出现高度/方向不对）。
+- **F11**：进程被回收后重建时小窗里会画整页详情 UI（兜底是单向的）。
+- **F13**：小窗里没有卡死看门狗 / 缓冲提示。
+- 其余 P2：约 90 处未使用 import 与 5 处重复 import、一批死代码（`Routes.PROFILE`、`isInWatchLater`、`CacheViewModel.setAll`、`WebDavClient` 的 String 版 upload、`WatchLaterScreen.QueueRowHeight`、`HomeScreen` 三个未用局部…）、`ProfileScreen` 7 个未用参数、`SectionLabel`/`parseRatio` 两套实现、约 20 处按钮缺触感、检查更新失败后的 `autoUpdateWantsRetry` 无退避、`runCatching` 吞 `CancellationException`、若干 `_ui.value = _ui.value.copy` 竞态。
+- 审查 P0-1：`tools/fixtures/*.xml` 里的真实会话凭据（用户明确"不用管"，本轮仍未动）。
+
 ### 阶段三十 · 详情页切后台/锁屏应暂停（且不影响小窗）
 
 | # | 现象 | 根因 | 改动 | 证据 |
@@ -675,7 +706,7 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 | 阶段八（启动自动检查更新与缓存分类清理） | 3 个提交（2 feat + docs 同步） |
 | 阶段九（发布 v1.2.1） | 1 个提交（版本号 + 发布文档） |
 | 阶段十（稍后观看队列 / 长按菜单 / 画中画 / 更新节流） | 2 个提交（feat + docs 同步） |
-| 当前版本 | `versionName 1.2.1`，`versionCode = 当前秒数 − 2026-10-01T00:00:00 的秒数` |
+| 当前版本 | `versionName 1.3.0`（该行记录于 1.2.1 时期），`versionCode = 当前秒数 − 2026-10-01T00:00:00 的秒数` |
 | 公开发布 | `v1.2.1`（2026-10-04），<https://github.com/limao996/xhs-thirdparty/releases/tag/v1.2.1>（上一版 `v1.2.0`） |
 
 > 提交信息中的"第 N 轮"指开发轮次（需求批次），与 commit 序号无关。

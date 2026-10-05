@@ -43,7 +43,16 @@ class UpdateViewModel : ViewModel() {
         if (_ui.value.checking) return
         _ui.update { it.copy(checking = true, result = null) }
         viewModelScope.launch {
-            val result = UpdateChecker.check(_ui.value.versionName)
+            // finally 复位：UpdateChecker 只兜 IOException/JSONException，别的异常（比如 OOM、
+            // 意料外的 RuntimeException）会让 `checking` 永久停在 true，按钮就再也点不动了（审计 P2）。
+            val result = try {
+                UpdateChecker.check(_ui.value.versionName)
+            } finally {
+                // 取消也要复位，否则取消后同样卡住
+                if (_ui.value.checking) {
+                    _ui.update { it.copy(checking = false) }
+                }
+            }
             _ui.update {
                 it.copy(checking = false, result = result, checkedAt = System.currentTimeMillis())
             }

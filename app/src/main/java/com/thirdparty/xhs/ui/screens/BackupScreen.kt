@@ -243,7 +243,8 @@ fun BackupScreen(onBack: () -> Unit) {
             Text("本地", style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(Spacing.xs))
             Text(
-                "备份包含：收藏、最近浏览、关注的作者、外观与自动切换设置（不含账号）。",
+                "备份包含：收藏、最近浏览、关注的作者、稍后观看队列、外观与自动换号设置、搜索记录，" +
+                    "以及 WebDAV 配置（含账号与密码）；不含账号凭据。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
