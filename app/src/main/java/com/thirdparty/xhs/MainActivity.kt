@@ -481,12 +481,16 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
                     }
                     // 小窗里只画视频：系统把整个 Activity 缩成小窗，其余 chrome 一律不要。
                     //
-                    // 这里**保持导航内容在组合里**（不再 `if (!pipActive)` 摘掉），理由：摘掉会让
-                    // 目标页的 `rememberSaveable`（滚动位置 / 全屏状态 / 图片页码）随组合一起丢，
-                    // 展开回来就回到顶部（审计 F6）。现在改为"照常组合 + 上面盖一层不透明黑底 +
-                    // 小窗视频"，状态全部保留，而小窗窗口里只看得到视频。
-                    AppNavHost(navController, deepLinkNoteId = pendingNote.value) {
-                        pendingNote.value = null
+                    // 这里是**跳过**导航内容的组合（不是盖在上面）。曾经试过"照常组合 + 不透明黑底盖住"，
+                    // 想保住 `rememberSaveable` 的滚动位置（审计 F6），但那样会**同时画出两块视频 surface**：
+                    // 小窗那块后绑定、把画面抢走，关掉小窗后详情页那块不会重新绑定（播放器实例没变），
+                    // 于是"回到详情页没有画面、进度还回到 0:00"（2026-10-06 用户报的回归）。
+                    // 结论：宁可丢滚动位置，也不能丢画面 —— 摘掉整棵树还能让详情页重新 compose，
+                    // 从而走"新建播放器 + 应用 `PlaybackHandoff` 的续播进度"那条已验证过的路。
+                    if (!pipActive) {
+                        AppNavHost(navController, deepLinkNoteId = pendingNote.value) {
+                            pendingNote.value = null
+                        }
                     }
                     // 记住当前路由：展开小窗时要判断"是不是已经在这个作品的详情页"，
                     // 是就不导航（导航会新建记录 → 整页重新加载）。
@@ -587,47 +591,40 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
                     }
                     // `pipActive` 已在上面（NavHost 之前）收集，这里复用同一个值
                     if (pipActive) {
-                        // 不透明黑底 + 视频铺满：把底下仍在组合的整页 UI 完全盖住，
-                        // 小窗窗口里就只剩视频（配合上面"保留组合"的做法）。
-                        Box(
-                            Modifier
-                                .fillMaxSize()
-                                .background(Color.Black)
-                        ) {
-                            pipSession?.let { s ->
-                                // 小窗里也要有卡死兜底：详情页那套看门狗随它的组合一起不可见时，
-                                // 小窗里卡住就没人救了（审计 F13）。这个 effect 不画 UI，纯恢复逻辑。
-                                com.thirdparty.xhs.ui.components.RecoverStuckPlayback(s.player)
-                                // 小窗里按**视频自己的比例**画（信箱式留边），不要拉满整窗：
-                                // 窗口比例是系统按 PiP 参数给的，两者不一定相等（尤其横屏视频
-                                // 切小窗时窗口可能仍是竖的），拉满就是用户看到的"画面被拉伸"。
-                                var pipAspect by androidx.compose.runtime.remember(s.player) {
-                                    androidx.compose.runtime.mutableFloatStateOf(
-                                        com.thirdparty.xhs.ui.components.PipController
-                                            .videoAspectOf(s.player.videoSize)
-                                    )
-                                }
-                                androidx.compose.runtime.DisposableEffect(s.player) {
-                                    val l = object : androidx.media3.common.Player.Listener {
-                                        override fun onVideoSizeChanged(
-                                            videoSize: androidx.media3.common.VideoSize
-                                        ) {
-                                            pipAspect =
-                                                com.thirdparty.xhs.ui.components.PipController
-                                                    .videoAspectOf(videoSize)
-                                        }
-                                    }
-                                    s.player.addListener(l)
-                                    pipAspect = com.thirdparty.xhs.ui.components.PipController
+                        pipSession?.let { s ->
+                            // 小窗里也要有卡死兜底：详情页那套看门狗随它的组合一起被摘掉了，
+                            // 小窗里卡住就没人救了（审计 F13）。这个 effect 不画 UI，纯恢复逻辑。
+                            com.thirdparty.xhs.ui.components.RecoverStuckPlayback(s.player)
+                            // 小窗里按**视频自己的比例**画（信箱式留边），不要拉满整窗：
+                            // 窗口比例是系统按 PiP 参数给的，两者不一定相等（尤其横屏视频
+                            // 切小窗时窗口可能仍是竖的），拉满就是用户看到的"画面被拉伸"。
+                            // 小窗期间导航树是摘掉的，所以这里**只有这一块** surface，
+                            // 不会和详情页抢播放器的画面（见上面 NavHost 处的说明）。
+                            var pipAspect by androidx.compose.runtime.remember(s.player) {
+                                androidx.compose.runtime.mutableFloatStateOf(
+                                    com.thirdparty.xhs.ui.components.PipController
                                         .videoAspectOf(s.player.videoSize)
-                                    onDispose { s.player.removeListener(l) }
-                                }
-                                com.thirdparty.xhs.ui.components.VideoSurface(
-                                    player = s.player,
-                                    videoAspect = pipAspect.takeIf { it > 0f },
-                                    modifier = Modifier.fillMaxSize()
                                 )
                             }
+                            androidx.compose.runtime.DisposableEffect(s.player) {
+                                val l = object : androidx.media3.common.Player.Listener {
+                                    override fun onVideoSizeChanged(
+                                        videoSize: androidx.media3.common.VideoSize
+                                    ) {
+                                        pipAspect = com.thirdparty.xhs.ui.components.PipController
+                                            .videoAspectOf(videoSize)
+                                    }
+                                }
+                                s.player.addListener(l)
+                                pipAspect = com.thirdparty.xhs.ui.components.PipController
+                                    .videoAspectOf(s.player.videoSize)
+                                onDispose { s.player.removeListener(l) }
+                            }
+                            com.thirdparty.xhs.ui.components.VideoSurface(
+                                player = s.player,
+                                videoAspect = pipAspect.takeIf { it > 0f },
+                                modifier = Modifier.fillMaxSize()
+                            )
                         }
                     }
                 }
