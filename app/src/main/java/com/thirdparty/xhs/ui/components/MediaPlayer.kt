@@ -486,6 +486,8 @@ private fun AutoHideController(
                     if (visible) interaction++
                 },
                 onDoubleTap = {
+                    // 双击暂停/继续：轻点反馈（用户反馈这里没有触感）
+                    haptics.tick()
                     if (player.isPlaying) player.pause() else player.play()
                     visible = true
                     interaction++

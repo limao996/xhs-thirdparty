@@ -550,6 +550,18 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 ---
 
+### 阶段二十二 · 检查更新按钮触感、播放器双击触感、小窗关闭后不再后台出声
+
+| # | 反馈 | 改动 | 证据 |
+| --- | --- | --- | --- |
+| 1 | 检查更新界面的「检查更新」按钮缺少触感 | `UpdateScreen` 接上触感：底部检查按钮（`检查更新` / `重新检查`）、`NewerBanner` 的「打开下载页 / 更新说明」、更新说明对话框的「打开下载页 / 关闭」 | 实机：点「重新检查」→ 触感记录 `16:44:19.273 TICK`（点击时刻 16:44:19，同一秒） |
+| 2 | 详情页视频播放器双击暂停缺少触感 | `MediaPlayer` 视频画面的 `onDoubleTap` 分支补 `haptics.tick()`（原来只切播放状态） | 实机（视频作品 2010）：进详情 `dumpsys audio` 为 `started=1 paused=0`，双击后变 `started=0 paused=1`，同时新增触感记录 `16:41:30.117 TICK` |
+| 3 | 小窗没有暂停时，关闭后仍在后台播放 | 之前只在 `onDestroy` 收尾，但**关闭小窗时系统不保证销毁 Activity**（实测只走 `onStop`），看不见的 ExoPlayer 于是继续出声。现在 `onStop` 也收一次尾：`!isChangingConfigurations && !isInPictureInPictureMode && !PipController.inPip.value && hasSession()` → 清掉「待打开的详情」并 `closeAndRelease()`；展开回详情页不走 `onStop`，不会误杀 | 代码路径 + 三条守卫；「关闭小窗」是系统覆盖层、不吃注入点击（GOTCHAS H5），**未做实机取证**（如实记） |
+
+---
+
+### 阶段十四 · 详情页去掉队列入口
+
 - 详情页不再渲染稍后观看浮动按钮（`DetailScreen` 的 `floatingActionButton` 清空，
   `onOpenWatchLater` 参数一并删除，`AppNavHost` 不再传）。入口只留：推荐页信息条、发现页 `CornerFabStack`、
   搜索 / 作者页 / 收藏 / 最近浏览的浮动按钮。

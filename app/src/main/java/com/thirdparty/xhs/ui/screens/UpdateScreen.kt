@@ -45,6 +45,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.thirdparty.xhs.net.UpdateChecker
 import com.thirdparty.xhs.ui.components.ListSection
 import com.thirdparty.xhs.ui.components.openUrl
+import com.thirdparty.xhs.ui.components.rememberHaptics
 import com.thirdparty.xhs.ui.theme.Corners
 import com.thirdparty.xhs.ui.theme.Spacing
 import com.thirdparty.xhs.ui.viewmodel.UpdateUiState
@@ -65,6 +66,8 @@ fun UpdateScreen(
     val state by viewModel.ui.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showNotes by remember { mutableStateOf(false) }
+    // 检查更新页各组件的点击反馈（用户反馈「检查更新」按钮没有触感）
+    val haptics = com.thirdparty.xhs.ui.components.rememberHaptics()
 
     // 只会真正触发一次：ViewModel 记住 entered
     LaunchedEffect(Unit) { viewModel.onEnter() }
@@ -123,7 +126,10 @@ fun UpdateScreen(
             }
 
             Button(
-                onClick = { viewModel.check() },
+                onClick = {
+                    haptics.tick()
+                    viewModel.check()
+                },
                 enabled = !state.checking,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.m)
             ) {
@@ -147,12 +153,14 @@ fun UpdateScreen(
             title = { Text("v${newer.version} 更新说明") },
             text = { Text(newer.notes) },
             confirmButton = {
-                TextButton(onClick = {
+                TextButton(onClick = haptics.click {
                     showNotes = false
                     openUrl(context, newer.apkUrl ?: newer.pageUrl)
                 }) { Text("打开下载页") }
             },
-            dismissButton = { TextButton(onClick = { showNotes = false }) { Text("关闭") } }
+            dismissButton = {
+                TextButton(onClick = haptics.click { showNotes = false }) { Text("关闭") }
+            }
         )
     }
 }
@@ -169,14 +177,14 @@ private fun NewerBanner(version: String, onOpenPage: () -> Unit, onShowNotes: ((
             Text("发现新版本 v$version", style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(Spacing.s))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Button(onClick = onOpenPage) {
+                Button(onClick = rememberHaptics().click(onOpenPage)) {
                     Icon(Icons.Filled.Download, null, Modifier.size(18.dp))
                     Spacer(Modifier.size(Spacing.s))
                     Text("打开下载页")
                 }
                 if (onShowNotes != null) {
                     Spacer(Modifier.size(Spacing.s))
-                    TextButton(onClick = onShowNotes) { Text("更新说明") }
+                    TextButton(onClick = rememberHaptics().click(onShowNotes)) { Text("更新说明") }
                 }
             }
         }

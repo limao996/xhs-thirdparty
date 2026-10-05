@@ -156,6 +156,18 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
     override fun onStop() {
         pipReceiver?.let { r -> runCatching { unregisterReceiver(r) } }
         pipReceiver = null
+        // 小窗被「关闭」时系统**不保证**销毁 Activity：实测只是 onStop，
+        // 于是那个看不见的 ExoPlayer 继续出声（用户反馈）。展开回详情页不会走 onStop
+        // （同一 Activity 回到前台），所以这里能安全区分：
+        //   不在小窗 + 还有会话 = 小窗已经结束且没人接手 → 自己收尾。
+        val pip = com.thirdparty.xhs.ui.components.PipController
+        if (!isChangingConfigurations && !isInPictureInPictureMode && !pip.inPip.value &&
+            pip.hasSession()
+        ) {
+            // 顺带把"待打开的作品"清掉：小窗是被关掉的，不该在下次回到前台时把人拽进详情页
+            pip.pendingDetailId.value = null
+            pip.closeAndRelease()
+        }
         super.onStop()
     }
 

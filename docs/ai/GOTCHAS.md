@@ -325,7 +325,27 @@
 - 判据：`createTime` 落在"我刚才操作的那几秒"内，并且 `opPkg` 是本应用，就算通过。
 - 反例：把"记录条数有没有变大"当判据 —— 见 I2。
 
----**I1 · `uiautomator dump` 失败时会读到上一次的旧文件**
+---
+
+**H12 · 画中画"关闭"不保证销毁 Activity：收尾要挂在 `onStop`**
+- 触发：只在 `onDestroy()` 里 `PipController.closeAndRelease()`，以为"关掉小窗 = Activity 销毁"。
+- 症状：用户没在小窗里按暂停就关掉小窗，声音继续放（用户实测反馈）。
+- 原因：关闭小窗时系统**不保证**立刻销毁 Activity（实测只回调 `onStop`），播放器于是留了下来。
+- 正确做法：`onStop()` 里补一次收尾，判据三条一起看 ——
+  `!isChangingConfigurations && !isInPictureInPictureMode && !PipController.inPip.value && hasSession()`。
+  展开回详情页走的是"同一 Activity 回到前台"，不会触发 `onStop`；进入小窗时 `PipController.start()`
+  已经把 `inPip` 置 true，所以也不会误杀。
+- 顺带：这一路要把 `pendingDetailId` 清掉，否则小窗被关掉后下次回到前台还会把人拽进那个详情页。
+
+**H13 · 推荐页（全屏视频）上 `uiautomator dump` 常返回空串，导航要用固定坐标兜底**
+- 症状：`DumpUi` 返回空串 → 脚本里所有"按文本找控件"都失败（`TapText` 返回 False），
+  看起来像应用没响应，其实只是取不到 UI 树。
+- 兜底：底部三个 tab 的坐标是固定的（本机 1080×2400、手势导航：`y ≈ 2220`，
+  推荐/发现/我的三个中心 `x ≈ 180 / 540 / 900`）。先 `input tap 540 1200` 让沉浸式标题栏与底部导航出现
+  （有时要连点两次），再按坐标切 tab；切到普通页面后 dump 就正常了。
+- 教训：脚本报"控件找不到"时，先确认 dump 是不是空的，再怀疑应用（同 I1）。
+
+**I1 · `uiautomator dump` 失败时会读到上一次的旧文件**
 - 触发：脚本里 `uiautomator dump --compressed /sdcard/d.xml; cat /sdcard/d.xml`。
 - 症状（本次实测踩了十几分钟）：dump 失败会打印
   `ERROR: null root node returned by UiTestAutomationBridge` 或
