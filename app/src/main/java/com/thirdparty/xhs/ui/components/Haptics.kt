@@ -1,6 +1,7 @@
 package com.thirdparty.xhs.ui.components
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.runtime.remember
@@ -101,16 +102,31 @@ fun rememberHaptics(): Haptics {
  *
  * 用 `settledPage` 而不是 `currentPage`：后者在拖动过程中跨过半页就会变，反馈会"提前"响；
  * `settledPage` 是真正停下来那一页，手感更实。首帧不算翻页（那是恢复现场）。
+ *
+ * **只对"用户真的拖了这一个分页器"给反馈**：图文里嵌入画廊与全屏查看器是同一个页码的两处视图，
+ * 在查看器里滑一页会回调上层把画廊**程序化**滚到同一页 —— 那个也走 `settledPage`，
+ * 于是用户听到/感到两次（"切换图片触感触发两次"）。程序化滚动不会产生 `DragInteraction`，
+ * 所以这里是判据。
  */
 @Composable
 fun PagerPageHaptics(state: androidx.compose.foundation.pager.PagerState) {
     val haptics = rememberHaptics()
+    // 由本分页器自己的拖动事件置位，落定时消费掉；程序化滚动不会置位
+    val fromUserDrag = remember(state) { java.util.concurrent.atomic.AtomicBoolean(false) }
+    LaunchedEffect(state) {
+        state.interactionSource.interactions.collect { interaction ->
+            if (interaction is androidx.compose.foundation.interaction.DragInteraction.Start) {
+                fromUserDrag.set(true)
+            }
+        }
+    }
     androidx.compose.runtime.LaunchedEffect(state) {
         var first = true
         androidx.compose.runtime.snapshotFlow { state.settledPage }
             .distinctUntilChanged()
             .collect {
-                if (first) first = false else haptics.segment()
+                val user = fromUserDrag.getAndSet(false)
+                if (first) first = false else if (user) haptics.segment()
             }
     }
 }

@@ -206,8 +206,11 @@ fun DetailScreen(
             if (params != null) {
                 runCatching { act.enterPictureInPictureMode(params) }
             }
-            // 弹出小窗即退出详情页；播放器已经在小窗手里，不再属于本页
-            onBack()
+            // **不要**在这里退出详情页（原来调 onBack()）。退出去会把这条导航记录弹掉，
+            // 于是：①用户关掉小窗后详情页也"没了"；②展开时只能重新 navigate 一条新记录
+            // ——新 ViewModel = 整页重新加载（用户反馈）。现在详情页留在返回栈里，
+            // 小窗期间只是**不参与组合**（MainActivity 里 `if (!pipActive)` 跳过 NavHost），
+            // ViewModel 与页面状态原样保留；展开时把播放器交回去就直接接着看。
         }
     }
     // A handed-over player arrives wearing the FEED's settings — it loops there, and

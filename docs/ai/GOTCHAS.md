@@ -351,12 +351,21 @@
     `PauseWhenNotStarted` 无条件 `pause()` → 小窗里停在暂停。
     → 判据：`if (PipController.isHandedOver(player)) return` —— 交给小窗的播放器，生命周期事件不许动它。
   - 交接后必须**显式接着** `playIntent`（`PipController.start(..., playIntent)`）。
-- 关小窗：
+- **不要**在进小窗时 `onBack()` 退出详情页：那条导航记录一弹掉，用户关掉小窗后详情页也"没了"，
+  展开时只能 `navigate` 一条新记录 → 新 ViewModel = **整页重新加载**。
+  正确做法：小窗期间让导航内容**不参与组合**（`if (!pipActive) NavHost(...)`），记录与状态都留着。
+- 出小窗（展开 vs 关闭）：
   - **不要**用 `isInPictureInPictureMode` 当"还在小窗里"的判据：关闭时它可能仍是 true，
     于是 `onStop` 里的释放判据永远不成立 → 后台一直出声（用户报过两次）。
-  - 正确判据：**"有会话 + 走到 `onStop`"**（小窗里的 Activity 是可见的，不会 stop）。
-    另加两条护栏：进小窗 2s 内的 `onStop` 不算（个别设备瞬停），
-    以及 `onPictureInPictureModeChanged(false)` 排一个 500ms 宽限任务区分"展开（会 onResume）vs 关闭"。
+  - 正确判据：**"有会话 + 走到 `onStop`"**；收到退出回调后又走到 `onStop` 用 300ms 确认窗口兜底。
+  - 宽限窗口要够长：实测 `onPictureInPictureModeChanged(false)` → `onResume` **1.15 秒**，
+    500ms 的窗口会把展开误判成关闭（播放器被释放 → 详情页只能重建）。现在用 **2.5 秒**。
+  - 顺序必须是 **先交接再恢复**：`handBackForDetail()` → `PlaybackHandoff.givePlayer()` →
+    最后 `inPip = false`。反过来会让详情页提前重组、自建播放器，小窗那个变孤儿（背景音）。
+  - `PipController.isHandedOver` 要**同时**认 `PlaybackHandoff` 的持有：`handBackForDetail()` 会清掉
+    session，若只看 session，展开瞬间那次 `ON_STOP` 会把刚交回去的播放器暂停掉。
+  - 判"是不是已经在详情页"时注意 `destination.route` 是**模式串** `detail/{noteId}`，
+    要和 `Routes.detail(id)` 比对必须把 `arguments["noteId"]` 拼回去。
 - 比例：`videoSize` 要按 `unappliedRotationDegrees` 交换宽高再算比例（手机横拍片常是"横向帧 + 旋转 90°"），
   并且夹到 PiP 允许的 `[1/2.39, 2.39]`；尺寸变化要重设参数；画面按比例信箱式画，别拉满整窗。
 
@@ -365,6 +374,13 @@
 - 根因模式：布局切换会 dispose 掉上一个组合，而 dispose 里"顺手 pause 一下免得后台出声"就打在**共享**播放器上。
 - 规矩：`PauseWhenNotStarted(pauseOnDispose = ownsPlayer)`，并且判据在**事件发生时**求值
   （`if (pauseOnDispose && !PipController.isHandedOver(current))`），不要用构造时捕获的布尔值。
+
+**H16 · 同一页面的"两处视图共享一个页码"会让触感/回调发两次**
+- 表现：图文里在**全屏查看器**滑动切图，触感响两次（嵌入画廊 + 查看器各一次）。
+- 根因：查看器滑完回调上层把**嵌入画廊程序化**滚到同一页，而两处都用 `settledPage` 做判据；
+  程序化滚动同样会改变 `settledPage`。
+- 规矩：`PagerPageHaptics` 只对**本分页器自己的 `DragInteraction`** 置位的翻页给反馈
+  （程序化滚动不产生拖动事件）。任何"共享页码的两处视图"都要按这个模式区分"用户操作"与"程序化同步"。
 
 
 **I1 · `uiautomator dump` 失败时会读到上一次的旧文件**

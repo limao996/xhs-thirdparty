@@ -151,6 +151,14 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
     /** 进小窗的时刻：`onStop` 里用它跳过"刚进小窗那一下的瞬停" */
     private var pipEnteredAtMs = 0L
 
+    /** 收到过"退出小窗"回调（还没判定展开/关闭）；`onResume` 用它确认是展开 */
+    @Volatile
+    private var pipExitPending = false
+
+    /** 当前导航目的地的路由（展开时用来判断"是不是已经在这个作品的详情页"） */
+    @Volatile
+    private var currentRoute: String? = null
+
     override fun onStart() {
         super.onStart()
         pipReceiver = com.thirdparty.xhs.ui.components.PipController.registerReceiver(
@@ -173,28 +181,42 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
             android.util.Log.i(
                 "XhsPip",
                 "onStop pip=${isInPictureInPictureMode} session=${pip.hasSession()} " +
-                    "justEntered=$justEntered exitCheck=${pipExitCheck?.isActive}"
+                    "justEntered=$justEntered exitPending=$pipExitPending exitCheck=${pipExitCheck?.isActive}"
             )
         }
         // 「有会话 + 走到 onStop」= 小窗已经没了：小窗里的 Activity 是**可见**的，不会 stop。
         //
         // 不再用 `isInPictureInPictureMode` 作判据：关闭小窗时这个值可能还停在 true，
         // 于是旧判据永远不成立、播放器永远不释放 —— 这正是用户两次反馈"关闭后还在后台放"的原因。
-        // 三个例外：配置变更（转屏）、刚进小窗的过渡期（个别设备会瞬停一下）、
-        // 退出小窗的宽限任务还在跑（那是"展开"，由它和详情页交接处理）。
-        if (!isChangingConfigurations && !justEntered && pipExitCheck?.isActive != true &&
-            pip.hasSession()
-        ) {
-            // 顺带把"待打开的作品"清掉：小窗是被关掉的，不该在下次回到前台时把人拽进详情页
-            pip.pendingDetailId.value = null
-            pip.closeAndRelease()
+        //
+        // 三种情况：
+        //   ① 配置变更 / 刚进小窗的过渡期 → 不动；
+        //   ② **已经收到退出回调又走到 onStop** → 几乎肯定是被关掉了，但为了不和"展开过程中
+        //      系统先给一次 onStop"打架，这里只是把判定窗口缩短（onResume 一到就取消）；
+        //   ③ 其余（没有退出回调，直接 stop）= 小窗没了 → 立刻收尾。
+        if (!isChangingConfigurations && !justEntered && pip.hasSession()) {
+            if (pipExitPending) {
+                schedulePipExitCheck(PIP_STOP_CONFIRM_MS)
+            } else if (pipExitCheck?.isActive != true) {
+                // 顺带把"待打开的作品"清掉：小窗是被关掉的，不该在下次回到前台时把人拽进详情页
+                pip.pendingDetailId.value = null
+                pip.closeAndRelease()
+            }
         }
         super.onStop()
     }
 
     override fun onResume() {
         super.onResume()
-        // 回到前台 = 展开（不是关闭）：取消"退出小窗后的收尾定时器"
+        if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+            android.util.Log.i(
+                "XhsPip",
+                "onResume pending=$pipExitPending session=" +
+                    com.thirdparty.xhs.ui.components.PipController.hasSession()
+            )
+        }
+        // 回到前台 = 展开（不是关闭）：先把播放器交回详情页，再取消收尾任务
+        if (pipExitPending) returnFromPipToDetail()
         pipExitCheck?.cancel()
         pipExitCheck = null
     }
@@ -240,23 +262,83 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
             // 退出小窗的**同一个回调**既可能是"展开"、也可能是"关闭"，这里不能立刻下结论：
             //   展开 → 同一 Activity 回到前台，会走 onResume；
             //   关闭 → 不回来（随后 onStop/onDestroy，或者什么都不来）。
-            // 所以先按"展开"处理（把详情页排上队），再给一小段时间；没回到前台就按"关闭"收尾。
-            com.thirdparty.xhs.ui.components.PipController.session.value?.let { s ->
-                com.thirdparty.xhs.ui.components.PipController.pendingDetailId.value = s.noteId
+            // 所以先挂上"待定"标记 + 宽限任务，等 onResume 或超时再决定。
+            //
+            // 注意**不在这里**就把 `inPip` 置 false / 排 pendingDetailId：那会让导航内容提前
+            // 重新组合，而播放器还没交回去 —— 详情页会新建一个播放器，小窗那个就变成没人管的
+            // 后台音频。交回顺序必须是：先 handBack + givePlayer，再让导航内容回来。
+            pipExitPending = true
+            schedulePipExitCheck(PIP_EXIT_GRACE_MS)
+        }
+    }
+
+    /**
+     * 退出小窗后的"展开还是关闭"判定：等一会儿，看 Activity 回到前台没有。
+     *
+     * 窗口不能太短：实测（模拟器 API 34）从 `onPictureInPictureModeChanged(false)` 到
+     * `onResume` 要 **1.15 秒**；500ms 的窗口会把展开误判成关闭 —— 播放器被释放，详情页只剩
+     * 重建（用户反馈"按全屏回到详情页，详情页被重新加载"）。
+     */
+    private fun schedulePipExitCheck(delayMs: Long) {
+        pipExitCheck?.cancel()
+        pipExitCheck = lifecycleScope.launch {
+            kotlinx.coroutines.delay(delayMs)
+            val pip = com.thirdparty.xhs.ui.components.PipController
+            val resumed = lifecycle.currentState.isAtLeast(
+                androidx.lifecycle.Lifecycle.State.RESUMED
+            )
+            if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+                android.util.Log.i(
+                    "XhsPip",
+                    "宽限任务到期(${delayMs}ms) resumed=$resumed session=${pip.hasSession()}"
+                )
             }
-            pipExitCheck?.cancel()
-            pipExitCheck = lifecycleScope.launch {
-                kotlinx.coroutines.delay(PIP_EXIT_GRACE_MS)
-                val pip = com.thirdparty.xhs.ui.components.PipController
-                if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
-                    // 展开：播放器已经交回详情页（handBackForDetail 会把 session 清掉）
-                    return@launch
-                }
-                if (pip.hasSession()) {
-                    pip.pendingDetailId.value = null
-                    pip.closeAndRelease()
-                }
+            if (resumed) {
+                // 展开：回到详情页（同一导航记录，状态不丢）
+                returnFromPipToDetail()
+                return@launch
             }
+            if (pip.hasSession()) {
+                if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+                    android.util.Log.i("XhsPip", "判定为关闭 → closeAndRelease")
+                }
+                pip.pendingDetailId.value = null
+                pip.closeAndRelease()
+            }
+            pipExitPending = false
+        }
+    }
+
+    /**
+     * 从「展开」回到详情页。
+     *
+     * 必须在导航内容重新组合**之前**完成播放器交接，否则详情页会自建播放器、小窗那个就成了
+     * 没人管的背景音。所以顺序是：`handBackForDetail()` → `PlaybackHandoff.givePlayer()` →
+     * 最后才把 `inPip` 置 false（导航内容这时才回来，并从 handoff 认领同一个播放器）。
+     *
+     * 只有在"当前不在这个作品的详情页"时才需要导航 —— 进小窗时不再退出详情页，所以正常路径下
+     * 那条记录还在（重新 navigate 会新建一条记录 = 整页重新加载，用户反馈的正是这个）。
+     */
+    private fun returnFromPipToDetail() {
+        val pip = com.thirdparty.xhs.ui.components.PipController
+        if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+            android.util.Log.i("XhsPip", "returnFromPipToDetail 入口 session=${pip.hasSession()}")
+        }
+        pipExitPending = false
+        pipExitCheck?.cancel()
+        pipExitCheck = null
+        val s = pip.handBackForDetail() ?: run {
+            pip.inPip.value = false
+            return
+        }
+        com.thirdparty.xhs.ui.components.PlaybackHandoff.givePlayer(s.noteId, s.player)
+        val route = currentRoute
+        if (route != com.thirdparty.xhs.navigation.Routes.detail(s.noteId)) {
+            pip.pendingDetailId.value = s.noteId
+        }
+        pip.inPip.value = false
+        if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+            android.util.Log.i("XhsPip", "returnFromPipToDetail route=$route note=${s.noteId}")
         }
     }
 
@@ -341,8 +423,33 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
                     androidx.compose.runtime.LaunchedEffect(lockEpoch) {
                         if (lockEpoch > 0) locked = biometricLockEnabled()
                     }
-                    AppNavHost(navController, deepLinkNoteId = pendingNote.value) {
-                        pendingNote.value = null
+                    // 小窗里只画视频：系统把整个 Activity 缩成小窗，其余 chrome 一律不要。
+                    // 注意这里是**跳过**导航内容的组合（不是盖在上面）——所以详情页的
+                    // ViewModel 留在返回栈里、组合被销毁，展开时重建但状态还在（不再重新加载）。
+                    val pipActive by
+                        com.thirdparty.xhs.ui.components.PipController.inPip
+                            .collectAsStateWithLifecycle()
+                    if (!pipActive) {
+                        AppNavHost(navController, deepLinkNoteId = pendingNote.value) {
+                            pendingNote.value = null
+                        }
+                    }
+                    // 记住当前路由：展开小窗时要判断"是不是已经在这个作品的详情页"，
+                    // 是就不导航（导航会新建记录 → 整页重新加载）。
+                    // 注意 `destination.route` 是**模式串**（`detail/{noteId}`），必须把实参拼回去
+                    // 才能和 `Routes.detail(id)` 比 —— 只比模式串会永远不相等。
+                    androidx.compose.runtime.LaunchedEffect(navController) {
+                        navController.currentBackStackEntryFlow.collect { entry ->
+                            val pattern = entry.destination.route
+                            val arg = entry.arguments?.getString("noteId")?.toLongOrNull()
+                            currentRoute = if (pattern == com.thirdparty.xhs.navigation.Routes.DETAIL &&
+                                arg != null
+                            ) {
+                                com.thirdparty.xhs.navigation.Routes.detail(arg)
+                            } else {
+                                pattern
+                            }
+                        }
                     }
                     if (locked) {
                         // swallow the back gesture: the cover must not be dismissible
@@ -421,9 +528,7 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
                     androidx.compose.runtime.LaunchedEffect(pipParamsVersion) {
                         refreshPipParams()
                     }
-                    val pipActive by
-                        com.thirdparty.xhs.ui.components.PipController.inPip
-                            .collectAsStateWithLifecycle()
+                    // `pipActive` 已在上面（NavHost 之前）收集，这里复用同一个值
                     if (pipActive) {
                         pipSession?.let { s ->
                             // 小窗里按**视频自己的比例**画（信箱式留边），不要拉满整窗：
@@ -465,8 +570,11 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
         /** last share link already offered, so the same clipboard does not re-prompt */
         const val KEY_LAST_CLIP = "last_clipboard_note"
 
-        /** 退出小窗后等多久判断"展开还是关闭"；展开会在这之前走 onResume */
-        const val PIP_EXIT_GRACE_MS = 500L
+        /** 退出小窗后等多久判断"展开还是关闭"（实测展开到 onResume 要 1.15s） */
+        const val PIP_EXIT_GRACE_MS = 2_500L
+
+        /** 已经收到退出回调、又走到 onStop 时的确认窗口（几乎肯定是被关掉了） */
+        const val PIP_STOP_CONFIRM_MS = 300L
 
         /** 进小窗后的这段时间内，`onStop` 不当作"小窗被关掉"（个别设备会瞬停一下） */
         const val PIP_ENTRY_GRACE_MS = 2_000L

@@ -98,8 +98,17 @@ object PipController {
 
     fun hasSession(): Boolean = _session.value != null
 
-    /** 播放器已经交给小窗：详情页销毁/生命周期停止时都不许动它。 */
-    fun isHandedOver(player: Player?): Boolean = _session.value?.player === player
+    /**
+     * 播放器归小窗、或者刚从小窗交回详情页（`PlaybackHandoff`）——两种情况都不许
+     * 生命周期/销毁逻辑去 pause 或 release 它。
+     *
+     * 后一种情况是必需的：展开小窗时 `handBackForDetail()` 会把会话清掉，此时若只看本对象，
+     * 判定就变成"没人管"了 —— 展开那一瞬间的 ON_STOP 会把刚交回去的播放器暂停掉
+     * （实测：`PauseWhenNotStarted ON_STOP handedOver=false` 紧跟在 handback 之后）。
+     */
+    fun isHandedOver(player: Player?): Boolean =
+        _session.value?.player === player ||
+            (player is ExoPlayer && PlaybackHandoff.isHandedOver(player))
 
     /** 展开回详情页：把播放器交回给详情页（详情页通过 PlaybackHandoff 认领）。 */
     fun handBackForDetail(): Session? {

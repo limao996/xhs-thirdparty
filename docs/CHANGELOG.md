@@ -605,6 +605,16 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 ---
 
+### 阶段二十五 · 图文翻页触感响两次、小窗退出把小窗/详情页搞乱
+
+| # | 现象 | 根因 | 改动 | 证据 |
+| --- | --- | --- | --- | --- |
+| 1 | 图文**全屏**切换图片，触感触发两次 | 嵌入画廊与全屏查看器是**同一个页码的两处视图**：查看器滑完回调上层，把画廊**程序化**滚到同一页；两处都用 `settledPage` 判定翻页，于是各响一次 | `PagerPageHaptics` 只对**本分页器自己的 `DragInteraction`** 置位的翻页给反馈（程序化滚动不产生拖动事件） | 实机：一次滑动后仅新增 1 条触感记录（`createTime 17:56:46.947`，此前是两条） |
+| 2 | 关闭小窗后**详情页也没了**；按全屏回到详情页，**详情页重新加载** | 进小窗时调了 `onBack()`，把详情页那条导航记录弹掉了；展开时只能 `navigate` 一条**新**记录 → 新 ViewModel = 整页重新加载 | 进小窗**不再退出详情页**：小窗期间让导航内容整体不参与组合（`if (!pipActive) AppNavHost(...)`），返回栈记录与 ViewModel 原样保留 | 代码 + 实机（展开后页面仍是原详情页、内容直接可见） |
+| 3 | （上条的第二个坑）展开时播放器被释放、详情页自建新播放器 | ①退出回调后 **500ms** 的判定窗口太短：实测 `pipModeChanged(false)` → `onResume` 要 **1.15s**，于是展开被误判成"关闭"→ 释放；②`handBackForDetail()` 清掉 session 后 `isHandedOver` 立刻返回 false，展开瞬间的 `ON_STOP` 又把刚交回去的播放器暂停/释放；③展开时比对的是路由**模式串** `detail/{noteId}`，与 `detail/2010` 永不相等 → 仍然新建记录 | ①判定窗口 500ms → **2500ms**（收到退出回调又走 `onStop` 时用 300ms 确认窗口兜底）；②`PipController.isHandedOver` **同时**认 `PlaybackHandoff` 的持有；③路由比对前把 `arguments["noteId"]` 拼回具体路由；④交回顺序固定为 `handBackForDetail()` → `PlaybackHandoff.givePlayer()` → **最后**才 `inPip=false` | 实机日志：`returnFromPipToDetail route=detail/2010 note=2010`（**未导航**）；展开后只有 1 条在播音轨、`DetailScreen dispose SKIP (handedOver)`、无 `RELEASE`；`ON_STOP handedOver=false` 的误暂停消失 |
+
+
+
 ### 阶段十四 · 详情页去掉队列入口
 
 - 详情页不再渲染稍后观看浮动按钮（`DetailScreen` 的 `floatingActionButton` 清空，
