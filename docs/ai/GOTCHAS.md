@@ -371,6 +371,10 @@
     又交给小窗的同一台（日志：`feed active=false handedOver=false` → 小窗里停住）。
     → 信息流所有"停播"分支（`active=false`、`inPip`、dispose）都必须先问归属，
     判据统一用 `PipController.isHandedOver(p)`（它同时认 `PlaybackHandoff` 的持有）。
+- **关掉小窗要交出进度**：`closeAndRelease()` 会销毁那台播放器，详情页会重建一个新的 ——
+  不 `PlaybackHandoff.stash(noteId, currentPosition, playWhenReady)` 的话，回到详情页就是 **0:00**
+  （用户反馈）。这条与"信息流 → 详情页"用的是同一个单槽通道：feed 的 stash 在详情页 compose 时
+  立刻被消费清空，所以小窗收尾再 stash 不会互相覆盖。
 - 比例：`videoSize` 要按 `unappliedRotationDegrees` 交换宽高再算比例（手机横拍片常是"横向帧 + 旋转 90°"），
   并且夹到 PiP 允许的 `[1/2.39, 2.39]`；尺寸变化要重设参数；画面按比例信箱式画，别拉满整窗。
 

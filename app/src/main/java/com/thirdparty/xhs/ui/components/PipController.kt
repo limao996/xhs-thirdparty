@@ -119,14 +119,31 @@ object PipController {
         return s
     }
 
-    /** 用户关掉小窗（或 Activity 被销毁）：停止并销毁播放器。 */
+    /** 用户关掉小窗（或 Activity 被销毁）：把进度交出去，然后停止并销毁播放器。 */
     fun closeAndRelease() {
         detachListener()
-        _session.value?.player?.let { p ->
+        _session.value?.let { s ->
+            // **关掉小窗后详情页会重建播放器**（这一台马上要 release），如果不把进度交出去，
+            // 回到详情页就会从 0:00 开始（用户反馈）。这里复用与"信息流 → 详情页"同一套续播通道：
+            // `stash` 记下位置与播放意图，详情页 compose 时 `take(noteId)` 会 seek 回去。
             runCatching {
-                p.stop()
-                p.clearMediaItems()
-                p.release()
+                PlaybackHandoff.stash(
+                    s.noteId,
+                    s.player.currentPosition,
+                    s.player.playWhenReady
+                )
+            }
+            if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+                android.util.Log.i(
+                    "XhsPip",
+                    "closeAndRelease stash note=${s.noteId} pos=${s.player.currentPosition}" +
+                        " playing=${s.player.playWhenReady}"
+                )
+            }
+            runCatching {
+                s.player.stop()
+                s.player.clearMediaItems()
+                s.player.release()
             }
         }
         _session.value = null
@@ -152,6 +169,13 @@ object PipController {
         val builder = PictureInPictureParams.Builder()
         player?.let { p ->
             val aspect = videoAspectOf(p.videoSize)
+            if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+                android.util.Log.i(
+                    "XhsPip",
+                    "buildParams videoSize=${p.videoSize.width}x${p.videoSize.height}" +
+                        " rot=${p.videoSize.unappliedRotationDegrees} aspect=$aspect"
+                )
+            }
             if (aspect > 0f) {
                 // PiP 允许的比例是 [1/2.39, 2.39]，越界会被系统忽略（窗口就退回 Activity 比例）
                 val clamped = aspect.coerceIn(1f / MAX_PIP_RATIO, MAX_PIP_RATIO)

@@ -270,6 +270,12 @@ fun DetailScreen(
         if (inherited != null) return@LaunchedEffect
 
         val target = handoff?.positionMs?.takeIf { it > 0L } ?: resumeMs
+        if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+            android.util.Log.i(
+                "XhsPip",
+                "detail 续播 target=$target handoff=${handoff?.positionMs} resumeMs=$resumeMs"
+            )
+        }
         if (handoff?.playIntent == true) sharedPlayer.play()
 
         if (target > 0L) {

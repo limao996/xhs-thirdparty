@@ -623,6 +623,14 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 
 
+### 阶段二十七 · 关掉小窗回到详情页，视频从 0:00 重放
+
+| # | 现象 | 根因 | 改动 | 证据 |
+| --- | --- | --- | --- | --- |
+| 1 | 关闭小窗后回到详情页，视频**从开头**播放 | 关小窗会 `closeAndRelease()` 把那台播放器销毁，而详情页重建播放器时**没有任何进度来源**（`PlaybackHandoff` 只用于"信息流 → 详情页"那条路） | `PipController.closeAndRelease()` 在 release **之前**把进度与播放意图交给同一个续播通道：`PlaybackHandoff.stash(noteId, currentPosition, playWhenReady)`；详情页 compose 时原有的 `take(noteId)` 分支会 `seekTo` 回去并按原意图继续播 | 实机日志：`closeAndRelease stash note=2010 pos=34037 playing=true` → `detail 续播 target=34037 handoff=34037`（**精确续播 34.0 秒**），回到应用 `started=1`。复现手段：小窗播放 15 秒后息屏（Activity 走 `onStop`、会话仍在 = 与"系统关掉小窗"同一条收尾分支），再回到应用 |
+
+
+
 ### 阶段十四 · 详情页去掉队列入口
 
 - 详情页不再渲染稍后观看浮动按钮（`DetailScreen` 的 `floatingActionButton` 清空，
