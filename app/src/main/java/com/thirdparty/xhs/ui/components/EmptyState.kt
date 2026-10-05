@@ -66,7 +66,7 @@ fun EmptyState(
         }
         if (actionLabel != null && onAction != null) {
             Spacer(Modifier.height(Spacing.s))
-            TextButton(onClick = onAction) { Text(actionLabel) }
+            TextButton(onClick = rememberHaptics().click(onAction)) { Text(actionLabel) }
         }
     }
 }

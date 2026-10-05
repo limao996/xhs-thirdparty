@@ -61,7 +61,7 @@ fun AboutScreen(
             TopAppBar(
                 title = { Text("关于") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = haptics.click(onBack)) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回")
                     }
                 }

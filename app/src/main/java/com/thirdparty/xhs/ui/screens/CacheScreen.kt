@@ -80,7 +80,7 @@ fun CacheScreen(
             TopAppBar(
                 title = { Text("清除缓存") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = haptics.click(onBack)) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回")
                     }
                 }

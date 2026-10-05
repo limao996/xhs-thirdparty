@@ -1,6 +1,8 @@
 package com.thirdparty.xhs.ui.components
 
+import androidx.compose.foundation.clickable
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.runtime.remember
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -28,6 +30,23 @@ class Haptics(private val feedback: HapticFeedback) {
     fun segment() = feedback.performHapticFeedback(HapticFeedbackType.SegmentTick)
     fun confirm() = feedback.performHapticFeedback(HapticFeedbackType.Confirm)
     fun reject() = feedback.performHapticFeedback(HapticFeedbackType.Reject)
+
+    /**
+     * 包一层回调，省掉"每处 onClick 都手写 haptics.xxx()"的重复 —— 也正因为容易漏写，
+     * 用户反复反馈过"很多交互没有触感"。新代码一律用它：
+     *
+     * ```
+     * onClick = haptics.click { onOpenDetail(id) }        // 轻点
+     * onClick = haptics.confirmClick { viewModel.save() } // 确认
+     * ```
+     *
+     * 写成**成员函数**而不是扩展函数：这样调用方只要有 `haptics` 就能用，不必再 import。
+     */
+    fun click(block: () -> Unit): () -> Unit = { tick(); block() }
+
+    fun confirmClick(block: () -> Unit): () -> Unit = { confirm(); block() }
+
+    fun rejectClick(block: () -> Unit): () -> Unit = { reject(); block() }
 }
 
 @Composable
@@ -35,3 +54,10 @@ fun rememberHaptics(): Haptics {
     val feedback = LocalHapticFeedback.current
     return remember(feedback) { Haptics(feedback) }
 }
+
+/** `Modifier.clickable` 的带触感版本：新的可点区域直接用它（需 import）。 */
+fun Modifier.hapticClickable(
+    haptics: Haptics,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+): Modifier = this.clickable(enabled = enabled) { haptics.tick(); onClick() }

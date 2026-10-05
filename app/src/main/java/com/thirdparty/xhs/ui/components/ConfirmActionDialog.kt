@@ -26,15 +26,17 @@ fun ConfirmActionDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    // 确认类对话框统一在组件内部给触感：所有调用方一次覆盖（用户反复反馈漏加）
+    val haptics = rememberHaptics()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = { Text(text) },
         confirmButton = {
-            TextButton(onClick = onConfirm) { Text(confirmText) }
+            TextButton(onClick = haptics.confirmClick(onConfirm)) { Text(confirmText) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = haptics.click(onDismiss)) { Text("取消") }
         }
     )
 }

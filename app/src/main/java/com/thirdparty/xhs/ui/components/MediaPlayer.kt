@@ -624,7 +624,10 @@ private fun AutoHideController(
                                 }
                             },
                             confirmButton = {
-                                TextButton(onClick = { menuOpen = false }) { Text("关闭") }
+                                TextButton(onClick = {
+                                    haptics.tick()
+                                    menuOpen = false
+                                }) { Text("关闭") }
                             }
                         )
                     }
@@ -655,6 +658,7 @@ private fun AutoHideController(
                 BufferedSlider(
                     value = if (dragging) dragFraction else fraction,
                     buffered = bufferedFraction,
+                    haptics = haptics,
                     onValueChange = { f ->
                         dragging = true
                         dragFraction = f
@@ -729,8 +733,11 @@ private fun AutoHideController(
 /** 播放器菜单对话框里的一行（样式与作品长按对话框保持一致）。 */
 @Composable
 private fun PlayerMenuRow(label: String, highlighted: Boolean = false, onClick: () -> Unit) {
+    val haptics = rememberHaptics()
     Row(
-        Modifier.fillMaxWidth().clickable { onClick() }.padding(vertical = Spacing.m),
+        Modifier.fillMaxWidth()
+            .clickable { haptics.tick(); onClick() }
+            .padding(vertical = Spacing.m),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(

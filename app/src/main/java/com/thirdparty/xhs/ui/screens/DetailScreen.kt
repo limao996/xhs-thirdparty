@@ -358,7 +358,7 @@ fun DetailScreen(
                 TopAppBar(
                     title = { Text("内容详情") },
                     navigationIcon = {
-                        IconButton(onClick = onBack) {
+                        IconButton(onClick = haptics.click(onBack)) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回")
                         }
                     },
@@ -757,7 +757,10 @@ private fun DetailContent(
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     modifier = Modifier
                         .clip(Corners.small)
-                        .clickable { onOpenAuthor(author.userId) }
+                        .clickable {
+                            haptics.tick()
+                            onOpenAuthor(author.userId)
+                        }
                 )
                 HorizontalDivider()
             }
@@ -798,12 +801,20 @@ private fun DetailContent(
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.weight(1f)
                     )
-                    TextButton(onClick = { viewModel.fetchComments(reset = true) }) { Text("重试") }
+                    TextButton(onClick = {
+                        haptics.tick()
+                        viewModel.fetchComments(reset = true)
+                    }) { Text("重试") }
                 }
             } else if (state.comments.isEmpty()) {
                 Text("还没有评论", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             } else {
-                state.comments.forEach { c -> CommentRow(c) { openReplies = it } }
+                state.comments.forEach { c ->
+                    CommentRow(c) {
+                        haptics.tick()
+                        openReplies = it
+                    }
+                }
                 // Auto-load instead of a 「查看更多评论」 button: the list is paged and a
                 // tap per page is pure friction. Keyed on the SCROLL POSITION rather
                 // than on the state, so a failed page is not retried in a loop — it
@@ -863,6 +874,8 @@ private fun DetailContent(
 
 @Composable
 private fun CommentRow(c: CommentItem, onOpenReplies: (CommentItem) -> Unit) {
+    // 评论行与其"点击查看回复"都要有触感（用户点名二级评论）
+    val haptics = com.thirdparty.xhs.ui.components.rememberHaptics()
     Row(Modifier.padding(vertical = Spacing.s)) {
         XhsAvatar(url = c.headImg, contentDescription = c.userName,
             modifier = Modifier.size(AvatarSize.comment))
@@ -889,7 +902,10 @@ private fun CommentRow(c: CommentItem, onOpenReplies: (CommentItem) -> Unit) {
                 Surface(
                     shape = Corners.medium,
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    modifier = Modifier.fillMaxWidth().clickable { onOpenReplies(c) }
+                    modifier = Modifier.fillMaxWidth().clickable {
+                        haptics.tick()
+                        onOpenReplies(c)
+                    }
                 ) {
                     Column(Modifier.padding(Spacing.s)) {
                         c.replies.forEach { r -> ReplyRow(r) }
@@ -912,7 +928,10 @@ private fun CommentRow(c: CommentItem, onOpenReplies: (CommentItem) -> Unit) {
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier
                         .clip(Corners.small)
-                        .clickable { onOpenReplies(c) }
+                        .clickable {
+                            haptics.tick()
+                            onOpenReplies(c)
+                        }
                         .padding(vertical = Spacing.xs)
                 )
             }

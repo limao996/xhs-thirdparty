@@ -53,7 +53,7 @@ fun BiometricLockCover(onUnlock: () -> Unit) {
             textAlign = TextAlign.Center
         )
         Spacer(Modifier.height(Spacing.l))
-        Button(onClick = onUnlock) { Text("解锁") }
+        Button(onClick = rememberHaptics().click(onUnlock)) { Text("解锁") }
     }
 }
 

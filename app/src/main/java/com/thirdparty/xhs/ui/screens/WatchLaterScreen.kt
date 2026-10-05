@@ -20,7 +20,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.DeleteSweep
-import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -91,7 +92,7 @@ fun WatchLaterScreen(
             TopAppBar(
                 title = { Text("稍后观看") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = haptics.click(onBack)) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回")
                     }
                 },
@@ -125,20 +126,14 @@ fun WatchLaterScreen(
             return@Scaffold
         }
 
-        // ---- 拖动排序 --------------------------------------------------------
-        // 拖动期间**不改列表顺序**：只记「从哪一行开始拖」（dragFrom）、「手指移动了多少」
-        // （dragOffset）、「现在会落在第几行」（dragTarget），靠 translationY 让开位置，
-        // 松手才整段写回数据库。
+        // ---- 排序 ------------------------------------------------------------
+        // 只做**上移 / 下移一格**：一次点击 = 与相邻行交换，顺序立刻写回数据库。
         //
-        // 之前是"每越过半行就和相邻行换位"，那样只能一格一格动：换位会让这一行的**基准位置**
-        // 立刻跳一行，而手势的位移是在节点的局部坐标里累加的，基准一跳就正好把累加量抵消掉，
-        // 于是手指拖多远都停在第 1/第 2 格（用户实测：只能 1→0 或 1→2，不能 1→3）。
-        var dragFrom by remember { mutableIntStateOf(-1) }
-        var dragTarget by remember { mutableIntStateOf(-1) }
-        var dragOffset by remember { mutableFloatStateOf(0f) }
-        // 刚落库的顺序。落库后要等 Room 重新读出来（一次磁盘往返），这段时间里如果直接渲染
-        // 旧列表，被拖的那一行会先弹回旧位置、再跳到新位置 —— 就是用户看到的"松开后闪一下"。
-        // 所以先按这份顺序渲染，等库里读回来的顺序对上再撤掉。
+        // 曾经做过长按拖动（含边缘自动滚动、双指滚动、内容坐标补偿），实机反馈始终不稳定，
+        // 用户要求直接去掉 —— 排序按钮没有任何手势歧义，也不会和列表的滚动打架。
+        //
+        // `committed` 是"刚落库的顺序"：写库是异步的，等 Room 读回来之前如果按旧列表渲染，
+        // 被移动的那一行会先闪回原位再跳过去，所以先按这份顺序画，等库里对上再撤掉。
         var committed by remember { mutableStateOf<List<Long>?>(null) }
         val items = committed?.let { ids ->
             val byId = state.items.associateBy { it.noteId }
@@ -148,138 +143,36 @@ fun WatchLaterScreen(
             val want = committed ?: return@LaunchedEffect
             if (state.items.map { it.noteId } == want) committed = null
         }
-        val rowHeightPx = with(LocalDensity.current) { QueueRowHeight.toPx() }
-        val scrollState = rememberScrollState()
-        // 拖动全程只用一个坐标系：**列表内容坐标**（= 视口坐标 + 当前滚动量）。
-        // 这样"列表被滚动"和"手指移动"都只是同一个数在变，不需要到处补正：
-        //  - 手指在视口里的位置：viewIndex*rowH + 行内偏移 − scrollState.value
-        //  - 内容坐标：上面那个 + scrollState.value
-        // 于是既支持边缘自动滚动，也支持"一根手指按着拖、另一根手指滑屏幕"
-        // （后者由 verticalScroll 处理：它是被拖行的父节点，另一个指针的拖动归它）。
-        var pointerY by remember { mutableFloatStateOf(-1f) }
-        var grabDy by remember { mutableFloatStateOf(0f) }
-        var viewportH by remember { mutableIntStateOf(0) }
-        // 自动滚动循环里要读"最新"的行数/行高/起始行 —— LaunchedEffect(Unit) 只在首帧跑一次，
-        // 直接闭包捕获会一直用第一次的旧值
-        val liveItems by rememberUpdatedState(items)
-        val liveRowH by rememberUpdatedState(rowHeightPx)
-        val liveFrom by rememberUpdatedState(dragFrom)
-        // 边缘自动滚动的两个常量（密度只能在组合里读，所以先算好再进协程）
-        val edgePx = with(LocalDensity.current) { 110.dp.toPx() }
-        val stepPx = with(LocalDensity.current) { 18.dp.toPx() }
-        LaunchedEffect(Unit) {
-            while (true) {
-                withFrameNanos { }
-                if (liveFrom < 0 || pointerY < 0f || viewportH <= 0) continue
-                val dy = when {
-                    pointerY < edgePx -> -stepPx * (1f - pointerY / edgePx)
-                    pointerY > viewportH - edgePx ->
-                        stepPx * (1f - (viewportH - pointerY) / edgePx)
-                    else -> 0f
-                }
-                if (dy == 0f) continue
-                val before = scrollState.value
-                scrollState.scrollBy(dy)
-                val moved = (scrollState.value - before).toFloat()
-                if (moved != 0f) {
-                    // 列表滚了 moved，被拖的行要跟着挪同样的量才停在同一处
-                    dragOffset += moved
-                    dragTarget = (liveFrom + (dragOffset / liveRowH).roundToInt())
-                        .coerceIn(0, liveItems.lastIndex)
-                }
-            }
-        }
 
-        fun land() {
-            val from = dragFrom
-            val to = dragTarget
-            if (from >= 0 && to >= 0 && to != from) {
-                val ids = items.map { it.noteId }.toMutableList()
-                ids.add(to, ids.removeAt(from))
-                committed = ids
-                viewModel.setOrder(ids)
-                haptics.confirm()
-            }
-            dragFrom = -1
-            dragTarget = -1
-            dragOffset = 0f
+        fun move(from: Int, to: Int) {
+            if (from < 0 || to < 0 || from > items.lastIndex || to > items.lastIndex) return
+            val ids = items.map { it.noteId }.toMutableList()
+            ids.add(to, ids.removeAt(from))
+            committed = ids
+            viewModel.setOrder(ids)
+            haptics.confirm()
         }
 
         Column(
-            Modifier.fillMaxSize().padding(pad)
-                .onSizeChanged { viewportH = it.height }
-                .verticalScroll(scrollState)
+            Modifier.fillMaxSize().padding(pad).verticalScroll(rememberScrollState())
         ) {
             Text(
-                "长按拖动排序 · 拖到边缘会自动滚动",
+                "用右侧上下按钮调整顺序",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = Spacing.l, top = Spacing.s, bottom = Spacing.xs)
             )
             items.forEachIndexed { index, item ->
-                val isDragging = dragFrom == index
-                // 别的行给被拖的那一行让位：往下拖时中间的行整体上移一格，往上拖则相反
-                val shift = when {
-                    dragFrom < 0 -> 0f
-                    isDragging -> dragOffset
-                    index in (dragFrom + 1)..dragTarget -> -rowHeightPx
-                    index in dragTarget..(dragFrom - 1) -> rowHeightPx
-                    else -> 0f
-                }
-                // 拖动的手势必须和 clickable 挂在同一个节点上（见 QueueRow）：挂在外面一层
-                // 的 Box 上时，行内 clickable 会先把事件吃掉，长按永远轮不到拖动。
-                val dragModifier = Modifier.pointerInput(item.noteId, index, items.size) {
-                    detectDragGesturesAfterLongPress(
-                        onDragStart = { offset ->
-                            dragFrom = index
-                            dragTarget = index
-                            dragOffset = 0f
-                            grabDy = offset.y
-                            pointerY = index * rowHeightPx + offset.y - scrollState.value
-                            haptics.longPress()
-                        },
-                        onDrag = { change, _ ->
-                            change.consume()
-                            pointerY = index * rowHeightPx + change.position.y - scrollState.value
-                            // 内容坐标里，被拖行的"顶边"要停在手指下方 grabDy 处
-                            val topOfRow = scrollState.value + pointerY - grabDy
-                            dragOffset = topOfRow - index * rowHeightPx
-                            dragTarget = (topOfRow / rowHeightPx).roundToInt()
-                                .coerceIn(0, items.lastIndex)
-                        },
-                        onDragEnd = { pointerY = -1f; land() },
-                        onDragCancel = {
-                            pointerY = -1f
-                            // 已经拖到别的位置就照样落库：手势被「取消」（系统抢走指针、
-                            // 注入事件流被打断等）时把顺序弹回去，用户会觉得拖动白做了。
-                            // 实测：`adb shell input draganddrop` 走的就是 cancel 分支。
-                            land()
-                        }
-                    )
-                }
-                Box(
-                    Modifier
-                        .zIndex(if (isDragging) 1f else 0f)
-                        .graphicsLayer {
-                            translationY = shift
-                            // 拖动中的那一行浮起来一点，别的行保持原样
-                            shadowElevation = if (isDragging) 12f else 0f
-                        }
-                ) {
-                    QueueRow(
-                        item = item,
-                        dragging = isDragging,
-                        dragModifier = dragModifier,
-                        onClick = {
-                            haptics.tick()
-                            onOpenDetail(item.noteId)
-                        },
-                        onRemove = {
-                            haptics.reject()
-                            viewModel.remove(item.noteId)
-                        }
-                    )
-                }
+                QueueRow(
+                    item = item,
+                    position = index + 1,
+                    canMoveUp = index > 0,
+                    canMoveDown = index < items.lastIndex,
+                    onMoveUp = { move(index, index - 1) },
+                    onMoveDown = { move(index, index + 1) },
+                    onClick = { onOpenDetail(item.noteId) },
+                    onRemove = { viewModel.remove(item.noteId) }
+                )
             }
             Spacer(Modifier.height(Spacing.xl))
         }
@@ -307,35 +200,36 @@ fun WatchLaterScreen(
 @Composable
 private fun QueueRow(
     item: NoteItem,
-    dragging: Boolean,
-    /** 长按拖动的手势修饰符：必须接在 clickable 之后，同一个节点上 */
-    dragModifier: Modifier = Modifier,
+    /** 第几件（从 1 开始） */
+    position: Int,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
     onClick: () -> Unit,
     onRemove: () -> Unit
 ) {
+    val haptics = rememberHaptics()
     Surface(
-        color = if (dragging) MaterialTheme.colorScheme.surfaceContainerHigh
-        else MaterialTheme.colorScheme.surfaceContainerLowest,
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
         modifier = Modifier
             .fillMaxWidth()
-            .height(QueueRowHeight)
             .padding(horizontal = Spacing.s, vertical = 2.dp)
             .clip(Corners.large)
-            .clickable { onClick() }
-            .then(dragModifier)
+            .clickable { haptics.tick(); onClick() }
     ) {
         Row(
-            Modifier.fillMaxSize().padding(horizontal = Spacing.s),
+            Modifier.fillMaxSize().padding(start = Spacing.s, end = Spacing.xs),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 拖动把手：纯提示（真个手柄都能长按拖动），所以不做单独的点击区
-            Icon(
-                Icons.Filled.DragHandle,
-                contentDescription = "长按拖动排序",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(20.dp)
+            // 序号 + 右侧竖直排列的小号上下按钮（原来那个拖动把手去掉了：实测拖不动）
+            Text(
+                "$position",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.width(18.dp)
             )
-            Spacer(Modifier.width(Spacing.s))
+            Spacer(Modifier.width(Spacing.xs))
             XhsAsyncImage(
                 url = item.cover.ifEmpty { item.thumbnail },
                 contentDescription = null,
@@ -363,7 +257,41 @@ private fun QueueRow(
                     )
                 }
             }
-            IconButton(onClick = onRemove) {
+            // 上下排序：竖直排列的小号按钮（禁用态在两端，一眼看出到头了）
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                IconButton(
+                    onClick = {
+                        haptics.tick()
+                        onMoveUp()
+                    },
+                    enabled = canMoveUp,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.KeyboardArrowUp,
+                        contentDescription = "上移",
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                IconButton(
+                    onClick = {
+                        haptics.tick()
+                        onMoveDown()
+                    },
+                    enabled = canMoveDown,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.KeyboardArrowDown,
+                        contentDescription = "下移",
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+            IconButton(onClick = {
+                haptics.reject()
+                onRemove()
+            }) {
                 Icon(Icons.Filled.DeleteOutline, contentDescription = "移出队列")
             }
         }

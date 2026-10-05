@@ -292,7 +292,7 @@ fun FullscreenImageViewer(
                 style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier.weight(1f).padding(start = Spacing.s)
             )
-            IconButton(onClick = onDismiss) {
+            IconButton(onClick = haptics.click(onDismiss)) {
                 Icon(Icons.Filled.Close, contentDescription = "关闭", tint = Scrim.onMedia)
             }
         }

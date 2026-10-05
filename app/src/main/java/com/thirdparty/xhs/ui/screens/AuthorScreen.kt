@@ -86,7 +86,7 @@ fun AuthorScreen(
             TopAppBar(
                 title = { Text(state.author?.userName ?: "作者主页") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
+                    IconButton(onClick = haptics.click(onBack)) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
                 }
             )
         },

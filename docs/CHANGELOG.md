@@ -490,7 +490,22 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 ---
 
-### 阶段十四 · 详情页去掉队列入口
+### 阶段十七 · 队列排序改成上下按钮、触感全面补齐
+
+| # | 反馈 | 改动 | 证据 |
+| --- | --- | --- | --- |
+| 1 | 队列排序依然不对 → 去掉拖动，改成竖直排列的小号上下按钮 | **删除整套拖动排序**（手势、边缘自动滚动、双指滚动补偿、`committed` 之外的拖动状态），改为每行左侧序号 + 右侧**竖直排列的小号上移/下移按钮**（两端自动禁用），点一次与相邻行交换并立刻写库 | 队列页 dump：`用右侧上下按钮调整顺序 \| 1 \| 骚妈妈 \| 免费 \| @玉凤妈妈 \| 2 \| 抖音风 抖音18+ (125) \| …`；点第 1 行「下移」后变为 `1 \| 抖音风… \| 2 \| 骚妈妈`，`TICK` 计数 `34 → 36`（按钮触感） |
+| 2 | 播放器进度条与倍速拖动条缺触感 | `BufferedSlider` 增加可选 `haptics` 参数：拖动时按 5% 一档节流给 `segment()`（不做节流会一次拖动连发几十下）；倍速 `Slider` 同样加触感 | 代码；`TICK` 计数只匹配 `effect=CLICK/TICK`，而 `SegmentTick` 是另一种 effect 名，所以这一项没能用计数旁证（如实记） |
+| 3 | 详情页作者卡片缺触感 | 作者整行（`ListItem` 的 `clickable`）→ `haptics.tick()`（关注按钮上一轮已补） | 代码 |
+| 4 | 详情页二级评论缺触感 | `CommentRow` 内部的 `rememberHaptics()`：评论预览块与「共 N 条回复，点击查看」都补 `tick()`；评论行打开回复、评论加载失败「重试」也补上 | 代码 |
+| 5 | 全面审查，所有交互都要有触感 | ①新增 `Haptics.click{} / confirmClick{} / rejectClick{}`（**成员函数**，调用方只要有 `haptics` 就无需 import）与 `Modifier.hapticClickable`；②**在共享组件里一次性覆盖多处的**：`ConfirmActionDialog`（7 个页面的确认框）、`UpdateAvailableDialog`、`CommentRepliesDialog`、`NoteActionDialog`（动作行 + 关闭）、`EmptyState`（重试）、`FollowedAuthorRow`（整行 + 已关注）、`BiometricLock`（解锁）、`ResetZoomButton`、`MediaPlayer`（播放器菜单每行、关闭、快退/快进/重播、进度条）；③各页面的**返回**按钮与其余可点元素逐处补齐 | 代码 + `dumpsys vibrator_manager` 计数（每次补的对象都有记录） |
+
+> 阶段十七如实说明：第 2 项（拖动条触感）在模拟器上只做了代码确认 ——
+> `TICks` 计数器匹配的是 `effect=CLICK/TICK`，`SegmentTick` 是另一种 effect 名，计数看不到它；
+> 想验证得改计数器或换真机。另外这一轮之后仍有个别页面级对话框按钮（备份 / 更新 / 我的的确认框）
+> 是**通过共享组件的调用方**间接覆盖的，若后续新增对话框请直接用 `haptics.click {}` 包装。
+
+---
 
 - 详情页不再渲染稍后观看浮动按钮（`DetailScreen` 的 `floatingActionButton` 清空，
   `onOpenWatchLater` 参数一并删除，`AppNavHost` 不再传）。入口只留：推荐页信息条、发现页 `CornerFabStack`、

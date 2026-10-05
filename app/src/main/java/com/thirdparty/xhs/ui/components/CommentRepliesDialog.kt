@@ -166,6 +166,6 @@ fun CommentRepliesDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } }
+        confirmButton = { TextButton(onClick = rememberHaptics().click(onDismiss)) { Text("关闭") } }
     )
 }

@@ -86,7 +86,7 @@ fun NoteActionDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("关闭") }
+            TextButton(onClick = haptics.click(onDismiss)) { Text("关闭") }
         }
     )
 }

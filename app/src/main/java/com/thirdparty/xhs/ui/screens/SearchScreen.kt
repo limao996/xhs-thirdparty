@@ -85,7 +85,7 @@ fun SearchScreen(
         topBar = {
             Box(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = haptics.click(onBack)) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                     SearchBar(

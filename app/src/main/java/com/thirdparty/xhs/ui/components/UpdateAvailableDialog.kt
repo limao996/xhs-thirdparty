@@ -34,6 +34,7 @@ fun UpdateAvailableDialog(
     onLater: () -> Unit,
     onSkipVersion: () -> Unit
 ) {
+    val haptics = rememberHaptics()
     AlertDialog(
         onDismissRequest = onLater,
         icon = { Icon(Icons.Filled.SystemUpdate, null) },
@@ -63,12 +64,12 @@ fun UpdateAvailableDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onOpenPage) { Text("打开下载页") }
+            TextButton(onClick = haptics.click(onOpenPage)) { Text("打开下载页") }
         },
         dismissButton = {
             Row {
-                TextButton(onClick = onSkipVersion) { Text("跳过这个版本") }
-                TextButton(onClick = onLater) { Text("以后再说") }
+                TextButton(onClick = haptics.rejectClick(onSkipVersion)) { Text("跳过这个版本") }
+                TextButton(onClick = haptics.click(onLater)) { Text("以后再说") }
             }
         }
     )

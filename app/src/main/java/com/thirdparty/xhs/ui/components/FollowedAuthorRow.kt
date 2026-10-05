@@ -73,9 +73,9 @@ fun FollowedAuthorRow(
                 )
             },
             trailingContent = {
-                OutlinedButton(onClick = onUnfollow) { Text("已关注") }
+                OutlinedButton(onClick = rememberHaptics().rejectClick(onUnfollow)) { Text("已关注") }
             },
-            modifier = Modifier.clickable(onClick = onClick)
+            modifier = Modifier.clickable(onClick = rememberHaptics().click(onClick))
         )
         if (showDivider) {
             // inset past the avatar so the line starts where the text does, the

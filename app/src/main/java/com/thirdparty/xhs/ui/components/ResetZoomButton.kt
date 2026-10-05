@@ -34,11 +34,12 @@ import androidx.compose.foundation.clickable
  */
 @Composable
 fun ResetZoomButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val haptics = rememberHaptics()
     Surface(
         shape = Corners.full,
         color = Scrim.chrome,
         contentColor = Scrim.onMedia,
-        modifier = modifier.clickable { onClick() }
+        modifier = modifier.clickable { haptics.tick(); onClick() }
     ) {
         Row(
             Modifier.padding(horizontal = Spacing.l, vertical = Spacing.s),
