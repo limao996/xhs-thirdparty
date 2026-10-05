@@ -204,11 +204,16 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
         // 于是旧判据永远不成立、播放器永远不释放 —— 这正是用户两次反馈"关闭后还在后台放"的原因。
         //
         // 三种情况：
-        //   ① 配置变更 / 刚进小窗的过渡期 / 锁屏息屏 → 不动；
+        //   ① 配置变更 / 刚进小窗的过渡期 → 不动；
         //   ② **已经收到退出回调又走到 onStop** → 几乎肯定是被关掉了，但为了不和"展开过程中
         //      系统先给一次 onStop"打架，这里只是把判定窗口缩短（onResume 一到就取消）；
         //   ③ 其余（亮屏、没有退出回调，直接 stop）= 小窗没了 → 立刻收尾。
-        if (!isChangingConfigurations && !justEntered && !screenOff && pip.hasSession()) {
+        //
+        // 锁屏/息屏单独处理：**停播但保留会话**（用户反馈锁屏后还在放；窗口解锁后还要继续用，
+        // 所以不能 release）。解锁后不自动续播 —— 锁屏本来就是要让它停下来。
+        if (screenOff && pip.hasSession()) {
+            pip.pauseForScreenOff()
+        } else if (!isChangingConfigurations && !justEntered && pip.hasSession()) {
             if (pipExitPending) {
                 schedulePipExitCheck(PIP_STOP_CONFIRM_MS)
             } else if (pipExitCheck?.isActive != true) {

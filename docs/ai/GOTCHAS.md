@@ -375,6 +375,11 @@
   收掉会话、`inPip` 置 false，解锁后那个窗口就按导航内容重组 → 用户看到"小窗里是视频外面套着详情页"。
   判据：`!PowerManager.isInteractive || KeyguardManager.isKeyguardLocked` 时不动会话；
   另在 `onResume` 里做幂等兜底：`isInPictureInPictureMode && hasSession()` → `inPip = true`。
+- **锁屏不是关小窗，但也不该继续播**：息屏/锁屏时 Activity 也会 `onStop`，
+  ①把它当"小窗没了"会收掉会话 → 解锁后窗口里变成"视频外面套着详情页 UI"；
+  ②完全不动又会让视频在锁屏后继续出声（`PauseWhenNotStarted` 对已交接的播放器是跳过的，
+  没人会去暂停它）。正确做法：`screenOff && hasSession()` → **只暂停、保留会话**
+  （`PipController.pauseForScreenOff()`），解锁后不自动续播。
 - **关掉小窗要交出进度**：`closeAndRelease()` 会销毁那台播放器，详情页会重建一个新的 ——
   不 `PlaybackHandoff.stash(noteId, currentPosition, playWhenReady)` 的话，回到详情页就是 **0:00**
   （用户反馈）。这条与"信息流 → 详情页"用的是同一个单槽通道：feed 的 stash 在详情页 compose 时

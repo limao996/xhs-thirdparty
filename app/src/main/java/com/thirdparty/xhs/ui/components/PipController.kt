@@ -99,6 +99,22 @@ object PipController {
     fun hasSession(): Boolean = _session.value != null
 
     /**
+     * 屏幕关掉/锁屏时把小窗的播放**暂停**（会话照旧保留，小窗窗口也还在）。
+     *
+     * 为什么不 release：锁屏不是关小窗，窗口解锁后还要继续用（内容与进度都得留着）。
+     * 为什么解锁后**不自动续播**：用户锁屏往往就是为了让它停下来 —— 自动续播会让人没法静音；
+     * 要接着看，点小窗上的播放按钮或展开回详情页即可。
+     */
+    fun pauseForScreenOff() {
+        _session.value?.player?.let { p ->
+            if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+                android.util.Log.i("XhsPip", "pauseForScreenOff playing=${p.isPlaying}")
+            }
+            runCatching { p.pause() }
+        }
+    }
+
+    /**
      * 播放器归小窗、或者刚从小窗交回详情页（`PlaybackHandoff`）——两种情况都不许
      * 生命周期/销毁逻辑去 pause 或 release 它。
      *
