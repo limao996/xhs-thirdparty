@@ -531,6 +531,17 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 ---
 
+### 阶段二十 · 分享不再被自己的剪贴板口令触发、分享标题改为面向用户的文案
+
+| # | 反馈 | 改动 | 证据 |
+| --- | --- | --- | --- |
+| 1 | 分享不要触发自己刚分享出去的剪贴板口令 | `ShareText` 增加 `markSelfShared(noteId, text)` / `isSelfShared(noteId, clipboard)`（进程内记录一对）；`shareNote()` 在拉起分享面板**之前**登记；`MainActivity.checkClipboardForShareLink()` 读到与登记一致的 (id, 文案) 时直接标记成「已看过」并返回，不再弹"打开这条笔记"。另外用 `Intent.EXTRA_EXCLUDE_COMPONENTS` 把**自己**从分享面板里排除 | 实机：在系统分享面板点「Copy to clipboard」后再回到应用，**没有**出现打开笔记的提示（`HAS_PROMPT: False`）；面板目标列表里不再出现 `小黄书.debug`（`TARGETS_APP_DEBUG_PRESENT: False`），截图 `v9-2-after-copy-return` |
+| 2 | 分享标题应起一个合适的、给用户看的 | `EXTRA_TITLE` 从"作品标题"改为固定文案 **「来自「小黄书」的分享」** —— 该字段只在系统分享面板的预览里显示、**不会发给目标应用**，放作品标题（常常不体面）没有意义；真正分享出去的文本仍是 `ShareText` 的完整文案（含口令） | 实机分享面板 dump：`Sharing text \| 来自「小黄书」的分享 \| 【图文】【图文CG】… \| No recommended people to share with`，截图 `v9-1-chooser` |
+
+---
+
+### 阶段十四 · 详情页去掉队列入口
+
 - 详情页不再渲染稍后观看浮动按钮（`DetailScreen` 的 `floatingActionButton` 清空，
   `onOpenWatchLater` 参数一并删除，`AppNavHost` 不再传）。入口只留：推荐页信息条、发现页 `CornerFabStack`、
   搜索 / 作者页 / 收藏 / 最近浏览的浮动按钮。

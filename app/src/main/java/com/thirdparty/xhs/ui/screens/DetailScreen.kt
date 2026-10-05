@@ -966,14 +966,23 @@ private fun timeStr(ms: Long): String =
 private fun shareNote(context: android.content.Context, item: NoteItem?) {
     if (item == null) return
     val text = com.thirdparty.xhs.data.ShareText.of(item)
+    // 记下来：分享面板里的「复制」会把这段文案放进剪贴板，回来时别被自己的分享触发"打开笔记"
+    com.thirdparty.xhs.data.ShareText.markSelfShared(item.noteId, text)
     val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
         type = "text/plain"
         putExtra(android.content.Intent.EXTRA_TEXT, text)
-        putExtra(android.content.Intent.EXTRA_TITLE, item.title.ifEmpty { "小黄书" })
+        // EXTRA_TITLE 只在分享面板的预览里显示，**不会发给目标应用**，所以给一个干净的中文标题，
+        // 而不是作品标题（作品标题常常不体面，摆系统面板上没必要）
+        putExtra(android.content.Intent.EXTRA_TITLE, "来自「小黄书」的分享")
     }
     val chooser = android.content.Intent.createChooser(send, "分享到").apply {
         // 从非 Activity 上下文（比如 Application）启动时必须带这个 flag；从 Activity 启动也无害
         addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        // 把"分享给自己"从面板里去掉：选中它只会把同一条笔记再打开一次
+        runCatching {
+            val self = android.content.ComponentName(context, com.thirdparty.xhs.MainActivity::class.java)
+            putExtra(android.content.Intent.EXTRA_EXCLUDE_COMPONENTS, arrayOf(self))
+        }
     }
     runCatching { context.startActivity(chooser) }.onFailure {
         android.widget.Toast.makeText(context, "没有可用的分享目标", android.widget.Toast.LENGTH_SHORT)

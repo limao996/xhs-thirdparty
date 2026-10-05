@@ -72,6 +72,12 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
             .mapNotNull { clip.getItemAt(it).coerceToText(this)?.toString() }
             .joinToString("\n")
         val noteId = DeepLink.parseNoteId(text) ?: return
+        // 自己刚分享出去的那条：分享面板里的「复制」会把它放进剪贴板，用它去触发"打开这条笔记"
+        // 纯属绕圈。标记成已看过，之后也不会再提示。
+        if (com.thirdparty.xhs.data.ShareText.isSelfShared(noteId, text)) {
+            prefs.edit().putString(KEY_LAST_CLIP, noteId.toString()).apply()
+            return
+        }
         if (prefs.getString(KEY_LAST_CLIP, null) == noteId.toString()) return
         clipboardNote.value = noteId
     }

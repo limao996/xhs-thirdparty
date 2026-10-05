@@ -59,5 +59,27 @@ object ShareText {
         return parts.joinToString(" · ")
     }
 
+    /**
+     * 自己刚分享出去的那条文案。
+     *
+     * 背景：分享面板里可以「复制」，用户复制完切回应用时，`MainActivity` 的焦点回调会读剪贴板、
+     * 认出里面的 `xhstp://note/<id>`，然后弹出"要打开这条笔记吗"——而这个笔记**就是他刚刚分享的**。
+     * 所以分享前先把 (noteId, 完整文案) 记在这里，回来看见一模一样的剪贴板内容就当作自己发的，
+     * 直接标记成"已看过"，不再提示。
+     *
+     * 只在内存里存：进程被杀之后这份记录就没了，但那时的剪贴板内容也已经不是"刚刚分享"的语境。
+     */
+    private val selfShared = java.util.concurrent.atomic.AtomicReference<Pair<Long, String>?>(null)
+
+    fun markSelfShared(noteId: Long, text: String) {
+        selfShared.set(noteId to text)
+    }
+
+    /** 剪贴板里的这条内容是不是我们自己刚分享出去的 */
+    fun isSelfShared(noteId: Long, clipboardText: String): Boolean {
+        val cur = selfShared.get() ?: return false
+        return cur.first == noteId && cur.second.trim() == clipboardText.trim()
+    }
+
     private const val APP_NAME = "小黄书"
 }
