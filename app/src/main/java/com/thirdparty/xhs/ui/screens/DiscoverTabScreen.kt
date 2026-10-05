@@ -543,7 +543,10 @@ private fun FanGroupTab(
                         a.notes.take(3).forEach { n ->
                             FanGroupNoteCard(
                                 item = n,
-                                onClick = { onOpenDetail(n.noteId) },
+                                onClick = {
+                                    haptics.tick()
+                                    onOpenDetail(n.noteId)
+                                },
                                 // 粉丝圈里的作品也要能长按出菜单（收藏 / 稍后观看）
                                 onLongClick = {
                                     haptics.longPress()

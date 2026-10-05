@@ -500,7 +500,11 @@ private fun AutoHideController(
         // frame with no controls and reads as a frozen player.
         LaunchedEffect(ended) { if (ended) visible = true }
         if (ended) {
-            IconButton(onClick = { player.seekTo(0); player.play() },
+            IconButton(onClick = {
+                haptics.tick()
+                player.seekTo(0)
+                player.play()
+            },
                 modifier = Modifier.align(Alignment.Center)) {
                 Icon(Icons.Filled.Replay, "重播", tint = Scrim.onMedia)
             }
@@ -675,7 +679,10 @@ private fun AutoHideController(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     val step = if (fineStep) 1000L else 5000L
-                    IconButton(onClick = { seekBy(-step) }, modifier = Modifier.size(btnSize)) {
+                    IconButton(onClick = {
+                        haptics.tick()
+                        seekBy(-step)
+                    }, modifier = Modifier.size(btnSize)) {
                         Icon(Icons.Filled.Replay5, "后退${step / 1000}秒", tint = Scrim.onMedia,
                             modifier = Modifier.size(iconSize))
                     }
@@ -688,7 +695,10 @@ private fun AutoHideController(
                             if (playing) "暂停" else "播放", tint = Scrim.onMedia,
                             modifier = Modifier.size(iconSize))
                     }
-                    IconButton(onClick = { seekBy(step) }, modifier = Modifier.size(btnSize)) {
+                    IconButton(onClick = {
+                        haptics.tick()
+                        seekBy(step)
+                    }, modifier = Modifier.size(btnSize)) {
                         Icon(Icons.Filled.Forward5, "前进${step / 1000}秒", tint = Scrim.onMedia,
                             modifier = Modifier.size(iconSize))
                     }

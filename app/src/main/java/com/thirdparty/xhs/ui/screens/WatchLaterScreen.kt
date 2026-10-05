@@ -97,7 +97,10 @@ fun WatchLaterScreen(
                 },
                 actions = {
                     if (state.items.isNotEmpty()) {
-                        IconButton(onClick = { confirmClear = true }) {
+                        IconButton(onClick = {
+                            haptics.tick()
+                            confirmClear = true
+                        }) {
                             Icon(Icons.Filled.DeleteSweep, contentDescription = "清空队列")
                         }
                     }
@@ -147,21 +150,23 @@ fun WatchLaterScreen(
         }
         val rowHeightPx = with(LocalDensity.current) { QueueRowHeight.toPx() }
         val scrollState = rememberScrollState()
-        // 手指在**列表视口**里的纵坐标（拖动时才有意义）与视口高度：边缘自动滚动靠这两个
+        // 拖动全程只用一个坐标系：**列表内容坐标**（= 视口坐标 + 当前滚动量）。
+        // 这样"列表被滚动"和"手指移动"都只是同一个数在变，不需要到处补正：
+        //  - 手指在视口里的位置：viewIndex*rowH + 行内偏移 − scrollState.value
+        //  - 内容坐标：上面那个 + scrollState.value
+        // 于是既支持边缘自动滚动，也支持"一根手指按着拖、另一根手指滑屏幕"
+        // （后者由 verticalScroll 处理：它是被拖行的父节点，另一个指针的拖动归它）。
         var pointerY by remember { mutableFloatStateOf(-1f) }
+        var grabDy by remember { mutableFloatStateOf(0f) }
         var viewportH by remember { mutableIntStateOf(0) }
         // 自动滚动循环里要读"最新"的行数/行高/起始行 —— LaunchedEffect(Unit) 只在首帧跑一次，
         // 直接闭包捕获会一直用第一次的旧值
         val liveItems by rememberUpdatedState(items)
         val liveRowH by rememberUpdatedState(rowHeightPx)
         val liveFrom by rememberUpdatedState(dragFrom)
-
-        // 拖到屏幕上下边缘时自动滚动：不然"把第 1 行拖到屏幕外的第 20 行"根本做不到
-        // （用户实测反馈）。列表滚动之后，手指相对被拖行的位移要按滚动量补回来，
-        // 否则落点不会跟着手指走。
         // 边缘自动滚动的两个常量（密度只能在组合里读，所以先算好再进协程）
-        val edgePx = with(LocalDensity.current) { 96.dp.toPx() }
-        val stepPx = with(LocalDensity.current) { 16.dp.toPx() }
+        val edgePx = with(LocalDensity.current) { 110.dp.toPx() }
+        val stepPx = with(LocalDensity.current) { 18.dp.toPx() }
         LaunchedEffect(Unit) {
             while (true) {
                 withFrameNanos { }
@@ -177,6 +182,7 @@ fun WatchLaterScreen(
                 scrollState.scrollBy(dy)
                 val moved = (scrollState.value - before).toFloat()
                 if (moved != 0f) {
+                    // 列表滚了 moved，被拖的行要跟着挪同样的量才停在同一处
                     dragOffset += moved
                     dragTarget = (liveFrom + (dragOffset / liveRowH).roundToInt())
                         .coerceIn(0, liveItems.lastIndex)
@@ -205,7 +211,7 @@ fun WatchLaterScreen(
                 .verticalScroll(scrollState)
         ) {
             Text(
-                "长按可以拖动排序",
+                "长按拖动排序 · 拖到边缘会自动滚动",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = Spacing.l, top = Spacing.s, bottom = Spacing.xs)
@@ -224,19 +230,21 @@ fun WatchLaterScreen(
                 // 的 Box 上时，行内 clickable 会先把事件吃掉，长按永远轮不到拖动。
                 val dragModifier = Modifier.pointerInput(item.noteId, index, items.size) {
                     detectDragGesturesAfterLongPress(
-                        onDragStart = {
+                        onDragStart = { offset ->
                             dragFrom = index
                             dragTarget = index
                             dragOffset = 0f
-                            pointerY = -1f
+                            grabDy = offset.y
+                            pointerY = index * rowHeightPx + offset.y - scrollState.value
                             haptics.longPress()
                         },
-                        onDrag = { change, amount ->
+                        onDrag = { change, _ ->
                             change.consume()
-                            dragOffset += amount.y
-                            // 视口坐标 = 行的基准位置 + 手指在行内的位置 − 当前滚动量
                             pointerY = index * rowHeightPx + change.position.y - scrollState.value
-                            dragTarget = (index + (dragOffset / rowHeightPx).roundToInt())
+                            // 内容坐标里，被拖行的"顶边"要停在手指下方 grabDy 处
+                            val topOfRow = scrollState.value + pointerY - grabDy
+                            dragOffset = topOfRow - index * rowHeightPx
+                            dragTarget = (topOfRow / rowHeightPx).roundToInt()
                                 .coerceIn(0, items.lastIndex)
                         },
                         onDragEnd = { pointerY = -1f; land() },

@@ -6,6 +6,7 @@ import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -309,7 +310,10 @@ private fun VideoPage(
             .combinedClickable(
                 interactionSource = noRipple,
                 indication = null,
-                onClick = onToggleInfo,
+                onClick = {
+                    haptics.tick()
+                    onToggleInfo()
+                },
                 onDoubleClick = {
                     haptics.tick()
                     togglePlayback(currentPlayer.value)
@@ -398,9 +402,13 @@ private fun VideoPage(
                     // whenever the finger landed on the lower part of the video.
                     // same reasoning as the video surface above
                     .combinedClickable(
-                        // 信息条是"可点的"东西，要有波纹（用户要求）。整屏视频那层仍然不铺
-                        // 波纹 —— 铺上去每次点屏幕都会闪一下整块画面。
+                        // 信息条是"可点的"东西，波纹要用系统的 ripple（M3），并显式给它
+                        // 媒体层上的浅色 —— 默认色是深色 onSurface，压在暗色信息栏上看不出来
+                        // （用户反馈"波纹不明显"）。
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = androidx.compose.material3.ripple(color = Scrim.onMedia),
                         onClick = {
+                            haptics.tick()
                             // Hand the player ITSELF over, not just its position: the
                             // detail page would otherwise build a second ExoPlayer on
                             // the same stream and pay for a fresh prepare, a fresh

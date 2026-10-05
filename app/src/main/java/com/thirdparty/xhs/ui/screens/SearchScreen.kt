@@ -78,6 +78,8 @@ fun SearchScreen(
     viewModel: SearchViewModel = viewModel(factory = RepoViewModelFactory())
 ) {
     val state by viewModel.ui.collectAsStateWithLifecycle()
+    // 搜索页各处的点击反馈（返回 / 清除 / 换搜索类型 / 历史 / 清空历史 / 用户行 / 提交搜索）
+    val haptics = com.thirdparty.xhs.ui.components.rememberHaptics()
 
     Scaffold(
         topBar = {
@@ -89,7 +91,10 @@ fun SearchScreen(
                     SearchBar(
                         query = state.query,
                         onQueryChange = { viewModel.onQueryChange(it) },
-                        onSearch = { viewModel.search() },
+                        onSearch = {
+                            haptics.tick()
+                            viewModel.search()
+                        },
                         active = false,
                         onActiveChange = {},
                         placeholder = { Text("搜索作品 / 作者") },
@@ -103,7 +108,10 @@ fun SearchScreen(
                         // only the field left the old query's results on screen.
                         trailingIcon = {
                             if (state.query.isNotEmpty()) {
-                                IconButton(onClick = { viewModel.clearQuery() }) {
+                                IconButton(onClick = {
+                        haptics.tick()
+                        viewModel.clearQuery()
+                    }) {
                                     Icon(Icons.Filled.Close, contentDescription = "清除")
                                 }
                             }
@@ -139,7 +147,10 @@ fun SearchScreen(
                 modes.forEachIndexed { index, (mode, label) ->
                     SegmentedButton(
                         selected = state.mode == mode,
-                        onClick = { viewModel.setMode(mode) },
+                        onClick = {
+                            haptics.tick()
+                            viewModel.setMode(mode)
+                        },
                         shape = SegmentedButtonDefaults.itemShape(index = index, count = modes.size)
                     ) {
                         Text(label)
@@ -157,7 +168,10 @@ fun SearchScreen(
                         style = MaterialTheme.typography.labelLarge,
                         modifier = Modifier.weight(1f)
                     )
-                    TextButton(onClick = { viewModel.clearHistory() }) { Text("清空") }
+                    TextButton(onClick = {
+                        haptics.reject()
+                        viewModel.clearHistory()
+                    }) { Text("清空") }
                 }
                 // wrap layout (not horizontal scroll)
                 FlowRow(
@@ -169,7 +183,10 @@ fun SearchScreen(
                     state.history.forEach { h ->
                         InputChip(
                             selected = false,
-                            onClick = { viewModel.chooseHistory(h) },
+                            onClick = {
+                                haptics.tick()
+                                viewModel.chooseHistory(h)
+                            },
                             label = { Text(h) }
                         )
                     }
@@ -232,7 +249,10 @@ fun SearchScreen(
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp)
                     ) {
                         items(state.users, key = { it.userId }) { user ->
-                            UserSearchRow(user, onClick = { onOpenAuthor(user.userId) })
+                            UserSearchRow(user, onClick = {
+                                haptics.tick()
+                                onOpenAuthor(user.userId)
+                            })
                         }
                     }
             }

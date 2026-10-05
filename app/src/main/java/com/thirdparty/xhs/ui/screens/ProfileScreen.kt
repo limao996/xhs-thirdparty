@@ -123,6 +123,8 @@ fun ProfileScreen(
             .verticalScroll(rememberScrollState())
             .padding(bottom = bottomNavClearance())
     ) {
+        // 「切换游客账号」等入口的点击反馈
+        val haptics = com.thirdparty.xhs.ui.components.rememberHaptics()
         // Account header, as its own contained card.
         //
         // It used to be a full-bleed colour band while every row below it was a
@@ -246,7 +248,10 @@ fun ProfileScreen(
                     // confirm first: switching creates a brand-new account and the
                     // previous identity cannot be recovered, so an accidental tap is
                     // not trivially undone.
-                    modifier = Modifier.cardRow { confirmRotate = true }
+                    modifier = Modifier.cardRow {
+                        haptics.tick()
+                        confirmRotate = true
+                    }
             )
         }
 

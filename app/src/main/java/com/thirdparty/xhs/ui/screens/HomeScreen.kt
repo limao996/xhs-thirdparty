@@ -304,6 +304,7 @@ fun HomeScreen(
 
 @Composable
 private fun HomeHeader(guest: String, rotating: Boolean, onOpenSearch: () -> Unit) {
+    val haptics = rememberHaptics()
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -317,7 +318,10 @@ private fun HomeHeader(guest: String, rotating: Boolean, onOpenSearch: () -> Uni
             LoadingIndicator(Modifier.width(20.dp).height(20.dp))
             Spacer(Modifier.width(8.dp))
         }
-        IconButton(onClick = onOpenSearch) {
+        IconButton(onClick = {
+            haptics.tick()
+            onOpenSearch()
+        }) {
             Icon(Icons.Filled.Search, contentDescription = "搜索")
         }
     }

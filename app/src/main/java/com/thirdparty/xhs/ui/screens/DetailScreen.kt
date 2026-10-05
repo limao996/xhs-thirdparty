@@ -457,6 +457,7 @@ fun DetailScreen(
                     imagePage = imagePage,
                     onImagePage = { imagePage = it },
                     onOpenImage = { page ->
+                        haptics.tick()
                         openImage = page
                         // Tapping a picture in the embedded gallery must go FULL screen,
                         // not open the viewer inside the page's content slot: there the
@@ -538,6 +539,8 @@ private fun DetailContent(
      */
     onUnfollowRequest: () -> Unit = {}
 ) {
+    // 详情页内嵌内容（关注按钮、图集、评论）的触感反馈
+    val haptics = com.thirdparty.xhs.ui.components.rememberHaptics()
     // NULLABLE, deliberately. When the player was inherited from 推荐 it is already
     // playing, so the media is drawn while this note's own request is still in flight;
     // only the sections below the media wait for `state.item`.
@@ -730,14 +733,20 @@ private fun DetailContent(
                     trailingContent = {
                         if (state.followed) {
                             // unfollowing asks for confirmation; following does not
-                            OutlinedButton(onClick = onUnfollowRequest) {
+                            OutlinedButton(onClick = {
+                                haptics.reject()
+                                onUnfollowRequest()
+                            }) {
                                 Icon(Icons.Filled.Check, contentDescription = null,
                                     modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(Spacing.xs + 2.dp))
                                 Text("已关注", style = MaterialTheme.typography.labelLarge)
                             }
                         } else {
-                            Button(onClick = { viewModel.toggleFollow() }) {
+                            Button(onClick = {
+                                haptics.confirm()
+                                viewModel.toggleFollow()
+                            }) {
                                 Icon(Icons.Filled.Add, contentDescription = null,
                                     modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(Spacing.xs + 2.dp))
