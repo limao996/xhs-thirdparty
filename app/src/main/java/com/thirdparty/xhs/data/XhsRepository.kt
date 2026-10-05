@@ -10,7 +10,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import org.json.JSONObject
-import com.thirdparty.xhs.net.CredentialStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -773,9 +772,6 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
 
     suspend fun watchLaterIds(): Set<Long> =
         withContext(Dispatchers.IO) { watchLaterDao.all().map { it.noteId }.toSet() }
-
-    suspend fun isInWatchLater(noteId: Long): Boolean =
-        withContext(Dispatchers.IO) { watchLaterDao.byId(noteId) != null }
 
     /** The queue in playing order. */
     suspend fun watchLaterList(): List<NoteItem> = withContext(Dispatchers.IO) {

@@ -190,19 +190,14 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
     private suspend fun doCallOnce(
         path: String,
         params: Map<String, Any>,
-        // Overrides 目前没有调用方（曾经的账号扫描器已移除）。保留是因为 doCallOnce 的签名
-        // 还要给自愈重登留一个"换身份试一次"的口子；注释里不要再提不存在的 scanner。
-        // WITHOUT disturbing the session currently stored in CredentialStore.
-        userIdOverride: String? = null,
-        tokenOverride: String? = null
     ): JSONObject {
-        val token = tokenOverride ?: credentialStore.userToken
+        val token = credentialStore.userToken
         val hash = credentialStore.userHash
         // The login call must re-establish identity from the *device*, never
         // from a possibly-stale user_hash, otherwise a stale hash would keep
         // being echoed back and re-auth would never recover.
-        val userIdHeader = userIdOverride
-            ?: if (path == LOGIN_PATH) deviceUserId() else hash.ifEmpty { deviceUserId() }
+        val userIdHeader =
+            if (path == LOGIN_PATH) deviceUserId() else hash.ifEmpty { deviceUserId() }
 
         val body = JSONObject()
         body.put("s_time", System.currentTimeMillis())

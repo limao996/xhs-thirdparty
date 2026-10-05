@@ -34,7 +34,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -50,15 +49,12 @@ import com.thirdparty.xhs.App
 import com.thirdparty.xhs.navigation.HomeTab
 import com.thirdparty.xhs.ui.theme.Scrim
 import com.thirdparty.xhs.ui.theme.Spacing
-import com.thirdparty.xhs.ui.theme.bottomNavClearance
-import com.thirdparty.xhs.ui.components.WatchLaterFab
 import com.thirdparty.xhs.ui.components.rememberHaptics
 import com.thirdparty.xhs.ui.theme.ThemeMode
 import com.thirdparty.xhs.ui.theme.XhsTheme
 import com.thirdparty.xhs.ui.viewmodel.GuestViewModel
 import android.widget.Toast
 import androidx.compose.runtime.remember
-import com.thirdparty.xhs.ui.theme.isDark
 
 /**
  * Root shell. The 推荐 tab is full-bleed immersive: the header and bottom nav
@@ -83,14 +79,11 @@ fun HomeScreen(
     onOpenUpdate: () -> Unit,
     /** 稍后观看队列（浮动按钮） */
     onOpenWatchLater: () -> Unit,
-    onSetBiometricLock: ((Boolean) -> Unit)? = null,
-    onSetHistoryLimit: ((Int) -> Unit)? = null,
     guestViewModel: GuestViewModel = viewModel(factory = RepoViewModelFactory())
 ) {
     val context = LocalContext.current
     val guest by guestViewModel.accountLabel.collectAsStateWithLifecycle()
     val rotating by guestViewModel.rotating.collectAsStateWithLifecycle()
-    val autoVip by guestViewModel.autoVip.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableStateOf(HomeTab.FEED) }
     var feedRefreshTick by rememberSaveable { mutableStateOf(0) }
     // 底部三 tab 切换的触感反馈（系统 API，尊重用户的触感开关）
@@ -115,9 +108,6 @@ fun HomeScreen(
     // covered while time/battery and the gesture bar remain reachable.
     // The header has statusBarsPadding(), and the bottom NavigationBar inherits
     // MD3's default window insets, so each lifts clear of its bar automatically.
-    val darkNow = currentThemeMode().isDark(androidx.compose.foundation.isSystemInDarkTheme())
-    val view = androidx.compose.ui.platform.LocalView.current
-    val activity = androidx.activity.compose.LocalActivity.current
     // Report the tab state; AppNavHost owns the actual system-bar configuration.
     //
     // Configuring the bars here as well meant that navigating away to 搜索 or 详情
@@ -198,17 +188,6 @@ fun HomeScreen(
                             onOpenSettings = onOpenSettings,
                             onOpenAbout = onOpenAbout,
                             onOpenUpdate = onOpenUpdate,
-                            biometricLock = App.INSTANCE.repository.biometricLock,
-                            biometricAvailable = androidx.biometric.BiometricManager.from(context).canAuthenticate(androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK or androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL) == androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS,
-                            onSetBiometricLock = onSetBiometricLock,
-                            historyLimit = App.INSTANCE.repository.historyLimit,
-                            onSetHistoryLimit = onSetHistoryLimit,
-                            autoVip = autoVip,
-                            onSetAutoVip = { on ->
-                                guestViewModel.setAutoVip(on) {
-                                    Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
-                                }
-                            },
                             rotating = rotating,
                             reloadKey = guest
                         )

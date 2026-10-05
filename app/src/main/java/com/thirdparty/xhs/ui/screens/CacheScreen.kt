@@ -158,7 +158,12 @@ fun CacheScreen(
                         leadingContent = {
                             Checkbox(
                                 checked = entry.kind in state.selected,
-                                onCheckedChange = { viewModel.toggle(entry.kind) }
+                                // 勾选框也是「我们自己画的按钮」：轻点语义（`onCheckedChange` 带 Boolean 参数，
+                                // 所以这里显式吞掉它，而不是直接用 `haptics.click { }` 的返回值）
+                                onCheckedChange = { _: Boolean ->
+                                    haptics.tick()
+                                    viewModel.toggle(entry.kind)
+                                }
                             )
                         },
                         trailingContent = {
@@ -233,13 +238,13 @@ fun CacheScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
+                TextButton(onClick = haptics.rejectClick {
                     confirm = false
                     viewModel.clearSelected()
                 }) { Text("清除") }
             },
             dismissButton = {
-                TextButton(onClick = { confirm = false }) { Text("取消") }
+                TextButton(onClick = haptics.click { confirm = false }) { Text("取消") }
             }
         )
     }

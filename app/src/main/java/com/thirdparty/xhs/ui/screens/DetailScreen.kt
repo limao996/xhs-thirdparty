@@ -2,7 +2,6 @@
 
 package com.thirdparty.xhs.ui.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
@@ -17,13 +16,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Fullscreen
@@ -34,7 +29,6 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -59,8 +53,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -74,12 +69,10 @@ import com.thirdparty.xhs.ui.components.ConfirmActionDialog
 import com.thirdparty.xhs.ui.components.FeeBadge
 import com.thirdparty.xhs.ui.components.ImageGallery
 import com.thirdparty.xhs.ui.components.MediaPlayer
-import com.thirdparty.xhs.ui.components.XhsAsyncImage
 import com.thirdparty.xhs.ui.components.XhsAvatar
 import com.thirdparty.xhs.ui.theme.AvatarSize
 import com.thirdparty.xhs.ui.theme.Corners
 import com.thirdparty.xhs.ui.theme.Spacing
-import com.thirdparty.xhs.ui.theme.XhsShapes
 import com.thirdparty.xhs.ui.viewmodel.DetailViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -147,8 +140,8 @@ fun DetailScreen(
     // 这个 composable。
     var confirmUnsave by remember { mutableStateOf(false) }
     var confirmUnfollow by remember { mutableStateOf(false) }
-    /** 画中画要 API 26+；低版本就不给播放器菜单加「小窗播放」这一项 */
-    val pipSupported = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O
+    // 画中画从 API 26 起，而 minSdk 就是 26（硬约束 5b），所以这里不再需要版本判断
+    val pipSupported = true
     val haptics = com.thirdparty.xhs.ui.components.rememberHaptics()
 
     // ---- media plumbing, hoisted OUT of the metadata branch -------------------
@@ -169,9 +162,8 @@ fun DetailScreen(
     // `onVideoSizeChanged` is ever coming for it.
     var videoAspect by remember(noteId) {
         mutableFloatStateOf(
-            inherited?.player?.videoSize?.let {
-                if (it.width > 0 && it.height > 0) it.width.toFloat() / it.height.toFloat() else 0f
-            } ?: 0f
+            com.thirdparty.xhs.ui.components.PipController
+                .videoAspectOf(inherited?.player?.videoSize)
         )
     }
     val itemMediaUrl = state.item?.mediaUrl.orEmpty()
@@ -490,7 +482,13 @@ fun DetailScreen(
                     onAspect = { if (it > 0f) videoAspect = it },
                     fullscreen = fullscreen,
                     onToggleFullscreen = { fullscreen = !fullscreen },
-                    onUnfollowRequest = { confirmUnfollow = true }
+                    onUnfollowRequest = { confirmUnfollow = true },
+                    // 把视频画面在窗口里的位置报给小窗，作为 `sourceRectHint`（lint 的
+                    // PictureInPictureIssue 建议之一）：有它系统才会从这块画面长/收，
+                    // 而不是整个窗口一起缩放。
+                    pipSourceRect = {
+                        com.thirdparty.xhs.ui.components.PipController.setSourceRectHint(it)
+                    }
                 )
             }
         }
@@ -557,7 +555,9 @@ private fun DetailContent(
      * The author row's 已关注 button asks the caller to confirm first (the dialog's
      * state lives in DetailScreen — see the note there). 关注 is still direct.
      */
-    onUnfollowRequest: () -> Unit = {}
+    onUnfollowRequest: () -> Unit = {},
+    /** 视频画面在窗口里的矩形（px），转给小窗做 `sourceRectHint`；默认不报 */
+    pipSourceRect: (android.graphics.Rect) -> Unit = {}
 ) {
     // 详情页内嵌内容（关注按钮、图集、评论）的触感反馈
     val haptics = com.thirdparty.xhs.ui.components.rememberHaptics()
@@ -636,7 +636,7 @@ private fun DetailContent(
                     controlsHiddenInitially = true,
                     // 「小窗播放」住在播放器自己的菜单里（低版本没有画中画，传 null 就不显示）
                     onEnterPip = onEnterPip,
-                    modifier = when {
+                    modifier = (when {
                         fullscreen -> Modifier.fillMaxSize()
                         // aspectRatio(0) throws, and 0 means "not known yet"；
                         // coerceAtLeast 只是让 lint 的 Range 检查看得懂（真实值的下限由上面 > 0f 保证）
@@ -645,7 +645,19 @@ private fun DetailContent(
                                 .aspectRatio(videoAspect.coerceAtLeast(0.01f))
                                 .clip(mediaShape)
                         else -> Modifier.fillMaxWidth().height(windowedHeight).clip(mediaShape)
-                    }
+                    })
+                        // 量画面在窗口里的位置：小窗用它做 sourceRectHint（lint PictureInPictureIssue）
+                        .onGloballyPositioned { coords ->
+                            val r = coords.boundsInWindow()
+                            if (r.width > 0f && r.height > 0f) {
+                                pipSourceRect(
+                                    android.graphics.Rect(
+                                        r.left.toInt(), r.top.toInt(),
+                                        r.right.toInt(), r.bottom.toInt()
+                                    )
+                                )
+                            }
+                        }
                 )
             }
         } else if (item != null) {

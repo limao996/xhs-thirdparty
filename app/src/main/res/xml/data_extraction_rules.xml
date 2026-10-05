@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    allowBackup 已经是 false，这里把云备份与设备迁移都显式排除，只为满足 Android 12+ 的要求
+    （lint 的 DataExtractionRules）。真正的"备份"由应用内的 设置 → 备份与恢复 负责，
+    内容不交给系统托管。
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" path="." />
+    </device-transfer>
+</data-extraction-rules>

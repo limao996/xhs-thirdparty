@@ -166,7 +166,9 @@ fun AboutScreen(
                     )
                 }
             },
-            confirmButton = { TextButton(onClick = { showLicense = false }) { Text("关闭") } }
+            confirmButton = {
+                TextButton(onClick = haptics.click { showLicense = false }) { Text("关闭") }
+            }
         )
     }
 }

@@ -67,13 +67,14 @@ fun UserListScreen(
 ) {
     val state by viewModel.ui.collectAsStateWithLifecycle()
     val title = if (mode == UserListMode.FOLLOWING) "关注" else "粉丝"
+    val haptics = com.thirdparty.xhs.ui.components.rememberHaptics()
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(title) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = haptics.click(onBack)) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回")
                     }
                 }

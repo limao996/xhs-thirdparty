@@ -9,9 +9,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -22,7 +20,6 @@ import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -34,7 +31,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -46,10 +42,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
-import com.thirdparty.xhs.App
 import com.thirdparty.xhs.common.RepoViewModelFactory
 import com.thirdparty.xhs.data.NoteItem
 import com.thirdparty.xhs.ui.components.BufferingIndicator
@@ -76,7 +70,6 @@ import com.thirdparty.xhs.ui.theme.Scrim
 import com.thirdparty.xhs.ui.theme.Spacing
 import com.thirdparty.xhs.ui.viewmodel.VideoFeedViewModel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
@@ -556,9 +549,9 @@ private fun rememberPreparedPlayer(
         val p = player
         val listener = if (p == null) null else object : Player.Listener {
             override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
-                if (videoSize.width > 0 && videoSize.height > 0) {
-                    aspect(videoSize.width.toFloat() / videoSize.height.toFloat())
-                }
+                // 与详情页/小窗共用同一个比例判据（含旋转修正与像素比），别再各算一套（审计 F9）
+                val a = com.thirdparty.xhs.ui.components.PipController.videoAspectOf(videoSize)
+                if (a > 0f) aspect(a)
             }
         }
         if (p != null && listener != null) p.addListener(listener)

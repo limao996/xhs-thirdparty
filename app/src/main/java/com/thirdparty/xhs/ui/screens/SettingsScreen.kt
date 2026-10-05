@@ -14,10 +14,8 @@ import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -36,6 +34,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import com.thirdparty.xhs.ui.components.SectionLabel
 import com.thirdparty.xhs.ui.theme.Spacing
 import com.thirdparty.xhs.ui.theme.ThemeMode
 import androidx.compose.foundation.layout.Spacer
@@ -305,12 +304,3 @@ private fun androidx.compose.foundation.layout.ColumnScope.SettingsGroup(
     Spacer(Modifier.height(Spacing.l))
 }
 
-@Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = Spacing.l, top = Spacing.m, bottom = Spacing.s)
-    )
-}

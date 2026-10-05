@@ -1,7 +1,5 @@
 package com.thirdparty.xhs.navigation
 
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -52,11 +50,9 @@ import com.thirdparty.xhs.ui.screens.UserListScreen
 import com.thirdparty.xhs.ui.viewmodel.UserListMode
 import com.thirdparty.xhs.ui.screens.BackupScreen
 import com.thirdparty.xhs.ui.theme.isDark
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import com.thirdparty.xhs.ui.screens.SettingsScreen
 import androidx.compose.ui.platform.LocalContext
-import kotlinx.coroutines.Dispatchers
 import androidx.compose.material.icons.filled.Close
 
 /**
@@ -93,6 +89,9 @@ private fun LocalListNav(
     var confirmRemove by remember { mutableStateOf(false) }
     var confirmExit by remember { mutableStateOf(false) }
 
+    // 屏幕上自己画的按钮都要有触感（硬约束 19）。这里以前只有一个 `haptics` 都没有。
+    val haptics = com.thirdparty.xhs.ui.components.rememberHaptics()
+
     Scaffold(
         topBar = {
             if (selecting) {
@@ -106,11 +105,13 @@ private fun LocalListNav(
                 TopAppBar(
                     title = { Text(title) },
                     navigationIcon = {
-                        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
+                        IconButton(onClick = haptics.click(onBack)) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回")
+                        }
                     },
                     actions = {
                         if (state.all.isNotEmpty()) {
-                            IconButton(onClick = { confirmClear = true }) {
+                            IconButton(onClick = haptics.click { confirmClear = true }) {
                                 Icon(Icons.Filled.DeleteOutline, contentDescription = "清空")
                             }
                         }
@@ -140,13 +141,13 @@ private fun LocalListNav(
             title = { Text("清空$title？") },
             text = { Text("此操作不可撤销，将删除全部 ${state.all.size} 条本地记录。") },
             confirmButton = {
-                TextButton(onClick = {
+                TextButton(onClick = haptics.rejectClick {
                     viewModel.clear()
                     confirmClear = false
                 }) { Text("清空") }
             },
             dismissButton = {
-                TextButton(onClick = { confirmClear = false }) { Text("取消") }
+                TextButton(onClick = haptics.click { confirmClear = false }) { Text("取消") }
             }
         )
     }
@@ -158,14 +159,14 @@ private fun LocalListNav(
             title = { Text("取消收藏？") },
             text = { Text("将从收藏中移除已选的 ${selected.size} 项，此操作不可撤销。") },
             confirmButton = {
-                TextButton(onClick = {
+                TextButton(onClick = haptics.rejectClick {
                     viewModel.removeSaved(selected)
                     selected = emptySet()
                     confirmRemove = false
                 }) { Text("取消收藏") }
             },
             dismissButton = {
-                TextButton(onClick = { confirmRemove = false }) { Text("再想想") }
+                TextButton(onClick = haptics.click { confirmRemove = false }) { Text("再想想") }
             }
         )
     }
@@ -179,13 +180,13 @@ private fun LocalListNav(
             title = { Text("退出多选？") },
             text = { Text("已选的 ${selected.size} 项会被取消勾选。") },
             confirmButton = {
-                TextButton(onClick = {
+                TextButton(onClick = haptics.click {
                     selected = emptySet()
                     confirmExit = false
                 }) { Text("退出") }
             },
             dismissButton = {
-                TextButton(onClick = { confirmExit = false }) { Text("继续多选") }
+                TextButton(onClick = haptics.click { confirmExit = false }) { Text("继续多选") }
             }
         )
     }
@@ -203,16 +204,17 @@ private fun SelectionTopBar(
     onExit: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val haptics = com.thirdparty.xhs.ui.components.rememberHaptics()
     TopAppBar(
         title = { Text("已选 $count 项") },
         navigationIcon = {
-            IconButton(onClick = onExit) {
+            IconButton(onClick = haptics.click(onExit)) {
                 Icon(Icons.Filled.Close, contentDescription = "退出多选")
             }
         },
         actions = {
-            TextButton(onClick = onSelectAll) { Text("全选") }
-            IconButton(onClick = onDelete) {
+            TextButton(onClick = haptics.click(onSelectAll)) { Text("全选") }
+            IconButton(onClick = haptics.rejectClick(onDelete)) {
                 Icon(Icons.Filled.DeleteOutline, contentDescription = "取消收藏")
             }
         }
@@ -317,21 +319,7 @@ fun AppNavHost(
                 onOpenSettings = { nav.navigate(Routes.SETTINGS) },
                 onOpenAbout = { nav.navigate(Routes.ABOUT) },
                 onOpenUpdate = { nav.navigate(Routes.UPDATE) },
-                onOpenWatchLater = { nav.navigate(Routes.WATCH_LATER) },
-                onSetBiometricLock = { on ->
-                    App.repo.biometricLock = on
-                    App.INSTANCE.notifyLockChanged()
-                },
-                onSetHistoryLimit = { n ->
-                    App.repo.historyLimit = n
-                    // trim straight away so a lower limit takes effect now rather
-                    // than only after the next viewed note. On the app scope, not an
-                    // ad-hoc one: this must survive the settings page being popped a
-                    // moment later, but it should still have a named owner.
-                    App.INSTANCE.appScope.launch {
-                        App.INSTANCE.repository.trimHistory()
-                    }
-                }
+                onOpenWatchLater = { nav.navigate(Routes.WATCH_LATER) }
             )
         }
 

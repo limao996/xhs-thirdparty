@@ -21,11 +21,11 @@ class UpdateCheckerTest {
           "assets": [
             {
               "name": "checksums.txt",
-              "browser_download_url": "https://example.invalid/checksums.txt"
+              "browser_download_url": "https://github.com/limao996/xhs-thirdparty/releases/download/v1.3.0/checksums.txt"
             },
             {
               "name": "小黄书-1.3.0-release.apk",
-              "browser_download_url": "https://example.invalid/app-release.apk"
+              "browser_download_url": "https://github.com/limao996/xhs-thirdparty/releases/download/v1.3.0/app-release.apk"
             }
           ]
         }
@@ -37,8 +37,13 @@ class UpdateCheckerTest {
         assertTrue(r is UpdateChecker.Result.Newer)
         r as UpdateChecker.Result.Newer
         assertEquals("1.3.0", r.version)
-        // 只挑 .apk 资产，不能拿 checksums.txt 的地址当下载链接
-        assertEquals("https://example.invalid/app-release.apk", r.apkUrl)
+        // 只挑 .apk 资产，不能拿 checksums.txt 的地址当下载链接。
+        // 注意 fixture 必须用**可信域名**（GitHub）：`isTrustedDownloadUrl` 会把别的域名过滤成 null，
+        // 之前这里写的是 example.invalid，于是断言一直是红的（CI 也红）。
+        assertEquals(
+            "https://github.com/limao996/xhs-thirdparty/releases/download/v1.3.0/app-release.apk",
+            r.apkUrl
+        )
         assertEquals("https://github.com/limao996/xhs-thirdparty/releases/tag/v1.3.0", r.pageUrl)
         assertTrue(r.notes.contains("修了点东西"))
     }

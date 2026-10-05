@@ -54,6 +54,7 @@ fun FollowedScreen(
     // for the whole list, so the row does not have to hold dialog state itself.
     var pendingUnfollow by remember { mutableStateOf<FollowedEntity?>(null) }
     val scope = rememberCoroutineScope()
+    val haptics = com.thirdparty.xhs.ui.components.rememberHaptics()
 
     LaunchedEffect(Unit) {
         list = App.repo.followedAuthors()
@@ -67,7 +68,9 @@ fun FollowedScreen(
                 // this page wants to know before scrolling
                 title = { Text(if (loaded) "我关注的作者 · ${list.size}" else "我关注的作者") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
+                    IconButton(onClick = haptics.click(onBack)) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回")
+                    }
                 }
             )
         }

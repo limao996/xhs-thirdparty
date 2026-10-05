@@ -7,7 +7,6 @@ object Routes {
     const val HOME = "home"
     const val DETAIL = "detail/{noteId}"
     const val SEARCH = "search"
-    const val PROFILE = "profile"
     const val AUTHOR = "author/{userId}"
     const val SAVED = "saved"
     const val HISTORY = "history"

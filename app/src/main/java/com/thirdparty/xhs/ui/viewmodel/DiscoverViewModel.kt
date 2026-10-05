@@ -2,7 +2,6 @@ package com.thirdparty.xhs.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.thirdparty.xhs.data.AuthorInfo
 import com.thirdparty.xhs.data.Category
 import com.thirdparty.xhs.data.FanGroupAuthor
 import com.thirdparty.xhs.data.FollowedEntity

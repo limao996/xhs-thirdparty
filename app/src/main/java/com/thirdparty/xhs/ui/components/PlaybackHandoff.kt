@@ -57,6 +57,17 @@ object PlaybackHandoff {
 
     private var noteId: Long = -1L
     private var pending: Pending? = null
+    private var pendingAtMs: Long = 0L
+
+    /**
+     * 单槽通道的保鲜期。
+     *
+     * 这个槽是"一次性事务"：信息流点进详情页时写入，详情页 compose 时消费。但**关掉小窗**那一路上
+     * 写入的进度（`PipController.closeAndRelease`）可能根本没有消费者 —— 用户关掉小窗后直接退出应用，
+     * 下次从收藏/深链打开同一个作品就会"莫名其妙从中间开始并自动播放"（审计 F7）。
+     * 加 TTL + `clearPending()`：过期的槽按不存在处理，且在 Activity 销毁时主动清掉。
+     */
+    private const val PENDING_TTL_MS = 60_000L
 
     private var heldNoteId: Long = -1L
     private var held: Held? = null
@@ -75,16 +86,34 @@ object PlaybackHandoff {
     fun stash(noteId: Long, positionMs: Long, playIntent: Boolean) {
         this.noteId = noteId
         this.pending = Pending(positionMs.coerceAtLeast(0L), playIntent)
+        this.pendingAtMs = android.os.SystemClock.elapsedRealtime()
     }
 
     /** Called by the detail page once its own player exists. Clears the store. */
     @Synchronized
     fun take(noteId: Long): Pending? {
-        if (this.noteId != noteId) return null
         val p = pending
+        val fresh = p != null &&
+            android.os.SystemClock.elapsedRealtime() - pendingAtMs <= PENDING_TTL_MS
+        if (this.noteId != noteId || !fresh) {
+            // 过期/不匹配的槽不再留着：它是"一次性事务"，留着只会在很久以后被别的打开动作误消费
+            if (p != null && !fresh) clearPendingLocked()
+            return null
+        }
+        clearPendingLocked()
+        return p
+    }
+
+    /** 主动丢弃还没被消费的进度（Activity 销毁时调，见审计 F7）。 */
+    @Synchronized
+    fun clearPending() {
+        clearPendingLocked()
+    }
+
+    private fun clearPendingLocked() {
         pending = null
         this.noteId = -1L
-        return p
+        pendingAtMs = 0L
     }
 
     // ---- the player itself --------------------------------------------------

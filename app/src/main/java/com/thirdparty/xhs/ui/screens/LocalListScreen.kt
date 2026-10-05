@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.History
@@ -67,13 +66,14 @@ fun LocalListScreen(
 
     // back gesture leaves selection mode rather than the screen
     BackHandler(enabled = selecting) { onSelectionChange(emptySet()) }
+    val haptics = com.thirdparty.xhs.ui.components.rememberHaptics()
 
     Column(Modifier.fillMaxSize()) {
         if (showOwnAppBar) {
             TopAppBar(
                 title = { Text(title) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = haptics.click(onBack)) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回")
                     }
                 }

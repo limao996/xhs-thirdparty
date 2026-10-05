@@ -65,19 +65,6 @@ class CredentialStore(context: Context) {
     }
 
     /**
-     * 彻底清空账号凭据（设备身份也换掉）。供"退出 / 清账号"用；
-     * 目前没有 UI 入口，但换号与备份恢复都依赖它的一致性语义。
-     */
-    fun clearCredentials() {
-        prefs.edit()
-            .remove(KEY_TOKEN)
-            .remove(KEY_HASH)
-            .remove(KEY_DEVICE)
-            .putLong(KEY_VIP_END, 0L)
-            .apply()
-    }
-
-    /**
      * The current account's VIP end, as last seen from the server (epoch seconds,
      * 0 = unknown).
      *

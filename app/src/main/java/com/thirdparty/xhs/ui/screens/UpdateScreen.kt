@@ -79,7 +79,7 @@ fun UpdateScreen(
             TopAppBar(
                 title = { Text("检查更新") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = haptics.click(onBack)) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回")
                     }
                 }

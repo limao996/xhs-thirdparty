@@ -633,7 +633,10 @@ fun PlaybackErrorOverlay(
                 color = Scrim.onMedia,
                 style = MaterialTheme.typography.bodyMedium
             )
-            TextButton(onClick = onRetry) { Text("重试") }
+            TextButton(
+                onClick = com.thirdparty.xhs.ui.components
+                    .rememberHaptics().click(onRetry)
+            ) { Text("重试") }
         }
     }
 }

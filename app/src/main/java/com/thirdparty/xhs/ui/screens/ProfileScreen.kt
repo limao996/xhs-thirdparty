@@ -26,8 +26,6 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.SwitchAccount
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LoadingIndicator
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
@@ -37,7 +35,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,22 +44,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.thirdparty.xhs.App
 import com.thirdparty.xhs.common.RepoViewModelFactory
 import com.thirdparty.xhs.ui.theme.AvatarSize
 import com.thirdparty.xhs.ui.theme.Corners
 import com.thirdparty.xhs.ui.theme.Spacing
-import com.thirdparty.xhs.ui.theme.ThemeMode
+import com.thirdparty.xhs.ui.components.SectionLabel
 import com.thirdparty.xhs.ui.components.XhsAvatar
 import com.thirdparty.xhs.ui.viewmodel.ProfileViewModel
-import androidx.compose.material.icons.filled.Search
 import com.thirdparty.xhs.ui.theme.bottomNavClearance
 import androidx.compose.material.icons.filled.Autorenew
-import androidx.compose.material3.Switch
 import androidx.compose.ui.draw.clip
 import com.thirdparty.xhs.BuildConfig
-import androidx.compose.material.icons.filled.CloudUpload
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.foundation.background
 
@@ -80,19 +72,7 @@ fun ProfileScreen(
     onOpenFollowing: (() -> Unit)? = null,
     onOpenFans: (() -> Unit)? = null,
     onOpenMyNotes: ((Int) -> Unit)? = null,
-    /** 备份与恢复 */
-
-    /** VIP-expiry auto switch */
-    autoVip: Boolean = false,
-    onSetAutoVip: ((Boolean) -> Unit)? = null,
-    /** app lock: require the device fingerprint/password on open */
-    biometricLock: Boolean = false,
-    biometricAvailable: Boolean = false,
-    onSetBiometricLock: ((Boolean) -> Unit)? = null,
-    /** 最近浏览 keep limit */
-    historyLimit: Int = 2000,
-    onSetHistoryLimit: ((Int) -> Unit)? = null,
-    /** 设置 entry */
+    /** 设置 entry（主题 / 应用锁 / 历史上限 / 自动换号都在设置页，这里只留入口） */
     onOpenSettings: (() -> Unit)? = null,
     /** 关于 / 检查更新：两个各自独立的页面，入口在这里（不在设置里） */
     onOpenAbout: (() -> Unit)? = null,
@@ -211,14 +191,14 @@ fun ProfileScreen(
             }
         }
         Spacer(Modifier.height(Spacing.m))
-        SectionLabel("我的内容")
+        SectionLabel("我的内容", bottom = Spacing.xs)
 
         ProfileEntry(Icons.Filled.Favorite, "我的收藏", "${state.savedCount} 条", onOpenSaved)
         ProfileEntry(Icons.Filled.History, "最近浏览", "${state.historyCount} 条", onOpenHistory)
         ProfileEntry(Icons.Filled.Group, "我关注的作者", "${state.followedCount} 位", onOpenFollowed)
 
         Spacer(Modifier.height(Spacing.m))
-        SectionLabel("账号")
+        SectionLabel("账号", bottom = Spacing.xs)
         if (onRotateGuest != null) {
             // confirm first: switching creates a brand-new account and the previous
             // identity is gone for good (there is no account history any more), so a
@@ -230,13 +210,13 @@ fun ProfileScreen(
                     title = { Text("切换游客账号？") },
                     text = { Text("将创建一个全新的随机账号，当前账号将无法找回。") },
                     confirmButton = {
-                        TextButton(onClick = {
+                        TextButton(onClick = haptics.rejectClick {
                             confirmRotate = false
                             onRotateGuest()
                         }) { Text("切换") }
                     },
                     dismissButton = {
-                        TextButton(onClick = { confirmRotate = false }) { Text("取消") }
+                        TextButton(onClick = haptics.click { confirmRotate = false }) { Text("取消") }
                     }
                 )
             }
@@ -262,7 +242,7 @@ fun ProfileScreen(
         }
 
         Spacer(Modifier.height(Spacing.m))
-        SectionLabel("其他")
+        SectionLabel("其他", bottom = Spacing.xs)
         if (onOpenSettings != null) {
             ProfileEntry(
                 Icons.Filled.Settings, "设置",
@@ -365,13 +345,3 @@ private fun ProfileEntry(
     .clip(Corners.large)
     .clickable { onClick() }
 
-/** Section header, matching the one used on the 设置 page. */
-@Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = Spacing.l, top = Spacing.m, bottom = Spacing.xs)
-    )
-}

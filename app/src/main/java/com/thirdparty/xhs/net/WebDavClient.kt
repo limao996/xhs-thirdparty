@@ -100,21 +100,6 @@ class WebDavClient(
         }
     }
 
-    /** Upload (creates or overwrites). Returns a human-readable result. */
-    suspend fun upload(name: String, content: String): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
-            val body = content.toRequestBody("application/json; charset=utf-8".toMediaType())
-            val req = authed(Request.Builder().url(fileUrl(name)).put(body)).build()
-            client.newCall(req).await().use { resp ->
-                // 201 Created / 204 No Content are the normal answers; some servers
-                // reply 200. Anything else is a real failure.
-                if (!resp.isSuccessful) {
-                    throw IOException("上传失败 HTTP ${resp.code} ${resp.message}")
-                }
-            }
-        }
-    }
-
     /** Download; fails clearly when the file is not there yet. */
     suspend fun download(name: String): Result<String> = withContext(Dispatchers.IO) {
         runCatching {

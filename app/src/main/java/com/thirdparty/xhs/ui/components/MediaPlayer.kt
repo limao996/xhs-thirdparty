@@ -18,7 +18,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -44,7 +43,6 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
-import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.thirdparty.xhs.ui.theme.Scrim
@@ -54,14 +52,10 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.filled.Forward5
 import androidx.compose.material.icons.filled.Replay5
-import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
@@ -152,18 +146,17 @@ fun MediaPlayer(
     // and fell back to fillMaxSize() — the full-screen picture would have been
     // stretched (and, before the surface fix, simply black).
     var videoAspect by remember(player) {
-        mutableStateOf(
-            player.videoSize.let {
-                if (it.width > 0 && it.height > 0) it.width.toFloat() / it.height.toFloat() else 0f
-            }
-        )
+        mutableStateOf(PipController.videoAspectOf(player.videoSize))
     }
     // report the natural aspect ratio so callers can size the container
+    //
+    // 一律走 `PipController.videoAspectOf`（含旋转修正与像素比）：详情页/信息流/小窗三处曾经各算一套
+    // `width/height`，手机横拍片（横向帧 + 旋转 90°）会出现"小窗是横的、详情页按竖的算"这种不一致（审计 F9）。
     DisposableEffect(player, onAspect) {
         val listener = object : Player.Listener {
             override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
-                if (videoSize.width > 0 && videoSize.height > 0) {
-                    val a = videoSize.width.toFloat() / videoSize.height.toFloat()
+                val a = PipController.videoAspectOf(videoSize)
+                if (a > 0f) {
                     videoAspect = a
                     onAspect?.invoke(a)
                 }
@@ -175,10 +168,8 @@ fun MediaPlayer(
     // and report what is already known to the host, so a layout that never sees a
     // change event still sizes itself correctly
     LaunchedEffect(player) {
-        val vs = player.videoSize
-        if (vs.width > 0 && vs.height > 0) {
-            onAspect?.invoke(vs.width.toFloat() / vs.height.toFloat())
-        }
+        val a = PipController.videoAspectOf(player.videoSize)
+        if (a > 0f) onAspect?.invoke(a)
     }
     DisposableEffect(player) {
         onDispose {

@@ -631,7 +631,35 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 
 
-### 阶段三十一 · 全面复审（两份只读审计 → 修复 + 未修清单）
+### 阶段三十二 · 把上一轮"未修清单"能修的都修掉
+
+上一轮（阶段三十一）末尾留了一张未修清单。这一轮逐条做掉能做的，**做不了的写清原因**（末尾）。
+
+| # | 上一轮的未修项 | 这一轮怎么修 | 证据 |
+| --- | --- | --- | --- |
+| 1 | **F6**：小窗期间导航内容不参与组合 → 展开回来滚动位置/全屏状态/图片页码回顶部 | 改成 **`AppNavHost` 照常组合**，小窗时在上面盖一层不透明黑底 + 视频把整页 UI 挡住（`MainActivity`）；不再用 `if (!pipActive)` 摘掉整棵导航树 | 实机：详情页滚到「明星淫梦」y=**1111** → 进小窗 → 关掉小窗 → 同一实例回前台，首项仍在 **y=1111**（未回顶部）；小窗截图只看到视频、4:3 信箱、无详情页 UI（`docs/images/screenshots/pip-after-fix.png`，未入库） |
+| 2 | **F7**：`PlaybackHandoff` 单槽残留（`onDestroy` 写的进度没人消费） | 加 **60s TTL**（过期槽按不存在处理并清掉）+ `clearPending()`，`MainActivity.onDestroy` 主动清 | 代码 + 编译；关小窗那一路实测日志 `closeAndRelease stash note=2010 pos=181257 playing=false` |
+| 3 | **F9**：比例判据两套（PiP 用旋转修正值，详情页/信息流用原始 `w/h`） | 统一到 `PipController.videoAspectOf()`（含旋转修正 + **`pixelWidthHeightRatio`**），详情页/信息流/小窗三处全部改用它 | 编译 + 实机播放正常（`started=1`）；小窗 frame=533×400 与视频 720×540 同比例 |
+| 4 | **F11**：进程被回收后重建，小窗里会画整页详情 UI | `onResume` 增加"在小窗里但没有会话"的分支：至少不把整页 UI 画进小窗（保持黑底），展开时走无会话分支放回界面 | 代码 + 编译（进程回收本身没法在模拟器上稳定复现，标**未验证**） |
+| 5 | **F13**：小窗里没有卡死看门狗 | 小窗那块组合里挂 `RecoverStuckPlayback(s.player)`（不画 UI，纯恢复逻辑） | 代码 + 编译 |
+| 6 | 死代码一批 | 删：`Routes.PROFILE`、`XhsRepository.isInWatchLater`、`CacheViewModel.setAll`、`WebDavClient` 的 String 版 `upload`/`download`、`WatchLaterScreen.QueueRowHeight`、`CredentialStore.clearCredentials`、`XhsApi` 的 `userIdOverride`/`tokenOverride`、`HomeScreen` 三个未用局部 + 两个没人用的回调参数、`ProfileScreen` **7 个未用参数**（设置项都在设置页了） | 编译通过；`lint` 与 grep 复查无引用 |
+| 7 | 约 20 处按钮缺触感 | 补：多选页返回/清空/三个确认框/多选工具栏（10 处）、LocalList·Followed·UserList·Backup·Update 的返回按钮、关于页许可关闭、缓存页勾选框与清理确认框、我的页切换账号确认框、播放器重试 | 编译；触感语义按四档（确认=`reject`/`accept`、轻点=`tick`） |
+| 8 | 约 90 处未使用 import | 脚本按"整个文件里除 import 行外不再出现该标识符"判定删除，**委托/运算符类名字（`getValue`/`componentN` 等）白名单保留** | 移除 **91 行**、涉及 20 个文件，编译通过 |
+| 9 | `SectionLabel` 两份私有实现 | 合成 `ui/components/SectionLabel.kt`（差异用 `bottom` 参数表达），两个页面共用 | 编译 |
+| 10 | `NoteItem` 里 `parseRatio` / `ratioOf` 两份实现 | `ratioOf` 改为委托 `parseRatio` | 编译 |
+| 11 | 检查更新失败后无退避（每次回前台都重试，会烧 GitHub 匿名额度） | 加 30 分钟重试窗口（`UPDATE_RETRY_MIN_INTERVAL_MS` + `lastUpdateAttemptAt`） | 代码 + 编译 |
+| 12 | lint：minSdk 已是 26 的过时判断等 | 删两处 `SDK_INT` 判断、合并 `mipmap-anydpi-v26` → `mipmap-anydpi`、删未用颜色 `icon_bg`、补 `dataExtractionRules`、给小窗加 `setSourceRectHint`（画面矩形由详情页量出报给 `PipController`） | 编译 + 安装运行；`lintDebug` 修前 **61** 条（其中 1 条 Error 在未入库的 `local.properties`） |
+| 13 | **单元测试本来是红的**（`UpdateCheckerTest` 用了 `example.invalid`，而 `isTrustedDownloadUrl` 只放行 GitHub） | 把 fixture 换成 GitHub 域名，断言同步；注释写清为什么 | `gradlew testDebugUnitTest` → **BUILD SUCCESSFUL**（修前 6 个用例 1 个失败） |
+
+**这一轮仍未修（原因写在括号里）**：
+- `runCatching` 吞 `CancellationException`（92 处）：需要逐处判断"这里取消该不该继续走错误分支"，批量替换会把错误处理改坏 —— 留待专项（不是不能修，是不该盲改）。
+- `_ui.value = _ui.value.copy(...)` 的读改写竞态：同上，逐处判断哪几个 ViewModel 真有并发写者。
+- `LocalListScreen` 的重复回调（`onRequestSelectAll`/`onRequestDelete` 与 selection 参数重叠）：要改多选页的接口形状，属于设计调整。
+- `Tokens.XhsColors.avatarBackground()` / `placeholderError()`、`XhsApi.gateFailure`、`App.appForeground`：都是**刻意的公开诊断/预留 API**（后者还在 `@Suppress("unused")` 里），保留。
+- `app.xiaohuangbook.net` 的 DNS 污染、CI 上的 release 签名核验等环境类项：与代码无关。
+- 审查 P0-13（`tools/fixtures/` 里的真实凭据）：用户明确"不用管"。
+
+
 
 审计方式：两个只读子代理分别审「播放器 / 画中画子系统」与「其余代码 + 文档一致性」，逐条给 file:line 证据；本轮先修 P0/P1 与廉价 P2，未修的逐条列在末尾（不假装修完）。
 

@@ -2,8 +2,6 @@
 
 package com.thirdparty.xhs.ui.screens
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,7 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
@@ -36,15 +33,12 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SearchBar
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -52,10 +46,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import com.thirdparty.xhs.common.RepoViewModelFactory
 import com.thirdparty.xhs.data.AuthorInfo
-import com.thirdparty.xhs.data.NoteItem
 import com.thirdparty.xhs.ui.components.EmptyState
-import com.thirdparty.xhs.ui.components.FeeBadge
-import com.thirdparty.xhs.ui.components.XhsAsyncImage
 import com.thirdparty.xhs.ui.components.XhsAvatar
 import com.thirdparty.xhs.ui.components.XhsWaterfallGrid
 import com.thirdparty.xhs.ui.components.rememberNoteActions
@@ -63,7 +54,6 @@ import com.thirdparty.xhs.ui.components.rememberNoteFlags
 import com.thirdparty.xhs.ui.components.WatchLaterFab
 import com.thirdparty.xhs.ui.theme.AvatarSize
 import com.thirdparty.xhs.ui.theme.Spacing
-import com.thirdparty.xhs.ui.theme.Thumb
 import com.thirdparty.xhs.ui.viewmodel.SearchResultMode
 import com.thirdparty.xhs.ui.viewmodel.SearchViewModel
 

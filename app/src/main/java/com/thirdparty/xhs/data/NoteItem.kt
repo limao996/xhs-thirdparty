@@ -114,14 +114,7 @@ data class NoteItem(
         }
 
         /** "1080*720" -> 1.5 ; falls back to the portrait default. */
-        private fun ratioOf(size: String): Float {
-            val parts = size.split('*')
-            if (parts.size != 2) return NoteImage.DEFAULT_RATIO
-            val w = parts[0].trim().toFloatOrNull() ?: return NoteImage.DEFAULT_RATIO
-            val h = parts[1].trim().toFloatOrNull() ?: return NoteImage.DEFAULT_RATIO
-            if (w <= 0f || h <= 0f) return NoteImage.DEFAULT_RATIO
-            return w / h
-        }
+        private fun ratioOf(size: String): Float = parseRatio(size, NoteImage.DEFAULT_RATIO)
     }
 }
 

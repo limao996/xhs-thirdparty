@@ -55,12 +55,6 @@ class CacheViewModel : ViewModel() {
         _ui.value = _ui.value.copy(selected = next)
     }
 
-    fun setAll(selected: Boolean) {
-        _ui.value = _ui.value.copy(
-            selected = if (selected) _ui.value.entries.map { it.kind }.toSet() else emptySet()
-        )
-    }
-
     /**
      * 反选：勾上的取消、没勾的勾上。
      *

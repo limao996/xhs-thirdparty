@@ -1,9 +1,10 @@
 package com.thirdparty.xhs
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -22,7 +23,6 @@ import com.thirdparty.xhs.ui.components.UpdateAvailableDialog
 import com.thirdparty.xhs.ui.components.openUrl
 import com.thirdparty.xhs.ui.theme.XhsWindowBackground
 import com.thirdparty.xhs.ui.theme.XhsTheme
-import com.thirdparty.xhs.ui.theme.isDark
 
 /**
  * Single-Activity Compose app. Theme follows the persisted mode (default system).
@@ -223,6 +223,10 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
             com.thirdparty.xhs.ui.components.PipController.hasSession()
         ) {
             com.thirdparty.xhs.ui.components.PipController.inPip.value = true
+        } else if (isInPictureInPictureMode) {
+            // 在小窗里、却**没有会话**（进程被回收后重建）：至少不要把整页 UI 画进那个小窗口，
+            // 让它保持黑底；展开时 `returnFromPipToDetail()` 会走"没有会话"的分支把界面放回来（审计 F11）。
+            com.thirdparty.xhs.ui.components.PipController.inPip.value = true
         }
         if (com.thirdparty.xhs.BuildConfig.DEBUG) {
             android.util.Log.i(
@@ -250,7 +254,7 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
      * 播放状态一变（小窗里点了播放/暂停），图标要跟着换，所以注册的接收者会回调到这里。
      */
     private fun refreshPipParams() {
-        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) return
+        // minSdk 26 == 画中画最低版本，所以不需要 SDK_INT 判断（硬约束 5b）
         if (!isInPictureInPictureMode) return
         val params = com.thirdparty.xhs.ui.components.PipController.buildParams(
             this,
@@ -375,6 +379,8 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
         super.onDestroy()
         pipReceiver?.let { r -> runCatching { unregisterReceiver(r) } }
         pipReceiver = null
+        // 续播单槽是"一次性事务"：没人消费的进度不能留到下一次打开同一个作品（审计 F7）
+        runCatching { com.thirdparty.xhs.ui.components.PlaybackHandoff.clearPending() }
         // 关掉小窗 = 没有界面了：播放器必须销毁，否则会留下一个看不见的 ExoPlayer
         // 继续放声音。展开回详情页时 session 已经交回去了（pendingDetailId 被消费），
         // 所以这里不会误伤。
@@ -469,13 +475,13 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
                         if (lockEpoch > 0) locked = biometricLockEnabled()
                     }
                     // 小窗里只画视频：系统把整个 Activity 缩成小窗，其余 chrome 一律不要。
-                    // 注意这里是**跳过**导航内容的组合（不是盖在上面）——所以详情页的
-                    // ViewModel 留在返回栈里、组合被销毁，展开时重建但 ViewModel 状态还在。
-                    // （已知局限：`rememberSaveable` 那几个值随组合一起丢，展开回来滚动位置会回到顶部。）
-                    if (!pipActive) {
-                        AppNavHost(navController, deepLinkNoteId = pendingNote.value) {
-                            pendingNote.value = null
-                        }
+                    //
+                    // 这里**保持导航内容在组合里**（不再 `if (!pipActive)` 摘掉），理由：摘掉会让
+                    // 目标页的 `rememberSaveable`（滚动位置 / 全屏状态 / 图片页码）随组合一起丢，
+                    // 展开回来就回到顶部（审计 F6）。现在改为"照常组合 + 上面盖一层不透明黑底 +
+                    // 小窗视频"，状态全部保留，而小窗窗口里只看得到视频。
+                    AppNavHost(navController, deepLinkNoteId = pendingNote.value) {
+                        pendingNote.value = null
                     }
                     // 记住当前路由：展开小窗时要判断"是不是已经在这个作品的详情页"，
                     // 是就不导航（导航会新建记录 → 整页重新加载）。
@@ -574,35 +580,47 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
                     }
                     // `pipActive` 已在上面（NavHost 之前）收集，这里复用同一个值
                     if (pipActive) {
-                        pipSession?.let { s ->
-                            // 小窗里按**视频自己的比例**画（信箱式留边），不要拉满整窗：
-                            // 窗口比例是系统按 PiP 参数给的，两者不一定相等（尤其横屏视频
-                            // 切小窗时窗口可能仍是竖的），拉满就是用户看到的"画面被拉伸"。
-                            var pipAspect by androidx.compose.runtime.remember(s.player) {
-                                androidx.compose.runtime.mutableFloatStateOf(
-                                    com.thirdparty.xhs.ui.components.PipController
+                        // 不透明黑底 + 视频铺满：把底下仍在组合的整页 UI 完全盖住，
+                        // 小窗窗口里就只剩视频（配合上面"保留组合"的做法）。
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .background(Color.Black)
+                        ) {
+                            pipSession?.let { s ->
+                                // 小窗里也要有卡死兜底：详情页那套看门狗随它的组合一起不可见时，
+                                // 小窗里卡住就没人救了（审计 F13）。这个 effect 不画 UI，纯恢复逻辑。
+                                com.thirdparty.xhs.ui.components.RecoverStuckPlayback(s.player)
+                                // 小窗里按**视频自己的比例**画（信箱式留边），不要拉满整窗：
+                                // 窗口比例是系统按 PiP 参数给的，两者不一定相等（尤其横屏视频
+                                // 切小窗时窗口可能仍是竖的），拉满就是用户看到的"画面被拉伸"。
+                                var pipAspect by androidx.compose.runtime.remember(s.player) {
+                                    androidx.compose.runtime.mutableFloatStateOf(
+                                        com.thirdparty.xhs.ui.components.PipController
+                                            .videoAspectOf(s.player.videoSize)
+                                    )
+                                }
+                                androidx.compose.runtime.DisposableEffect(s.player) {
+                                    val l = object : androidx.media3.common.Player.Listener {
+                                        override fun onVideoSizeChanged(
+                                            videoSize: androidx.media3.common.VideoSize
+                                        ) {
+                                            pipAspect =
+                                                com.thirdparty.xhs.ui.components.PipController
+                                                    .videoAspectOf(videoSize)
+                                        }
+                                    }
+                                    s.player.addListener(l)
+                                    pipAspect = com.thirdparty.xhs.ui.components.PipController
                                         .videoAspectOf(s.player.videoSize)
+                                    onDispose { s.player.removeListener(l) }
+                                }
+                                com.thirdparty.xhs.ui.components.VideoSurface(
+                                    player = s.player,
+                                    videoAspect = pipAspect.takeIf { it > 0f },
+                                    modifier = Modifier.fillMaxSize()
                                 )
                             }
-                            androidx.compose.runtime.DisposableEffect(s.player) {
-                                val l = object : androidx.media3.common.Player.Listener {
-                                    override fun onVideoSizeChanged(
-                                        videoSize: androidx.media3.common.VideoSize
-                                    ) {
-                                        pipAspect = com.thirdparty.xhs.ui.components.PipController
-                                            .videoAspectOf(videoSize)
-                                    }
-                                }
-                                s.player.addListener(l)
-                                pipAspect = com.thirdparty.xhs.ui.components.PipController
-                                    .videoAspectOf(s.player.videoSize)
-                                onDispose { s.player.removeListener(l) }
-                            }
-                            com.thirdparty.xhs.ui.components.VideoSurface(
-                                player = s.player,
-                                videoAspect = pipAspect.takeIf { it > 0f },
-                                modifier = Modifier.fillMaxSize()
-                            )
                         }
                     }
                 }

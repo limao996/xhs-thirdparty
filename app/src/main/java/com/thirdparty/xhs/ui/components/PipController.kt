@@ -55,6 +55,19 @@ object PipController {
     /** 监听播放器状态，用于刷新小窗按钮（随会话建立/结束挂上/摘掉）。 */
     private var stateListener: Player.Listener? = null
 
+    /**
+     * 视频画面在窗口里的位置（px），用来给系统一个 `sourceRectHint`。
+     *
+     * lint 的 `PictureInPictureIssue` 对 targetSdk ≥ 31 的建议里就有它：有 hint 时系统从小窗
+     * 展开/收起的动画会从这块矩形往外长，没有就是整个窗口一起缩放（观感差别明显）。
+     */
+    private var sourceRectHint: android.graphics.Rect? = null
+
+    /** 播放器画面变化时由 UI 报进来（`boundsInWindow`）。 */
+    fun setSourceRectHint(rect: android.graphics.Rect?) {
+        sourceRectHint = rect
+    }
+
     // ---- 生命周期 ----------------------------------------------------------
 
     /**
@@ -217,6 +230,9 @@ object PipController {
             }
             builder.setActions(actions(activity, p))
         }
+        sourceRectHint?.let { rect ->
+            if (!rect.isEmpty) runCatching { builder.setSourceRectHint(rect) }
+        }
         return runCatching { builder.build() }.getOrNull()
     }
 
@@ -232,7 +248,9 @@ object PipController {
         val w = if (rotate) size.height else size.width
         val h = if (rotate) size.width else size.height
         if (w <= 0 || h <= 0) return 0f
-        return w.toFloat() / h.toFloat()
+        // 非方形像素（少见但要算）：显示比例 = 宽/高 × 像素宽高比
+        val par = if (size.pixelWidthHeightRatio > 0f) size.pixelWidthHeightRatio else 1f
+        return (w.toFloat() / h.toFloat()) * par
     }
 
     /** PiP 系统允许的最大比例（约 2.39:1）；超出的比例会被忽略 */

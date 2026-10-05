@@ -113,6 +113,9 @@ class App : Application() {
     @Volatile
     private var autoUpdateWantsRetry = false
 
+    /** 上一次「真的发出请求」的时刻（含失败的重试），用来给失败重试退避。 */
+    private var lastUpdateAttemptAt = 0L
+
     /**
      * Ask GitHub for the latest release and, if it is newer, surface it.
      *
@@ -128,6 +131,11 @@ class App : Application() {
      */
     fun checkUpdateOnLaunch(force: Boolean = false) {
         if (!force && !autoUpdateTried.compareAndSet(false, true)) return
+        // force 只用来「回到前台补一次」，不是「每次回前台都补」：失败重试也要退避，
+        // 否则断网时每次切前台都会打一次 GitHub（匿名 60 次/小时/IP，实测会 403）。
+        val now = System.currentTimeMillis()
+        if (force && now - lastUpdateAttemptAt < UPDATE_RETRY_MIN_INTERVAL_MS) return
+        lastUpdateAttemptAt = now
         appScope.launch {
             if (!updateCheckDue()) return@launch
             val result = runCatching { UpdateChecker.check() }.getOrNull()
@@ -305,5 +313,8 @@ class App : Application() {
         private const val KEY_UPDATE_CHECKED_AT = "update_checked_at"
         /** startup update checks are throttled to this interval */
         private const val UPDATE_CHECK_INTERVAL_MS = 12L * 60L * 60L * 1000L
+
+    /** 失败后允许再试的最小间隔（30 分钟）：失败不算「查过了」，但也不能立刻再试。 */
+    private const val UPDATE_RETRY_MIN_INTERVAL_MS = 30L * 60L * 1000L
     }
 }
