@@ -276,14 +276,37 @@
   「展开」= `onPictureInPictureModeChanged(false)` → `pendingDetailId` → `PlaybackHandoff.givePlayer` → 回详情页；
   「关闭」= Activity 销毁 → `MainActivity.onDestroy` 里 `PipController.closeAndRelease()`（见硬约束 17）。
 
-**H4 · 画中画控制栏最多 3 个自定义按钮，而且不要往里面塞队列**
-- 触发：需求写「播放/暂停、播放顺序、稍后观看队列、全屏」四个。
-- 现实：`PictureInPictureParams.setActions` 在手机上只显示 3 个；三个按钮挤在一行也不好按，
-  而队列是主界面的东西（小窗里点它还得把 Activity 拉起来）。
-- 做法（用户确认过的最终形态）：只放两个 —— 播放/暂停、播放顺序（顺序 ⇄ 单集循环），
-  「全屏」交给系统自带的展开按钮；入口在**播放器自己的菜单**里（`MediaPlayer(onEnterPip = …)`，
-  那个菜单本身是 `AlertDialog`），不要在页面顶栏再放一个「更多」。
-  图标必须是资源或 Bitmap，所以有 `res/drawable/ic_pip_play|pause|repeat.xml`。
+**H4 · 画中画控制栏最多 3 个自定义按钮，就用标准的三个**
+- 触发：需求写「播放/暂停、播放顺序、稍后观看队列、全屏」。
+- 现实：`PictureInPictureParams.setActions` 在手机上最多显示 3 个；队列属于主界面，
+  塞进小窗之后点了还得把 Activity 拉起来。
+- 现行做法（用户最终确认）：`后退 10 秒 / 播放暂停 / 前进 10 秒` 三个 `RemoteAction`，
+  「全屏」用系统自带的展开按钮；入口在**播放器自己的菜单**（`MediaPlayer(onEnterPip = …)`，
+  菜单是原生 `AlertDialog`）。图标必须是资源或 Bitmap：`res/drawable/ic_pip_{rewind,pause,play,forward}.xml`
+  （用 Material 标准图形，别自己画）。动作经广播回到 `MainActivity` 注册的接收者，
+  动作后记得 `setPictureInPictureParams` 重设一次（播放/暂停图标要换）。
+
+**H8 · 不要自绘对话框外壳**
+- 触发：用户反馈"对话框没有遮罩和动画"，我先做了一版自绘遮罩 + 自绘入场动画的统一外壳。
+- 结果：被明确否决 —— "不要自己绘制，用原生的 AlertDialog"。
+- 正确做法：一律 `material3.AlertDialog`。实测遮罩本来就在（长按对话框打开时背景亮度
+  `239 → 96`，约 60% 压暗）；动画由系统负责，若设备的"动画时长比例"是 0 就瞬间完成，
+  那是用户设置。**不要再接管对话框的窗口与遮罩**。
+
+**H9 · 同一角落的浮动按钮要一起排**
+- 触发：发现页原本有"刷新"FAB，稍后观看入口也贴在右下角。
+- 症状：后画的扩展 FAB 把刷新按钮整个盖住，用户看到"稍后观看把刷新替代了"。
+- 正确做法：`ui/components/CornerFabStack.kt` 统一排：小号刷新（次要色）在上、扩展稍后观看在下，
+  间距 `Spacing.m`；队列为空时只剩刷新；画中画时整组隐藏。
+
+**H7 · 触感反馈用系统 API，验证靠 `dumpsys vibrator_manager`**
+- 触发：要给长按、切换、落位加振动。
+- 做法：`ui/components/Haptics.kt` 包一层 `LocalHapticFeedback`（`HapticFeedbackType.LongPress /
+  TextHandleMove / Confirm / Reject`），**不要** `Vibrator`（系统 API 尊重用户的触感开关，
+  也不需要 `VIBRATE` 权限）。
+- 验证：`adb shell dumpsys vibrator_manager | grep xhs` 能看到 `opPkg=com.thirdparty.xhs…`
+  的 `VibrationRecord`（长按那一下是 `Prebaked{effect=HEAVY_CLICK} … Usage=TOUCH`）。
+  模拟器上 `scale: 0.00` 是正常的 —— 没有可用触感硬件/关掉了触感，调用本身已生效。
 
 **H5 · 自动化验证的系统边界（本次踩到的两条）**
 - 画中画窗口的「关闭 / 展开」是系统覆盖层，**不吃 `adb shell input tap`**（注入触摸被忽略）。

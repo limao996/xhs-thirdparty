@@ -48,6 +48,7 @@ fun NoteActionDialog(
     /** 需要多选的页面（收藏 / 最近浏览）才给这个入口 */
     onEnterSelection: (() -> Unit)? = null
 ) {
+    val haptics = rememberHaptics()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -63,6 +64,7 @@ fun NoteActionDialog(
                     icon = if (saved) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
                     label = if (saved) "取消收藏" else "收藏"
                 ) {
+                    if (saved) haptics.reject() else haptics.confirm()
                     onDismiss()
                     onToggleSave()
                 }
@@ -70,11 +72,13 @@ fun NoteActionDialog(
                     icon = if (inWatchLater) Icons.Filled.PlaylistRemove else Icons.Filled.PlaylistAdd,
                     label = if (inWatchLater) "移出稍后观看" else "稍后观看"
                 ) {
+                    if (inWatchLater) haptics.reject() else haptics.confirm()
                     onDismiss()
                     onToggleWatchLater()
                 }
                 if (onEnterSelection != null) {
                     ActionRow(icon = Icons.Filled.Checklist, label = "多选") {
+                        haptics.longPress()
                         onDismiss()
                         onEnterSelection()
                     }

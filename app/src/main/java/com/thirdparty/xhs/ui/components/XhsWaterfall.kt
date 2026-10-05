@@ -150,6 +150,8 @@ fun XhsWaterfallGrid(
             key = { i -> safeItems[i].noteId }
         ) { index ->
             val note = safeItems[index]
+            // 长按 / 选中这类"模式切换"都给一次系统触感反馈（见 Haptics）
+            val haptics = rememberHaptics()
             // 每张卡片外面套一个 Box：长按菜单是以它自己的锚点弹出的（DropdownMenu 用
             // 父节点的坐标定位），所以菜单必须和卡片在同一个 Box 里。
             Box {
@@ -159,9 +161,15 @@ fun XhsWaterfallGrid(
                     // In selection mode a plain tap toggles instead of opening, which is
                     // what every gallery-style multi-select does.
                     onClick = {
-                        if (selectionMode) onLongPress?.invoke(note) else onOpenDetail(note.noteId)
+                        if (selectionMode) {
+                            haptics.tick()
+                            onLongPress?.invoke(note)
+                        } else {
+                            onOpenDetail(note.noteId)
+                        }
                     },
                     onLongClick = {
+                        haptics.longPress()
                         if (actions != null) menuFor = note else onLongPress?.let { cb -> cb(note) }
                     }
                 )

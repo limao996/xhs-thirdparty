@@ -68,6 +68,7 @@ import com.thirdparty.xhs.ui.components.rememberPlaybackError
 import com.thirdparty.xhs.ui.components.retryPlayback
 import com.thirdparty.xhs.ui.components.NoteActionDialog
 import com.thirdparty.xhs.ui.components.WatchLaterBar
+import com.thirdparty.xhs.ui.components.rememberHaptics
 import com.thirdparty.xhs.ui.components.rememberNoteActions
 import com.thirdparty.xhs.ui.components.rememberNoteFlags
 import com.thirdparty.xhs.ui.theme.Scrim
@@ -228,6 +229,7 @@ private fun VideoPage(
     /** 信息条上的稍后观看入口 */
     onOpenWatchLater: () -> Unit
 ) {
+    val haptics = rememberHaptics()
     // the video's real width/height ratio; used to size the surface so the
     // picture is never stretched (FILL would distort, ZOOM would crop).
     var videoAspect by remember(item.noteId) { mutableFloatStateOf(9f / 16f) }
@@ -285,8 +287,14 @@ private fun VideoPage(
                 interactionSource = noRipple,
                 indication = null,
                 onClick = onToggleInfo,
-                onDoubleClick = { togglePlayback(currentPlayer.value) },
-                onLongClick = { onLongPress(item) }
+                onDoubleClick = {
+                    haptics.tick()
+                    togglePlayback(currentPlayer.value)
+                },
+                onLongClick = {
+                    haptics.longPress()
+                    onLongPress(item)
+                }
             )
     ) {
         // poster cover behind the player so the page is never a black void.
@@ -400,7 +408,10 @@ private fun VideoPage(
                             }
                             onClickDetail()
                         },
-                        onDoubleClick = { togglePlayback(currentPlayer.value) }
+                        onDoubleClick = {
+                            haptics.tick()
+                            togglePlayback(currentPlayer.value)
+                        }
                     )
                     .padding(Spacing.l)
             ) {

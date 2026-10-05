@@ -314,7 +314,8 @@ private fun AutoHideController(
     onEnterPip: (() -> Unit)? = null
 ) {
     var visible by remember(player) { mutableStateOf(!startHidden) }
-    // Seeded FROM the player, not from zero/false.
+    // 播放器控件也给系统触感反馈：它和页面其他按钮是同一层交互
+    val haptics = rememberHaptics()    // Seeded FROM the player, not from zero/false.
     //
     // This controller can be built around a player that is already in the middle of
     // something — the one handed over by the feed, or one whose layout just changed. It
@@ -535,7 +536,10 @@ private fun AutoHideController(
             ) {
                 // the page's own app bar is hidden in fullscreen, so offer a way back
                 if (fullscreen) {
-                    IconButton(onClick = onToggleFullscreen) {
+                    IconButton(onClick = {
+                        haptics.tick()
+                        onToggleFullscreen()
+                    }) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             "退出全屏", tint = Scrim.onMedia
@@ -551,7 +555,7 @@ private fun AutoHideController(
                     modifier = Modifier.weight(1f).padding(start = Spacing.xs)
                 )
                 Box {
-                    IconButton(onClick = { menuOpen = true; interaction++ }) {
+                    IconButton(onClick = { haptics.tick(); menuOpen = true; interaction++ }) {
                         Icon(Icons.Filled.MoreVert, "更多", tint = Scrim.onMedia)
                     }
                     // 菜单用**对话框**而不是 DropdownMenu：下拉面板没有半透明遮罩、也没有
@@ -656,7 +660,10 @@ private fun AutoHideController(
                         Icon(Icons.Filled.Replay5, "后退${step / 1000}秒", tint = Scrim.onMedia,
                             modifier = Modifier.size(iconSize))
                     }
-                    IconButton(onClick = { if (playing) player.pause() else player.play() },
+                    IconButton(onClick = {
+                        haptics.tick()
+                        if (playing) player.pause() else player.play()
+                    },
                         modifier = Modifier.size(btnSize)) {
                         Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                             if (playing) "暂停" else "播放", tint = Scrim.onMedia,
@@ -677,7 +684,10 @@ private fun AutoHideController(
                             style = MaterialTheme.typography.labelSmall,
                             modifier = Modifier.padding(end = Spacing.xs))
                     }
-                    IconButton(onClick = onToggleFullscreen, modifier = Modifier.size(btnSize)) {
+                    IconButton(onClick = {
+                        haptics.tick()
+                        onToggleFullscreen()
+                    }, modifier = Modifier.size(btnSize)) {
                         Icon(if (fullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
                             "全屏", tint = Scrim.onMedia, modifier = Modifier.size(iconSize))
                     }

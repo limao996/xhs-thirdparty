@@ -153,7 +153,11 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
         super.onStop()
     }
 
-    /** 播放/暂停、循环方式变了以后刷新小窗那几个按钮的图标与文案。 */
+    /**
+     * 刷新小窗的窗口参数（画面比例 + 后退/播放暂停/前进）。
+     *
+     * 播放状态一变（小窗里点了播放/暂停），图标要跟着换，所以注册的接收者会回调到这里。
+     */
     private fun refreshPipParams() {
         if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) return
         if (!isInPictureInPictureMode) return
@@ -179,7 +183,10 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
     ) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         com.thirdparty.xhs.ui.components.PipController.inPip.value = isInPictureInPictureMode
-        if (!isInPictureInPictureMode) {
+        if (isInPictureInPictureMode) {
+            // 进小窗时把比例刷一遍：视频尺寸可能是在进小窗之后才探到的
+            refreshPipParams()
+        } else {
             com.thirdparty.xhs.ui.components.PipController.session.value?.let { s ->
                 com.thirdparty.xhs.ui.components.PipController.pendingDetailId.value = s.noteId
             }

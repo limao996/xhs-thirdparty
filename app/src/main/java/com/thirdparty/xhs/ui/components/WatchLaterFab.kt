@@ -37,8 +37,12 @@ fun WatchLaterFab(onOpen: () -> Unit, modifier: Modifier = Modifier) {
 
     if (count <= 0 || inPip) return
 
+    val haptics = rememberHaptics()
     ExtendedFloatingActionButton(
-        onClick = onOpen,
+        onClick = {
+            haptics.tick()
+            onOpen()
+        },
         modifier = modifier
     ) {
         Icon(Icons.Filled.PlaylistPlay, contentDescription = null)

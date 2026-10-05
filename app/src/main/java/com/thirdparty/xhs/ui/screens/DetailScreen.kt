@@ -150,6 +150,7 @@ fun DetailScreen(
     var confirmUnfollow by remember { mutableStateOf(false) }
     /** 画中画要 API 26+；低版本就不给播放器菜单加「小窗播放」这一项 */
     val pipSupported = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O
+    val haptics = com.thirdparty.xhs.ui.components.rememberHaptics()
 
     // ---- media plumbing, hoisted OUT of the metadata branch -------------------
     //
@@ -194,6 +195,7 @@ fun DetailScreen(
         val p = sharedPlayer
         val act = context as? android.app.Activity
         if (p != null && act != null && pipSupported) {
+            haptics.tick()
             com.thirdparty.xhs.ui.components.PipController.start(
                 p, noteId, state.item?.title.orEmpty()
             )

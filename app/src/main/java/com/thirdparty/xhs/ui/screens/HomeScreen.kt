@@ -52,6 +52,7 @@ import com.thirdparty.xhs.ui.theme.Scrim
 import com.thirdparty.xhs.ui.theme.Spacing
 import com.thirdparty.xhs.ui.theme.bottomNavClearance
 import com.thirdparty.xhs.ui.components.WatchLaterFab
+import com.thirdparty.xhs.ui.components.rememberHaptics
 import com.thirdparty.xhs.ui.theme.ThemeMode
 import com.thirdparty.xhs.ui.theme.XhsTheme
 import com.thirdparty.xhs.ui.viewmodel.GuestViewModel
@@ -92,6 +93,8 @@ fun HomeScreen(
     val autoVip by guestViewModel.autoVip.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableStateOf(HomeTab.FEED) }
     var feedRefreshTick by rememberSaveable { mutableStateOf(0) }
+    // 底部三 tab 切换的触感反馈（系统 API，尊重用户的触感开关）
+    val haptics = rememberHaptics()
 
     LaunchedEffect(Unit) {
         guestViewModel.ensureFreshGuest()
@@ -170,7 +173,11 @@ fun HomeScreen(
                     // weight(1f) so the content takes only the remaining height
                     // (fillMaxSize would overflow past the bottom nav and break scrolling)
                     Box(Modifier.fillMaxWidth().weight(1f)) {
-                        DiscoverTabScreen(onOpenDetail = onOpenDetail, onOpenAuthor = onOpenAuthor)
+                        DiscoverTabScreen(
+                            onOpenDetail = onOpenDetail,
+                            onOpenAuthor = onOpenAuthor,
+                            onOpenWatchLater = onOpenWatchLater
+                        )
                     }
                 }
                 HomeTab.PROFILE -> Column(Modifier.fillMaxSize().statusBarsPadding()) {
@@ -251,11 +258,11 @@ fun HomeScreen(
                 }
             }
 
-            // 稍后观看入口：**发现 / 我的**这类普通标签页用浮动按钮；推荐页不用浮动
-            // 按钮，改成视频信息栏上方的一条信息条（见 VideoFeedScreen 里的 WatchLaterBar），
-            // 免得按钮压在画面上、又跟着「收起 chrome」忽隐忽现。
+            // 稍后观看入口：**我的**这类普通标签页用浮动按钮；推荐页不用浮动按钮，改成视频
+            // 信息栏上方的一条信息条；发现页的右下角归 DiscoverTabScreen 自己管（那里要和
+            // 刷新按钮叠在一起，见 CornerFabStack）。
             AnimatedVisibility(
-                visible = !immersive,
+                visible = !immersive && tab != HomeTab.DISCOVER,
                 enter = fadeIn(),
                 exit = fadeOut(),
                 modifier = Modifier.align(Alignment.BottomEnd)
@@ -285,6 +292,7 @@ fun HomeScreen(
                         NavigationBarItem(
                             selected = selected,
                             onClick = {
+                                haptics.tick()
                                 if (entry == HomeTab.FEED && tab == HomeTab.FEED) feedRefreshTick++
                                 else tab = entry
                             },

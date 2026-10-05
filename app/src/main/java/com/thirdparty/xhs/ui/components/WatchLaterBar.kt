@@ -51,13 +51,17 @@ fun WatchLaterBar(onOpen: () -> Unit, modifier: Modifier = Modifier) {
 
     if (count <= 0 || inPip) return
 
+    val haptics = rememberHaptics()
     Surface(
         color = Scrim.chrome,
         contentColor = Scrim.onMedia,
         shape = Corners.small,
         modifier = modifier
             .fillMaxWidth()
-            .clickable { onOpen() }
+            .clickable {
+                haptics.tick()
+                onOpen()
+            }
     ) {
         Row(
             Modifier.padding(horizontal = Spacing.m, vertical = Spacing.s),

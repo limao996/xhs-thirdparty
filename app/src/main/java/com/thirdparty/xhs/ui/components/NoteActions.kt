@@ -54,12 +54,14 @@ fun rememberNoteFlags(): NoteFlags {
 @Composable
 fun rememberNoteActions(): NoteActions {
     val context = LocalContext.current
-    return remember(context) {
+    val haptics = rememberHaptics()
+    return remember(context, haptics) {
         NoteActions(
             toggleSave = { item ->
                 App.INSTANCE.appScope.launch {
                     val saved = App.repo.toggleSaveLocal(item)
                     withContext(Dispatchers.Main) {
+                        if (saved) haptics.confirm() else haptics.reject()
                         Toast.makeText(
                             context,
                             if (saved) "已收藏" else "已取消收藏",
@@ -72,6 +74,7 @@ fun rememberNoteActions(): NoteActions {
                 App.INSTANCE.appScope.launch {
                     val added = App.repo.toggleWatchLater(item)
                     withContext(Dispatchers.Main) {
+                        if (added) haptics.confirm() else haptics.reject()
                         Toast.makeText(
                             context,
                             if (added) "已加入稍后观看" else "已移出稍后观看",

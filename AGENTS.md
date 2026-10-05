@@ -23,8 +23,10 @@
 | 13 | 缓存清理**一项勾选只清一项**：`AppCaches.clear()` 按 `CacheKind` 分别调用，`XhsRepository.clearHttpCache()` 只清磁盘、不得顺手清内存位图缓存 | 之前清磁盘会连带清内存，确认框列的是 2 项、实际清了 3 项，与用户勾选不符 |
 | 14 | 启动自动检查更新**只在真有新版时弹窗**，其余（无正式版 / 限流 / 断网 / 已是最新）一律静默；「跳过这个版本」必须持久化到 `settings` | 每次启动都弹会骚扰用户；GitHub 匿名 API 只有 60 次/小时/IP，实测会 403 |
 | 15 | 自动检查更新**12 小时一次**（`settings.update_checked_at`），且只有**成功**的检查才写时间戳 | 每次冷启动都查既打扰用户、也会把匿名额度烧光（实测 403） |
-| 16 | 任何菜单 / 弹窗一律用**对话框**（`AlertDialog`，带遮罩与动画），不要用 `DropdownMenu`；队列排序用**长按拖动**，不加「上移 / 下移」按钮 | 下拉面板没有半透明遮罩、没有入场动画，铺在瀑布流卡片或全屏视频上还容易被边缘裁掉；队列顺序本来就是拖出来的 |
-| 17 | 画中画：播放器交给 `PipController` 后**详情页销毁不得 release**（`PipController.isHandedOver`）；「展开」用 `PlaybackHandoff.givePlayer` 交回详情页，「关闭」在 `MainActivity.onDestroy` 里 `closeAndRelease()`；入口在**播放器的菜单**（`MediaPlayer(onEnterPip=…)`）里，控制栏只放 播放/暂停 + 播放顺序（**不要**把稍后观看队列塞进小窗） | 缺交接登记 = 小窗黑屏（播放器被详情页销毁）；不销毁 = 关掉小窗后还有声音；PiP 最多显示 3 个自定义按钮，且队列属于主界面（见 `docs/ai/GOTCHAS.md` H 节） |
+| 16 | 任何菜单 / 弹窗一律用**原生的 `material3.AlertDialog`**（带遮罩与动画），不要用 `DropdownMenu`，也**不要自绘对话框外壳**（不要自己画遮罩/自己写入场动画，用户明确否决过）；队列排序用**长按拖动**，不加「上移 / 下移」按钮 | 下拉面板没有半透明遮罩、没有入场动画，铺在瀑布流卡片或全屏视频上还容易被边缘裁掉；原生对话框系统会负责遮罩与动画（动画受系统"动画时长比例"影响，用户关掉就瞬间完成，这是设置不是缺陷）；队列顺序本来就是拖出来的 |
+| 17 | 画中画：播放器交给 `PipController` 后**详情页销毁不得 release**（`PipController.isHandedOver`）；「展开」用 `PlaybackHandoff.givePlayer` 交回详情页，「关闭」在 `MainActivity.onDestroy` 里 `closeAndRelease()`；入口在**播放器的菜单**（`MediaPlayer(onEnterPip=…)`），小窗控制栏用**三个** `RemoteAction`：后退 10 秒 / 播放暂停 / 前进 10 秒（不要再加别的，尤其不要把稍后观看队列塞进小窗） | 缺交接登记 = 小窗黑屏（播放器被详情页销毁）；不销毁 = 关掉小窗后还有声音；PiP 最多显示 3 个自定义按钮，队列属于主界面（见 `docs/ai/GOTCHAS.md` H 节） |
+| 18 | 同一角落的浮动按钮必须**一起排**（`ui/components/CornerFabStack.kt`：刷新在上、稍后观看在下），不许各画各的 | 曾经两个 FAB 各自贴在右下角，后画的把前一个完全盖住，用户当场发现"稍后观看替代了刷新" |
+| 19 | 交互一律用**系统触感 API**（`ui/components/Haptics.kt` → `LocalHapticFeedback` / `HapticFeedbackType`），**不要用 `Vibrator` 自定义振动** | 系统 API 尊重用户的触感开关与强度，也不需要 `VIBRATE` 权限；自定义振动会绕过这些设置 |
 
 ## 1. 项目一句话
 

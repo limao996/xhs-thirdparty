@@ -103,6 +103,7 @@ fun FullscreenImageViewer(
 
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
+    val haptics = rememberHaptics()
     // 双击缩放要"平滑"（用户要求），但捏合与拖动必须逐帧跟手：所以渲染用的值在
     // 「动画」与「立即」两套 spec 之间切换，只有双击和「恢复」按钮打开动画。
     var smooth by remember { mutableStateOf(false) }
@@ -215,6 +216,7 @@ fun FullscreenImageViewer(
                                 lastTapAt = 0L
                                 // 双击是"跳到"另一个倍率，动画化（捏合/拖动必须跟手，见下面的
                                 // smooth 开关：只有双击和「恢复」按钮会打开它）
+                                haptics.tick()
                                 smooth = true
                                 if (scale > 1.01f) {
                                     scale = 1f
@@ -263,7 +265,12 @@ fun FullscreenImageViewer(
                     .padding(bottom = Spacing.l),
                 contentAlignment = Alignment.Center
             ) {
-                ResetZoomButton(onClick = { smooth = true; scale = 1f; offset = Offset.Zero })
+                ResetZoomButton(onClick = {
+                    haptics.tick()
+                    smooth = true
+                    scale = 1f
+                    offset = Offset.Zero
+                })
             }
         }
 

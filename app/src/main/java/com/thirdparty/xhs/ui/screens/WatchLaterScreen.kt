@@ -33,6 +33,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -52,6 +53,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.thirdparty.xhs.common.RepoViewModelFactory
 import com.thirdparty.xhs.data.NoteItem
 import com.thirdparty.xhs.ui.components.XhsAsyncImage
+import com.thirdparty.xhs.ui.components.rememberHaptics
 import com.thirdparty.xhs.ui.theme.Corners
 import com.thirdparty.xhs.ui.theme.Spacing
 import com.thirdparty.xhs.ui.viewmodel.WatchLaterViewModel
@@ -114,13 +116,33 @@ fun WatchLaterScreen(
         }
 
         // ---- 拖动排序 --------------------------------------------------------
-        // 拖动期间用 preview 这份列表渲染，松手写回数据库后由 watchLaterVersion 触发的
-        // 重新读取接管（见 WatchLaterViewModel）。
-        var draggingId by remember { mutableStateOf<Long?>(null) }
+        // 拖动期间**不改列表顺序**：只记「从哪一行开始拖」（dragFrom）、「手指移动了多少」
+        // （dragOffset）、「现在会落在第几行」（dragTarget），靠 translationY 让开位置，
+        // 松手才整段写回数据库。
+        //
+        // 之前是"每越过半行就和相邻行换位"，那样只能一格一格动：换位会让这一行的**基准位置**
+        // 立刻跳一行，而手势的位移是在节点的局部坐标里累加的，基准一跳就正好把累加量抵消掉，
+        // 于是手指拖多远都停在第 1/第 2 格（用户实测：只能 1→0 或 1→2，不能 1→3）。
+        var dragFrom by remember { mutableIntStateOf(-1) }
+        var dragTarget by remember { mutableIntStateOf(-1) }
         var dragOffset by remember { mutableFloatStateOf(0f) }
-        var preview by remember { mutableStateOf<List<NoteItem>?>(null) }
-        val items = preview ?: state.items
+        val items = state.items
         val rowHeightPx = with(LocalDensity.current) { QueueRowHeight.toPx() }
+        val haptics = rememberHaptics()
+
+        fun land() {
+            val from = dragFrom
+            val to = dragTarget
+            if (from >= 0 && to >= 0 && to != from) {
+                val ids = items.map { it.noteId }.toMutableList()
+                ids.add(to, ids.removeAt(from))
+                viewModel.setOrder(ids)
+                haptics.confirm()
+            }
+            dragFrom = -1
+            dragTarget = -1
+            dragOffset = 0f
+        }
 
         Column(
             Modifier.fillMaxSize().padding(pad).verticalScroll(rememberScrollState())
@@ -132,51 +154,37 @@ fun WatchLaterScreen(
                 modifier = Modifier.padding(start = Spacing.l, top = Spacing.s, bottom = Spacing.xs)
             )
             items.forEachIndexed { index, item ->
-                val isDragging = draggingId == item.noteId
+                val isDragging = dragFrom == index
+                // 别的行给被拖的那一行让位：往下拖时中间的行整体上移一格，往上拖则相反
+                val shift = when {
+                    dragFrom < 0 -> 0f
+                    isDragging -> dragOffset
+                    index in (dragFrom + 1)..dragTarget -> -rowHeightPx
+                    index in dragTarget..(dragFrom - 1) -> rowHeightPx
+                    else -> 0f
+                }
                 // 拖动的手势必须和 clickable 挂在同一个节点上（见 QueueRow）：挂在外面一层
                 // 的 Box 上时，行内 clickable 会先把事件吃掉，长按永远轮不到拖动。
-                val dragModifier = Modifier.pointerInput(item.noteId, state.items) {
+                val dragModifier = Modifier.pointerInput(item.noteId, index, items.size) {
                     detectDragGesturesAfterLongPress(
                         onDragStart = {
-                            draggingId = item.noteId
+                            dragFrom = index
+                            dragTarget = index
                             dragOffset = 0f
-                            preview = state.items
+                            haptics.longPress()
                         },
                         onDrag = { change, amount ->
                             change.consume()
                             dragOffset += amount.y
-                            val list = preview ?: return@detectDragGesturesAfterLongPress
-                            val from = list.indexOfFirst { it.noteId == item.noteId }
-                            if (from < 0) return@detectDragGesturesAfterLongPress
-                            // 手指每越过一行的半程，就和那一行换位
-                            val target = (from + (dragOffset / rowHeightPx).roundToInt())
-                                .coerceIn(0, list.lastIndex)
-                            if (target != from) {
-                                preview = list.toMutableList().apply {
-                                    add(target, removeAt(from))
-                                }
-                                // 换位之后这一行的基准位置也挪了一格
-                                dragOffset -= (target - from) * rowHeightPx
-                            }
+                            dragTarget = (index + (dragOffset / rowHeightPx).roundToInt())
+                                .coerceIn(0, items.lastIndex)
                         },
-                        onDragEnd = {
-                            preview?.let { list ->
-                                viewModel.setOrder(list.map { it.noteId })
-                            }
-                            draggingId = null
-                            dragOffset = 0f
-                            preview = null
-                        },
+                        onDragEnd = { land() },
                         onDragCancel = {
                             // 已经拖到别的位置就照样落库：手势被「取消」（系统抢走指针、
                             // 注入事件流被打断等）时把顺序弹回去，用户会觉得拖动白做了。
                             // 实测：`adb shell input draganddrop` 走的就是 cancel 分支。
-                            preview?.let { list ->
-                                viewModel.setOrder(list.map { it.noteId })
-                            }
-                            draggingId = null
-                            dragOffset = 0f
-                            preview = null
+                            land()
                         }
                     )
                 }
@@ -184,7 +192,7 @@ fun WatchLaterScreen(
                     Modifier
                         .zIndex(if (isDragging) 1f else 0f)
                         .graphicsLayer {
-                            translationY = if (isDragging) dragOffset else 0f
+                            translationY = shift
                             // 拖动中的那一行浮起来一点，别的行保持原样
                             shadowElevation = if (isDragging) 12f else 0f
                         }
@@ -195,7 +203,10 @@ fun WatchLaterScreen(
                         dragging = isDragging,
                         dragModifier = dragModifier,
                         onClick = { onOpenDetail(item.noteId) },
-                        onRemove = { viewModel.remove(item.noteId) }
+                        onRemove = {
+                            haptics.reject()
+                            viewModel.remove(item.noteId)
+                        }
                     )
                 }
             }

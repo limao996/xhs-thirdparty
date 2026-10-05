@@ -97,10 +97,14 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 fun DiscoverTabScreen(
     onOpenDetail: (Long) -> Unit,
     onOpenAuthor: (Int) -> Unit,
+    /** 稍后观看队列入口（与刷新按钮同处右下角，见 CornerFabStack） */
+    onOpenWatchLater: () -> Unit = {},
     viewModel: DiscoverViewModel = viewModel(factory = RepoViewModelFactory())
 ) {
     val state by viewModel.ui.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableStateOf(DiscoverTab.FEED) }
+    // 子 tab 与分类切换的触感反馈
+    val haptics = com.thirdparty.xhs.ui.components.rememberHaptics()
     val scope = rememberCoroutineScope()
 
     // Switching sub-tabs no longer refreshes anything.
@@ -120,7 +124,12 @@ fun DiscoverTabScreen(
         Column(Modifier.fillMaxSize()) {
             PrimaryTabRow(selectedTabIndex = tab.ordinal) {
                 DiscoverTab.entries.forEachIndexed { i, t ->
-                    Tab(selected = tab == t, onClick = { if (tab != t) tab = t }, text = { Text(t.label) })
+                    Tab(selected = tab == t, onClick = {
+                        if (tab != t) {
+                            haptics.tick()
+                            tab = t
+                        }
+                    }, text = { Text(t.label) })
                 }
             }
             // weight(1f) so the tab content gets the REMAINING height; a plain
@@ -161,22 +170,21 @@ fun DiscoverTabScreen(
         // the FAB flush against the floating NavigationBar
         val clear = bottomNavClearance()
 
-        // Refresh FAB — lifted above the floating bottom navigation bar.
+        // Refresh FAB + 稍后观看 FAB，竖着叠在右下角（见 CornerFabStack）。
         //
-        // Hidden on 关注: that tab lists the authors followed on THIS device, so
-        // there is nothing remote to refresh — the button only re-fetched the
-        // feed behind a list that never changes.
-        if (tab != DiscoverTab.FOLLOW_LOCAL) {
-            FloatingActionButton(
-                onClick = { scope.launch { viewModel.refresh() } },
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                modifier = Modifier.align(Alignment.BottomEnd)
-                    .padding(end = Spacing.l, bottom = clear)
-            ) {
-                Icon(Icons.Filled.Refresh, contentDescription = "刷新")
-            }
-        }
+        // 刷新在 关注 子 tab 上不给：那一页列的是本机关注的作者，没有远端可刷新 ——
+        // 按钮只会把后面的信息流刷一遍。
+        // 两个按钮曾经各画各的又停在同一角落，后画的把前一个盖住了（实测被用户当场抓到）。
+        com.thirdparty.xhs.ui.components.CornerFabStack(
+            onOpenWatchLater = onOpenWatchLater,
+            onRefresh = if (tab != DiscoverTab.FOLLOW_LOCAL) {
+                { scope.launch { viewModel.refresh() } }
+            } else {
+                null
+            },
+            modifier = Modifier.align(Alignment.BottomEnd)
+                .padding(end = Spacing.l, bottom = clear)
+        )
     }
 }
 
@@ -187,6 +195,8 @@ private fun FeedTab(
     onOpenDetail: (Long) -> Unit
 ) {
     val clear = com.thirdparty.xhs.ui.theme.bottomNavClearance()
+    // 分类切换的触感反馈
+    val haptics = com.thirdparty.xhs.ui.components.rememberHaptics()
     // Category row: kept here so a tap can bring the chosen chip to the middle of
     // the viewport. Selecting a category by tapping a chip is exactly when the row
     // should follow the choice — otherwise the chip the user just picked can sit
@@ -260,7 +270,10 @@ private fun FeedTab(
             items(state.categories, key = { it.id }) { cat ->
                 FilterChip(
                     selected = state.selectedCategory == cat.id,
-                    onClick = { viewModel.selectCategory(cat.id) },
+                    onClick = {
+                        if (state.selectedCategory != cat.id) haptics.tick()
+                        viewModel.selectCategory(cat.id)
+                    },
                     label = { Text(cat.name) }
                 )
             }
