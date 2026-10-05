@@ -261,7 +261,15 @@ private fun VideoPage(
             if (p.playbackState == Player.STATE_IDLE) p.prepare()
             p.play()
         } else {
-            p.pause()
+            // **放过已经交出去的播放器**：从推荐页点进详情时，这一台被交给详情页
+            // （再交给小窗）。信息流这一侧只是"在底下"而已，它一旦按 active=false
+            // 去 pause，就会把小窗里正在播的画面按停（用户反馈：从推荐页进详情再开小窗，
+            // 小窗依然自动暂停）。归属判断与详情页销毁、inPip 分支同一套规则。
+            val handedOver = com.thirdparty.xhs.ui.components.PipController.isHandedOver(p)
+            if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+                android.util.Log.i("XhsPip", "feed active=false handedOver=$handedOver")
+            }
+            if (!handedOver) p.pause()
         }
     }
     // recording the view is a separate effect so a player rebuild does not
@@ -291,7 +299,11 @@ private fun VideoPage(
     androidx.compose.runtime.LaunchedEffect(inPip) {
         if (!inPip) return@LaunchedEffect
         val p = currentPlayer.value ?: return@LaunchedEffect
-        if (!com.thirdparty.xhs.ui.components.PipController.isHandedOver(p)) {
+        val handedOver = com.thirdparty.xhs.ui.components.PipController.isHandedOver(p)
+        if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+            android.util.Log.i("XhsPip", "feed inPip 分支 handedOver=$handedOver")
+        }
+        if (!handedOver) {
             runCatching { p.pause() }
         }
     }

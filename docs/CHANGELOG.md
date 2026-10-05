@@ -615,6 +615,14 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 
 
+### 阶段二十六 · 从推荐页进详情再开小窗，小窗自动暂停
+
+| # | 现象 | 根因 | 改动 | 证据 |
+| --- | --- | --- | --- | --- |
+| 1 | **从推荐页**进详情页、打开小窗后，小窗里的视频自动暂停（深链路径已正常） | 信息流自己把这一台播放器按停了：`VideoFeedScreen` 的 `LaunchedEffect(active, player)` 在 `active=false` 时无条件 `pause()`，而这一台正是"信息流 → 详情页 → 小窗"交接的同一台（日志 `feed active=false handedOver=false`）。同一族问题还有进小窗时组合销毁触发的 `ON_STOP` 暂停 | 信息流所有"停播"分支先问归属：`LaunchedEffect(active, player)` 的 `pause()` 与 `inPip` 分支都改判 `PipController.isHandedOver(p)`（同时认 `PlaybackHandoff` 的持有），dispose 分支本来就有 | 实机（推荐页 → 详情 → 小窗）：`进小窗 started=1 paused=0`，日志 `ON_STOP handedOver=true`（跳过暂停）；展开后 `route=detail/35535` 未导航、仅 1 条在播音轨 |
+
+
+
 ### 阶段十四 · 详情页去掉队列入口
 
 - 详情页不再渲染稍后观看浮动按钮（`DetailScreen` 的 `floatingActionButton` 清空，

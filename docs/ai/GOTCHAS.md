@@ -366,6 +366,11 @@
     session，若只看 session，展开瞬间那次 `ON_STOP` 会把刚交回去的播放器暂停掉。
   - 判"是不是已经在详情页"时注意 `destination.route` 是**模式串** `detail/{noteId}`，
     要和 `Routes.detail(id)` 比对必须把 `arguments["noteId"]` 拼回去。
+  - 从**推荐页**点进详情再开小窗这条路上，暂停来自信息流自己：`VideoFeedScreen` 的
+    `LaunchedEffect(active, player)` 在 `active=false` 时 `pause()`，而这一台正是被交给详情页、
+    又交给小窗的同一台（日志：`feed active=false handedOver=false` → 小窗里停住）。
+    → 信息流所有"停播"分支（`active=false`、`inPip`、dispose）都必须先问归属，
+    判据统一用 `PipController.isHandedOver(p)`（它同时认 `PlaybackHandoff` 的持有）。
 - 比例：`videoSize` 要按 `unappliedRotationDegrees` 交换宽高再算比例（手机横拍片常是"横向帧 + 旋转 90°"），
   并且夹到 PiP 允许的 `[1/2.39, 2.39]`；尺寸变化要重设参数；画面按比例信箱式画，别拉满整窗。
 
