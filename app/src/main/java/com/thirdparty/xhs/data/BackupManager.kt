@@ -35,6 +35,9 @@ object BackupManager {
 
     /** Bumped whenever the payload shape changes; see [restore]. */
     const val VERSION = 3
+
+    /** 备份文件（含解压后）的大小上限，防解压炸弹与内存爆掉 */
+    const val MAX_BACKUP_BYTES = 64 * 1024 * 1024
     private const val MARKER = "xhs-thirdparty-backup"
 
     data class Result(val ok: Boolean, val detail: String)
@@ -57,14 +60,27 @@ object BackupManager {
 
     /** Accepts either gzipped or plain-text payloads and returns the JSON. */
     fun decode(bytes: ByteArray): String {
+        // 上限，防"解压炸弹"：gzip 能把很小的文件膨胀成几个 G，而下面是一次性 readBytes()
+        require(bytes.size <= MAX_BACKUP_BYTES) {
+            "备份文件过大（${bytes.size / 1024 / 1024} MB，上限 ${MAX_BACKUP_BYTES / 1024 / 1024} MB）"
+        }
         val gzipped = bytes.size >= 2 &&
             bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()
-        return if (gzipped) {
-            java.util.zip.GZIPInputStream(java.io.ByteArrayInputStream(bytes))
-                .use { it.readBytes().toString(Charsets.UTF_8) }
-        } else {
-            bytes.toString(Charsets.UTF_8)
+        if (!gzipped) return bytes.toString(Charsets.UTF_8)
+        // 解压时也限流：读满上限就停，别让 GZIPInputStream.readBytes() 无上限地撑爆内存
+        val out = java.io.ByteArrayOutputStream()
+        java.util.zip.GZIPInputStream(java.io.ByteArrayInputStream(bytes)).use { gz ->
+            val buf = ByteArray(64 * 1024)
+            while (true) {
+                val n = gz.read(buf)
+                if (n < 0) break
+                if (out.size() + n > MAX_BACKUP_BYTES) {
+                    throw java.io.IOException("备份解压后超过上限（${MAX_BACKUP_BYTES / 1024 / 1024} MB）")
+                }
+                out.write(buf, 0, n)
+            }
         }
+        return out.toByteArray().toString(Charsets.UTF_8)
     }
 
     /** Everything, as pretty-printed JSON. */
@@ -122,12 +138,24 @@ object BackupManager {
             }
         })
 
-        root.put("followed", JSONArray().apply {
-            db.followDao().all().forEach { e ->
+        root.put("followed", JSONArray().apply {            db.followDao().all().forEach { e ->
                 put(JSONObject().apply {
                     put("userId", e.userId); put("userName", e.userName)
                     put("headImg", e.headImg); put("signature", e.signature)
                     put("followedAt", e.followedAt)
+                })
+            }
+        })
+
+        // 稍后观看队列：之前完全没进备份（类注释却说导出"everything the user would
+        // miss after a reinstall"），换机/重装就丢队列（docs/REVIEW.md 附录C-P1-4）。
+        root.put("watchLater", JSONArray().apply {
+            db.watchLaterDao().all().forEach { e ->
+                put(JSONObject().apply {
+                    put("noteId", e.noteId); put("title", e.title)
+                    put("userName", e.userName); put("cover", e.cover)
+                    put("noteType", e.noteType); put("rawJson", e.rawJson)
+                    put("position", e.position); put("addedAt", e.addedAt)
                 })
             }
         })
@@ -140,7 +168,7 @@ object BackupManager {
      *
      * [merge] keeps whatever is already on the device and adds the file's rows
      * (existing entries win on the same key);
-     * otherwise the local favourites/history/follows are replaced wholesale.
+     * otherwise the local favourites/history/follows/queue are replaced wholesale.
      * The account is always adopted as-is, since it identifies the session.
      */
     suspend fun restore(
@@ -216,18 +244,29 @@ object BackupManager {
             }
         }
 
+        // 空/残缺备份 + 覆盖 = 让用户白清一次库（旧代码还会回一个"成功"）。
+        // 这里先看有没有任何可恢复的内容，没有就中止（docs/REVIEW.md 附录C-P1-10）。
+        val hasPayload = listOf("saved", "history", "followed", "watchLater", "settings", "searchHistory")
+            .any { key -> root.optJSONArray(key)?.length() ?: 0 > 0 || root.optJSONObject(key) != null }
+        if (!hasPayload) {
+            return@withContext Result(false, "备份里没有可恢复的内容（可能已损坏）")
+        }
+
         // 覆盖模式：清空 + 写入必须在**同一个事务**里。原来是一串独立的 suspend 写，
         // 中途进程被杀/磁盘满就会停在"已清空、没写回"的状态（见 docs/REVIEW.md 附录C-P0-3）。
         // 计数放在事务内累加，事务提交后才有意义。
         var saved = 0
         var hist = 0
         var follows = 0
+        var queued = 0
         var skipped = 0
         db.withTransaction {
             if (!merge) {
                 db.savedDao().clearAll()
                 db.historyDao().clearAll()
                 db.followDao().clearLocal()
+                // 队列之前不在 clear 列表里：覆盖恢复后旧队列会和新数据混在一起
+                db.watchLaterDao().clearAll()
             }
 
             root.optJSONArray("saved")?.let { arr ->
@@ -285,12 +324,34 @@ object BackupManager {
                     follows++
                 }
             }
+
+            // 队列：position 直接沿用备份里的顺序（队列不提供排序，顺序就是加入顺序）
+            root.optJSONArray("watchLater")?.let { arr ->
+                for (i in 0 until arr.length()) {
+                    val row = validRow(arr.optJSONObject(i)) ?: run { skipped++; null }
+                    if (row == null) continue
+                    val o = arr.optJSONObject(i)
+                    db.watchLaterDao().upsert(
+                        WatchLaterEntity(
+                            noteId = row.noteId,
+                            title = row.title,
+                            userName = row.userName,
+                            cover = row.cover,
+                            noteType = row.noteType,
+                            rawJson = row.rawJson,
+                            position = o?.optInt("position") ?: i,
+                            addedAt = o?.optLong("addedAt") ?: 0L
+                        )
+                    )
+                    queued++
+                }
+            }
         }
 
         val tail = if (skipped > 0) "｜跳过无效 $skipped" else ""
         return@withContext Result(
             true,
-            "已恢复${counts}｜收藏 $saved｜浏览 $hist｜关注 $follows$tail"
+            "已恢复${counts}｜收藏 $saved｜浏览 $hist｜关注 $follows｜队列 $queued$tail"
         )
     }
 

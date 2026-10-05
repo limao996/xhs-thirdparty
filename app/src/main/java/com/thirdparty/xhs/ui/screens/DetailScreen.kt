@@ -623,9 +623,12 @@ private fun DetailContent(
                     onEnterPip = onEnterPip,
                     modifier = when {
                         fullscreen -> Modifier.fillMaxSize()
-                        // aspectRatio(0) throws, and 0 means "not known yet"
+                        // aspectRatio(0) throws, and 0 means "not known yet"；
+                        // coerceAtLeast 只是让 lint 的 Range 检查看得懂（真实值的下限由上面 > 0f 保证）
                         landscape && videoAspect > 0f ->
-                            Modifier.height(windowedHeight).aspectRatio(videoAspect).clip(mediaShape)
+                            Modifier.height(windowedHeight)
+                                .aspectRatio(videoAspect.coerceAtLeast(0.01f))
+                                .clip(mediaShape)
                         else -> Modifier.fillMaxWidth().height(windowedHeight).clip(mediaShape)
                     }
                 )

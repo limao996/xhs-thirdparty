@@ -58,8 +58,9 @@ abstract class XhsDatabase : RoomDatabase() {
                     "xhs_local.db"
                 )
                     .addMigrations(MIGRATION_2_3)
-                    // 兜底：其它跨版本（例如 1 → 3）还是清库重建，本地缓存可以重新拉
-                    .fallbackToDestructiveMigration()
+                    // **故意不挂 `fallbackToDestructiveMigration()`**：那会让"漏写迁移"的版本
+                    // 静默清空用户的收藏 / 浏览 / 关注 / 队列。宁可启动就崩，也不能悄悄丢数据
+                    // （见 docs/REVIEW.md P1-3 与附录C-P0-2；AGENTS 硬约束与 CONVENTIONS 都要求真迁移）。
                     .build().also { INSTANCE = it }
             }
     }

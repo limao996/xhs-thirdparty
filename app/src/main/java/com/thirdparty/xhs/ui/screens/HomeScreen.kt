@@ -117,7 +117,7 @@ fun HomeScreen(
     // MD3's default window insets, so each lifts clear of its bar automatically.
     val darkNow = currentThemeMode().isDark(androidx.compose.foundation.isSystemInDarkTheme())
     val view = androidx.compose.ui.platform.LocalView.current
-    val activity = LocalContext.current as? android.app.Activity
+    val activity = androidx.activity.compose.LocalActivity.current
     // Report the tab state; AppNavHost owns the actual system-bar configuration.
     //
     // Configuring the bars here as well meant that navigating away to 搜索 or 详情
@@ -332,7 +332,8 @@ private fun HomeHeader(guest: String, rotating: Boolean, onOpenSearch: () -> Uni
 }
 
 @Composable
-private fun currentThemeMode(): ThemeMode = App.INSTANCE.themeState.collectAsState().value
+private fun currentThemeMode(): ThemeMode =
+    App.INSTANCE.themeState.collectAsStateWithLifecycle().value
 
 private fun iconFor(tab: HomeTab): ImageVector = when (tab) {
     HomeTab.FEED -> Icons.Filled.PlayCircle

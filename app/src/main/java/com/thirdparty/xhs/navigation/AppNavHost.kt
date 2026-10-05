@@ -244,7 +244,7 @@ fun AppNavHost(
     val detailImmersive by App.INSTANCE.detailImmersive.collectAsStateWithLifecycle()
     val imageViewerShown by App.INSTANCE.imageViewerShown.collectAsStateWithLifecycle()
     val barView = androidx.compose.ui.platform.LocalView.current
-    val barActivity = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity
+    val barActivity = androidx.activity.compose.LocalActivity.current
     val barDark = App.INSTANCE.themeState.collectAsStateWithLifecycle().value
         .isDark(androidx.compose.foundation.isSystemInDarkTheme())
     androidx.compose.runtime.DisposableEffect(
@@ -441,7 +441,7 @@ fun AppNavHost(
             )
         }
 
-        composable("followed",
+        composable(Routes.FOLLOWED,
             enterTransition = { slideInHorizontally(tween(320)) { it / 6 } + fadeIn(tween(320)) },
             popExitTransition = { slideOutHorizontally(tween(240)) { it / 6 } + fadeOut(tween(240)) }
         ) {

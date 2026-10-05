@@ -34,7 +34,7 @@ app/src/main/java/com/thirdparty/xhs/
 ├── data/
 │   ├── XhsRepository.kt       ★ 单一数据源：全部接口调用与缓存写入
 │   ├── Models.kt / NoteItem.kt / ShareText.kt   DTO 与 UI 模型
-│   ├── XhsDatabase.kt         Room 数据库（xhs_local.db，version 2）
+│   ├── XhsDatabase.kt         Room 数据库（xhs_local.db，version 3）
 │   ├── XhsEntity.kt / XhsDao.kt / FollowDao.kt 实体与 DAO
 │   ├── BackupManager.kt       备份/恢复（本地文件 + WebDAV）
 │   └── AppCaches.kt           可清理缓存（CacheKind：磁盘图片 / 内存位图 / 临时文件）与 formatBytes
@@ -44,7 +44,7 @@ app/src/main/java/com/thirdparty/xhs/
 │   ├── OkHttpAwait.kt         协程桥接
 │   ├── CredentialStore.kt     SharedPreferences 存账号/设备标识
 │   ├── IdentityGuess.kt       设备身份生成（四种形式：MAC / IMEI / android_id / 截断 30 位的 android_id）
-│   ├── WebDavClient.kt        WebDAV（PROPFIND/PUT/GET/MKCOL）
+│   ├── WebDavClient.kt        WebDAV（PUT/GET/MKCOL）
 │   └── ...
 ├── navigation/AppNavHost.kt + Routes.kt   唯一路由注册处
 ├── ui/screens/*.kt            页面（Home/DiscoverTab/Detail/VideoFeed/Search/Author/...）
@@ -86,18 +86,21 @@ app/src/main/java/com/thirdparty/xhs/
   `member/user-info`、`member/follow-list`、`member/fun-list`、`member/note-list`、`member/fun-group-list`；
   `net/XhsApi.kt` 另有 `user/login-with-guest`、`app/init`。
 
-## 5. 本地数据（Room v2，`xhs_local.db`）
+## 5. 本地数据（Room v3，`xhs_local.db`）
 
 | 实体 | 内容 | 说明 |
 | --- | --- | --- |
 | `SavedNoteEntity` | 收藏 | 一键清空（二次确认） |
 | `HistoryEntity` | 最近浏览 | 上限可配；不记录未观看的视频 |
 | `FollowedEntity` | 我关注的作者 | 支持取消关注（二次确认） |
+| `WatchLaterEntity` | 稍后观看队列 | `position` 定义顺序；不提供排序，只按加入时间 |
 
-迁移策略当前是 `fallbackToDestructiveMigration()` —— **改 schema 就升级 version，数据会清空**，
-所以不能把"必须保留"的数据只放在这里。备份内容：收藏 / 最近浏览 / 关注 / 设置（主题、自动换号开关、历史上限、应用锁）/
+迁移策略：**必须写真迁移**（范例 `MIGRATION_2_3`），数据库**刻意不挂**
+`fallbackToDestructiveMigration()` —— 那会在漏写迁移时静默清空用户数据。
+备份内容：收藏 / 最近浏览 / 关注 / **稍后观看队列** / 设置（主题、自动换号开关、历史上限、应用锁）/
 搜索记录 / WebDAV 配置（**含 URL、用户名与密码**，JSON 里是明文，注意备份文件本身的存放位置）；
-**不含账号凭据**（identity / token / hash / VIP 窗口都不导出——旧窗口恢复回来也没有意义）。
+**不含账号凭据**（identity / token / hash / VIP 窗口都不导出——旧窗口恢复回来也没有意义，
+其中 `vipEnd` 也**不再从备份恢复**，否则外部文件能决定"VIP 是否还有效"）。
 
 ## 6. 环境事实（本机，构建用）
 

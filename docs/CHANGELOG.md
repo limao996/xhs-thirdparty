@@ -582,6 +582,29 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 ---
 
+### 阶段二十四 · 审查 P1/P2 修复批次（全面审查 → 全面修复）
+
+| # | 类别 | 改动 | 证据 |
+| --- | --- | --- | --- |
+| 1 | 用户可见 bug | ①关注/粉丝列表**失败态**不再伪装成"还没有关注任何人"，带「重试」（`UserListScreen` + `load(reset=true)`）；②搜索结果处理的**早退分支不再吞掉 `loading`**（改 `try/finally`）——原来会让该次搜索之后再也加载不出下一页；③双击缩放 **Y 轴**也用动画值（原来只有 X 轴平滑） | 编译通过；`docs/REVIEW.md` 附录B-P1-7/8/9 |
+| 2 | 生命周期与死代码 | `currentThemeMode()` 改 `collectAsStateWithLifecycle`；删掉 `WatchLaterViewModel.setOrder` + `XhsRepository.setWatchLaterOrder` + 队列页 KDoc 里仍在讲拖动的段落；删掉 `GuestViewModel` 的 `checkVipExpiry/rotate/currentDeviceMac`（无人调用）；删掉未被引用的 `Modifier.hapticClickable`；`composable("followed")` 改回 `Routes.FOLLOWED` | 编译通过 |
+| 3 | 网络硬化 | ①**4xx 不再重试**（新增 `HttpStatusException`：4xx 直接抛，5xx/网络中断才重试）；②`UpdateChecker` 改用可取消的 `Call.await()`（原来阻塞 `execute()`，取消不生效）；③更新页只接受 **GitHub 域名的 https 下载地址**（`isTrustedDownloadUrl`），否则回落发布页 | 编译通过；附录A-P1-12/17/18 |
+| 4 | 凭据一致性 | `CredentialStore` 新增 `clearSession()` / `clearCredentials()`（token+hash+VIP 缓存**一次提交**清掉）；`loginAsDevice` / 换号路径改用它，消除"新身份 + 旧 token"中间态；`deviceId` 的"读-生成-写"加 `synchronized` | 编译通过；附录A-P1-9/19 |
+| 5 | 备份硬化 | ①**不再挂 `fallbackToDestructiveMigration()`**（漏写迁移时不再静默清库）；②备份文件与解压结果都有 64 MB 上限（防解压炸弹）；③空/残缺备份在清库前就被拒；④**队列进备份**（导出 + 恢复 + 覆盖时一并清空）；⑤WebDAV 地址校验：公网 `http://` 直接拒绝（Basic 认证会明文过网），私网 http 允许 | 编译通过；附录A-P0-7/8、C-P0-2/3、C-P1-4/10、C-P2-32 |
+| 6 | 平台配置 | `allowBackup="false"`（访客 token 与 WebDAV 口令不再进系统云备份）；`videoSize` 相关 | 编译通过 |
+| 7 | lint | `VideoPlayer` 用 **`androidx.annotation.OptIn`** 声明 media3 的 `@UnstableApi`（Java 注解用 Kotlin 的 `@OptIn` 无效）；主题里的 `windowLightNavigationBar` 加 `tools:targetApi="27"`；`aspectRatio` 的 Range 误报用 `coerceAtLeast` 消除 | **lint 错误 40 → 1**（仅剩 `local.properties` 的 PropertyEscape，那是本机忽略文件）；警告 53 项保留（`UseKtx`/`GradleDependency`/`ModifierParameter` 等） |
+| 8 | 文档一致性 | ①`CONTEXT` 数据库改 v3 + 四张表、迁移策略改为"必须真迁移"、去掉不存在的 PROPFIND、备份清单补队列与"不再恢复 vipEnd"；②`CONVENTIONS` 的 DB 变更行改为"必须写真迁移"；③`README` 备份内容补队列与 WebDAV 凭据；④`docs/README` 的 GOTCHAS 索引补 H/I 两节；⑤`BUILD` 的 `.gitignore` 说法按实际（规则在 `.gitattributes`）改写 | 逐条对照附录C「文档与代码不一致清单」 |
+| 9 | CI / 构建 | CI 增加 `assembleRelease`（R8 + 资源压缩才是真会崩的那条）；`gradle.properties` 里过时的 AGP 注释改写 | 工作流文本 |
+
+**仍未修（如实列出，等你决定优先级）**：
+- 审查 P0-1：`tools/fixtures/prefs_*.xml` 里的真实 `user_token` / 设备身份（你说"不用管"）。
+- 附录B-P1-11 评论区改 `LazyColumn`（动布局，风险高于收益，未动）。
+- 附录B-P1-12 图片按用途尺寸解码（要在 `XhsAsyncImage` 加尺寸参数并改所有调用点）。
+- 附录C 的 version catalog、Room schema 导出 + 迁移测试、wrapper checksum、WebDAV 文件名带时间戳（会改变既有备份路径语义）。
+- lint 剩余 53 项警告（`UseKtx` ×20、`GradleDependency` ×7、`IconLauncherShape` ×5、`ModifierParameter` ×5 等）与依赖升级。
+
+---
+
 ### 阶段十四 · 详情页去掉队列入口
 
 - 详情页不再渲染稍后观看浮动按钮（`DetailScreen` 的 `floatingActionButton` 清空，

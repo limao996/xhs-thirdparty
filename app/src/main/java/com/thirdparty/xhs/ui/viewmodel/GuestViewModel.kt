@@ -128,29 +128,6 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
      * account, so this only makes the 我的 page's own numbers current immediately rather
      * than one request later.
      */
-    fun checkVipExpiry() {
-        if (!_autoVip.value) return
-        viewModelScope.launch {
-            if (runCatching { repo.switchToVipAccount() }.getOrDefault(false)) {
-                refreshLabel()
-                refreshVip()
-            }
-        }
-    }
-
-    /** Manual switch to the next pooled account. */
-    fun rotate(onToast: (String) -> Unit = {}) {
-        if (_rotating.value) return
-        viewModelScope.launch {
-            _rotating.value = true
-            val ok = runCatching { repo.rotateGuest() }.getOrNull()?.optInt("result") == 1
-            refreshLabel()
-            refreshVip()
-            _rotating.value = false
-            onToast(if (ok) "已切换游客账号" else "切换失败，沿用当前账号")
-        }
-    }
-
     /**
      * Manual switch: a brand-new RANDOM identity every time.
      *
@@ -169,9 +146,6 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
             onToast(if (ok) "已切换到新的随机账号" else "切换失败，沿用当前账号")
         }
     }
-
-    /** The identity currently in use. */
-    fun currentDeviceMac(): String = repo.currentDeviceMac()
 
     private fun refreshLabel() {
         viewModelScope.launch {

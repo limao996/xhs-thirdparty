@@ -17,8 +17,8 @@ data class WatchLaterUiState(
 /**
  * 稍后观看队列页。
  *
- * 顺序改动（上移 / 下移 / 删除）都写进本地库，所以观察 [XhsRepository.watchLaterVersion]
- * 再读一次列表就够了 —— 不需要在内存里维护第二份顺序，那份总会和库里不一致。
+ * 队列**不提供排序**（硬约束 20）：按加入时间排列，增删都写进本地库，
+ * 观察 [XhsRepository.watchLaterVersion] 再读一次列表就够了 —— 不需要在内存里维护第二份顺序。
  */
 class WatchLaterViewModel(private val repo: XhsRepository) : ViewModel() {
 
@@ -37,11 +37,6 @@ class WatchLaterViewModel(private val repo: XhsRepository) : ViewModel() {
             val items = runCatching { repo.watchLaterList() }.getOrDefault(emptyList())
             _ui.value = WatchLaterUiState(items = items, loading = false)
         }
-    }
-
-    /** 长按拖动结束：把新的顺序整段写回去。 */
-    fun setOrder(orderedIds: List<Long>) {
-        viewModelScope.launch { repo.setWatchLaterOrder(orderedIds) }
     }
 
     fun remove(noteId: Long) {

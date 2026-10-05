@@ -84,6 +84,18 @@ fun UserListScreen(
             state.loading -> Box(Modifier.fillMaxSize().padding(pad), Alignment.Center) {
                 LoadingIndicator()
             }
+            // 失败要先于"空"判断：拉取失败时 users 也是空，直接显示"还没有关注任何人"
+            // 会把网络错误伪装成空列表（而且没有重试出口）——docs/REVIEW.md 附录B-P1-7
+            state.error && state.users.isEmpty() -> Box(Modifier.fillMaxSize().padding(pad)) {
+                EmptyState(
+                    title = "加载失败",
+                    description = "网络或账号异常，点下面重试",
+                    actionLabel = "重试",
+                    onAction = { viewModel.load(reset = true) },
+                    modifier = Modifier.fillMaxSize(),
+                    icon = Icons.Filled.Group
+                )
+            }
             state.users.isEmpty() -> Box(Modifier.fillMaxSize().padding(pad)) {
                 EmptyState(
                     title = if (mode == UserListMode.FOLLOWING) "还没有关注任何人" else "还没有粉丝",

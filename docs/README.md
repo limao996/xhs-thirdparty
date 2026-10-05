@@ -23,7 +23,7 @@
 | [../CLAUDE.md](../CLAUDE.md) | Claude Code 等工具的极简指针 |
 | [ai/CONTEXT.md](ai/CONTEXT.md) | 一页上下文：技术栈表、代码地图、数据流、协议摘要、环境事实、当前状态 |
 | [ai/CONVENTIONS.md](ai/CONVENTIONS.md) | 代码 / 提交 / 文档 / 沟通 / 可移植性约定 |
-| [ai/GOTCHAS.md](ai/GOTCHAS.md) | 踩坑规则：触发条件 → 正确做法（A 流程（含 A7 断言误判）/ B 构建 / C Compose（含 C8 列表滚动位置）/ D 数据与播放器 / E 仓库（含 E5 文档须与实现一致）/ **F 游客账号与 VIP 续期** / **G 检查更新**） |
+| [ai/GOTCHAS.md](ai/GOTCHAS.md) | 踩坑规则：触发条件 → 正确做法（A 流程（含 A7 断言误判）/ B 构建 / C Compose（含 C8 列表滚动位置）/ D 数据与播放器 / E 仓库（含 E5 文档须与实现一致）/ F 游客账号与 VIP 续期 / G 检查更新 / **H 稍后观看·长按菜单·画中画** / **I 验证工具本身的坑**） |
 | [ai/PROMPTS.md](ai/PROMPTS.md) | 可直接复用的任务提示词模板（修复 / 新页面 / UI 改造 / 依赖 / 验证 / 文档 / 发布自检） |
 | [.github/copilot-instructions.md](../.github/copilot-instructions.md) | GitHub Copilot 指令 |
 | [.cursor/rules/project.mdc](../.cursor/rules/project.mdc) | Cursor 项目规则 |

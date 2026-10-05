@@ -117,40 +117,47 @@ class SearchViewModel(private val repo: XhsRepository) : ViewModel() {
             )
         }
         viewModelScope.launch {
-            when (_ui.value.mode) {
-                SearchResultMode.CONTENT -> {
-                    val list = runCatching { repo.searchNote(q, 1) }.getOrNull()
-                    // A response that lands after the field was cleared (or after
-                    // a newer query was typed) must not repopulate the page it no
-                    // longer belongs to — that is exactly how 清除 used to look
-                    // broken: it emptied the field, and a second later the old
-                    // results were back.
-                    if (_ui.value.query.trim() != q) return@launch
-                    _ui.update {
-                        it.copy(
-                            searching = false,
-                            results = list ?: it.results,
-                            empty = list != null && list.isEmpty(),
-                            error = list == null,
-                            hasMore = list != null && list.isNotEmpty()
-                        )
+            // `loading` 必须走 finally 复位：早退分支（下面的两处"query 已变"）会直接
+            // return，原来那些路径把 `loading = true` 永久留着，而 `loadMore()` 的第一行
+            // 就是 `if (loading) return` —— 结果是**该次搜索之后再也加载不出下一页**
+            // （docs/REVIEW.md 附录B-P1-8）。
+            try {
+                when (_ui.value.mode) {
+                    SearchResultMode.CONTENT -> {
+                        val list = runCatching { repo.searchNote(q, 1) }.getOrNull()
+                        // A response that lands after the field was cleared (or after
+                        // a newer query was typed) must not repopulate the page it no
+                        // longer belongs to — that is exactly how 清除 used to look
+                        // broken: it emptied the field, and a second later the old
+                        // results were back.
+                        if (_ui.value.query.trim() != q) return@launch
+                        _ui.update {
+                            it.copy(
+                                searching = false,
+                                results = list ?: it.results,
+                                empty = list != null && list.isEmpty(),
+                                error = list == null,
+                                hasMore = list != null && list.isNotEmpty()
+                            )
+                        }
+                    }
+                    SearchResultMode.USER -> {
+                        val users = runCatching { repo.searchUsers(q, 1) }.getOrNull()
+                        if (_ui.value.query.trim() != q) return@launch
+                        _ui.update {
+                            it.copy(
+                                searching = false,
+                                users = users ?: it.users,
+                                empty = users != null && users.isEmpty(),
+                                error = users == null,
+                                hasMore = false
+                            )
+                        }
                     }
                 }
-                SearchResultMode.USER -> {
-                    val users = runCatching { repo.searchUsers(q, 1) }.getOrNull()
-                    if (_ui.value.query.trim() != q) return@launch
-                    _ui.update {
-                        it.copy(
-                            searching = false,
-                            users = users ?: it.users,
-                            empty = users != null && users.isEmpty(),
-                            error = users == null,
-                            hasMore = false
-                        )
-                    }
-                }
+            } finally {
+                loading = false
             }
-            loading = false
         }
     }
 

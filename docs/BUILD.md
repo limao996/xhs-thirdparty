@@ -149,5 +149,6 @@ Get-FileHash $apk -Algorithm MD5                          # 分发时贴这个�
 ## 8. 构建产物不入库
 
 `.gitignore` 覆盖 `app/build/`、`build/`、`.gradle/`、`.kotlin/`、`.idea/`、`local.properties`、`*.apk`、
-`*.keystore`（`keystore/release.jks` 通过例外规则保留）、`tools/out/`。
+`tools/out/`。`keystore/` **刻意不入忽略列表**（签名密钥是刻意入库的，见上文签名一节）；
+`.gitattributes` 把 `*.jks` / `*.keystore` 标成 binary，避免行尾转换破坏密钥文件。
 提交前确认 `git status` 里没有上述内容。

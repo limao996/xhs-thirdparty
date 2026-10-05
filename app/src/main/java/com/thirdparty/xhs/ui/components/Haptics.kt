@@ -1,6 +1,5 @@
 package com.thirdparty.xhs.ui.components
 
-import androidx.compose.foundation.clickable
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
@@ -93,13 +92,6 @@ fun rememberHaptics(): Haptics {
     val feedback = LocalHapticFeedback.current
     return remember(feedback) { Haptics(feedback) }
 }
-
-/** `Modifier.clickable` 的带触感版本：新的可点区域直接用它（需 import）。 */
-fun Modifier.hapticClickable(
-    haptics: Haptics,
-    enabled: Boolean = true,
-    onClick: () -> Unit
-): Modifier = this.clickable(enabled = enabled) { haptics.tick(); onClick() }
 
 /**
  * **翻页触感的唯一实现**：页面**落定**时给一次 `segment()`。

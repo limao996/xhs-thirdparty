@@ -1,3 +1,7 @@
+// media3 的不少 API 标了 `@UnstableApi`（Java 注解），Compose 的 Expressive 组件标了 Kotlin 实验性：
+// 不显式 opt-in 的话 lint 会报 27 处 UnsafeOptInUsageError（docs/REVIEW.md 附录B-P2-8）。
+// 注意：Java 注解要用 `androidx.annotation.OptIn`，Kotlin 的 `@OptIn` 对它无效。
+@file:androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 
 package com.thirdparty.xhs.ui.components

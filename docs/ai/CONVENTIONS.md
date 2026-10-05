@@ -16,7 +16,7 @@
 | 数据访问 | UI 与组件**不得**直接调 `net/` 或 Room；一律经 `XhsRepository` |
 | 新接口 | 加在 `XhsRepository`（含缓存写入与失败语义），再在 ViewModel 暴露状态 |
 | 新页面 | 同时登记 `navigation/Routes.kt` 常量与 `AppNavHost` 的 `composable`；属底部页则补 `HomeTab` |
-| DB 变更 | 改实体/表结构必须 `@Database(version = n+1)`；当前是 destructive migration，需在提交信息里说明数据会清空 |
+| DB 变更 | 改实体/表结构必须 `@Database(version = n+1)` **并写一个真迁移**（范例：v2→v3 的 `watch_later`）；不要依赖 `fallbackToDestructiveMigration` —— 那会静默清空用户的收藏/浏览/关注/队列 |
 | 错误处理 | 失败时保留已有数据 + 暴露错误态，禁止把失败显示成"空数据" |
 | Compose 状态 | 子 tab 内容包在 `rememberSaveableStateHolder().SaveableStateProvider(key)` 里；列表滚动状态按 `resetKey` 分组（`key(resetKey) { rememberLazyStaggeredGridState() }`），换 key = 回顶部、同 key = 保留位置；身份位在同名却是新列表时要单调递增（GOTCHAS C2/C8） |
 | 并发 | 协程只在 ViewModel / Repository；`Dispatchers.IO` 用于 IO；不在组合函数里做阻塞调用 |

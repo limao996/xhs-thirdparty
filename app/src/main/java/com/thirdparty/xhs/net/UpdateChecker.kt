@@ -65,7 +65,9 @@ object UpdateChecker {
                 .get()
                 .build()
             try {
-                client.newCall(request).execute().use { response ->
+                // await()（OkHttpAwait）而不是阻塞的 execute()：作用域被取消时会 cancel 掉连接，
+                // 否则 socket 要一直跑到超时（docs/REVIEW.md 附录A-P1-17）。
+                client.newCall(request).await().use { response ->
                     when {
                         response.code == 404 -> Result.NoRelease(RELEASES_URL)
                         response.code == 403 -> Result.Failed("GitHub 限流（HTTP 403），过一会儿再试")
@@ -93,7 +95,7 @@ object UpdateChecker {
                 .mapNotNull { assets.optJSONObject(it) }
                 .firstOrNull { it.optString("name").endsWith(".apk", ignoreCase = true) }
                 ?.optString("browser_download_url")
-                ?.takeIf { it.isNotEmpty() }
+                ?.takeIf { it.isNotEmpty() && isTrustedDownloadUrl(it) }
         }
         return if (isNewer(tag, currentVersion)) {
             Result.Newer(tag, pageUrl, notes.take(600), apkUrl)
@@ -103,8 +105,7 @@ object UpdateChecker {
     }
 
     /** 按数字段比较 "1.10.0" 与 "1.9.2"；任一侧解析不了就当"不更新"。 */
-    fun isNewer(remote: String, current: String): Boolean {
-        val a = numbers(remote) ?: return false
+    fun isNewer(remote: String, current: String): Boolean {        val a = numbers(remote) ?: return false
         val b = numbers(current) ?: return false
         for (i in 0 until maxOf(a.size, b.size)) {
             val x = a.getOrElse(i) { 0 }
@@ -119,4 +120,19 @@ object UpdateChecker {
         if (cleaned.isEmpty()) return null
         return cleaned.split('.').map { it.toIntOrNull() ?: return null }.ifEmpty { null }
     }
+
+    /**
+     * 只信 GitHub 自己的下载地址。
+     *
+     * 应答是**外部数据**，仓库/发布一旦被改，弹窗上的「打开下载页」就会指向任意 URL
+     * （docs/REVIEW.md 附录A-P1-18）。不在白名单里就当作没有 apk 链接，回落到发布页。
+     */
+    fun isTrustedDownloadUrl(url: String): Boolean = runCatching {
+        val u = java.net.URI(url)
+        u.scheme.equals("https", true) && TRUSTED_HOSTS.any { h ->
+            u.host.equals(h, true) || u.host.endsWith(".$h", true)
+        }
+    }.getOrDefault(false)
+
+    private val TRUSTED_HOSTS = listOf("github.com", "githubusercontent.com")
 }

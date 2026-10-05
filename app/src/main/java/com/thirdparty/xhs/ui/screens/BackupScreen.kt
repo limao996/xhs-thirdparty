@@ -92,6 +92,21 @@ fun BackupScreen(onBack: () -> Unit) {
         }
     }
 
+    /**
+     * WebDAV 配置校验（不抛异常，只把原因写进状态行）。
+     *
+     * 全局开明文是为了让**局域网** http WebDAV 可用，但 WebDAV 是 Basic 认证 ——
+     * 公网 http 等于把账号密码明文发出去，所以这里直接拦住（docs/REVIEW.md 附录A-P1-13）。
+     */
+    fun cfgOk(): Boolean {
+        val err = WebDavClient.validate(url)
+        if (err != null) {
+            status = "失败：$err"
+            return false
+        }
+        return true
+    }
+
     // System pickers instead of a hard-coded path: works on every Android version
     // and needs no storage permission.
     val saveLauncher = rememberLauncherForActivityResult(
@@ -163,6 +178,7 @@ fun BackupScreen(onBack: () -> Unit) {
                 confirmButton = {
                     androidx.compose.material3.TextButton(onClick = rememberHaptics().confirmClick {
                         confirmUpload = false
+                        if (!cfgOk()) return@confirmClick
                         WebDavClient.save(context, WebDavClient.WebDavConfig(url, user, pass))
                         run("正在上传到云端") {
                             val cfg = WebDavClient.WebDavConfig(url, user, pass)
@@ -288,11 +304,13 @@ fun BackupScreen(onBack: () -> Unit) {
             // one per line.
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedButton(onClick = haptics.click {
+                    if (!cfgOk()) return@click
                     WebDavClient.save(context, WebDavClient.WebDavConfig(url, user, pass))
                     status = "配置已保存"
                 }) { Text("保存配置") }
                 Spacer(Modifier.size(Spacing.s))
                 OutlinedButton(onClick = haptics.click {
+                    if (!cfgOk()) return@click
                     WebDavClient.save(context, WebDavClient.WebDavConfig(url, user, pass))
                     run("正在测试连接") {
                         val cfg = WebDavClient.WebDavConfig(url, user, pass)
@@ -308,6 +326,7 @@ fun BackupScreen(onBack: () -> Unit) {
                 Button(onClick = haptics.click { confirmUpload = true }) { Text("上传备份") }
                 Spacer(Modifier.size(Spacing.s))
                 OutlinedButton(onClick = haptics.click {
+                    if (!cfgOk()) return@click
                     WebDavClient.save(context, WebDavClient.WebDavConfig(url, user, pass))
                     confirmRestore = { run("正在从云端恢复") {
                         val cfg = WebDavClient.WebDavConfig(url, user, pass)

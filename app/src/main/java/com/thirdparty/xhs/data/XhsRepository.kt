@@ -806,12 +806,6 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
         _watchLaterVersion.value++
     }
 
-    /** Rewrite the queue order after a drag (ids in the new order). */
-    suspend fun setWatchLaterOrder(orderedIds: List<Long>) = withContext(Dispatchers.IO) {
-        orderedIds.forEachIndexed { index, id -> watchLaterDao.setPosition(id, index) }
-        _watchLaterVersion.value++
-    }
-
     /** Squeeze positions back to 0..n-1 so removals cannot leave gaps. */
     private suspend fun renumberWatchLater() {
         watchLaterDao.all().forEachIndexed { i, e ->

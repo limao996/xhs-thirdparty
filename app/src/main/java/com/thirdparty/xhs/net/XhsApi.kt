@@ -163,6 +163,12 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
         for (attempt in 0 until NETWORK_ATTEMPTS) {
             try {
                 return doCallOnce(path, params)
+            } catch (e: HttpStatusException) {
+                // 4xx 是"请求本身不对"（404 / 403 / 429 …），重发一次只会再烧一次配额；
+                // 5xx 与网络中断才值得重试。（docs/REVIEW.md 附录A-P1-12）
+                if (e.code in 400..499) throw e
+                lastError = e
+                if (attempt < NETWORK_ATTEMPTS - 1) delay(RETRY_BACKOFF_MS)
             } catch (e: java.io.IOException) {
                 lastError = e
                 if (attempt < NETWORK_ATTEMPTS - 1) {
@@ -176,6 +182,10 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
         }
         throw lastError ?: java.io.IOException("request failed: $path")
     }
+
+    /** 非 2xx 响应；4xx 不重试，见 [doCall]。 */
+    class HttpStatusException(val code: Int, path: String) :
+        java.io.IOException("HTTP $code for $path")
 
     private suspend fun doCallOnce(
         path: String,
@@ -230,7 +240,7 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
             // transient failure. Throwing IOException instead makes the retry
             // wrapper above do its job.
             if (!response.isSuccessful) {
-                throw java.io.IOException("HTTP ${response.code} for $path")
+                throw HttpStatusException(response.code, path)
             }
             val bytes = response.body?.bytes()
             if (bytes == null || bytes.isEmpty()) {
@@ -278,11 +288,23 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
      * `getUserId()` prefers it over the device identity, and a stale hash would
      * pin us to the previous account.
      */
+    /**
+     * 换一个设备身份（换号的第一步）。
+     *
+     * 与 [CredentialStore.setDevice] 的区别：这里把 token/hash 一起清掉，避免出现
+     * "新身份 + 旧 token" 的中间状态（那组合在服务端只会得到 `-1 用戶ID錯誤`）。
+     */
+    suspend fun rotateDevice(advance: Boolean): String {
+        if (advance) credentialStore.setDevice(IdentityGuess.randomFresh())
+        credentialStore.clearSession()
+        return credentialStore.deviceId
+    }
+
     suspend fun loginAsGuest(advanceDevice: Boolean = false): JSONObject {
         if (advanceDevice) {
-            credentialStore.freshDevice()
-            credentialStore.userHash = ""
-        }        // CREATE the account first. `app/init` is what registers the device
+            rotateDevice(advance = true)
+        }
+        // CREATE the account first. `app/init` is what registers the device
         // identity with the backend — without it every new identity answers
         // `result=-1 用戶ID錯誤` from the account endpoints and it looks like the
         // backend never issues accounts. Verified: 8/8 fresh random identities
@@ -307,7 +329,8 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
      */
     suspend fun loginAsDevice(identity: String): JSONObject {
         credentialStore.setDevice(identity)
-        credentialStore.userHash = ""
+        // 一起清 token + hash：只清 hash 会留下"新身份 + 旧 token"
+        credentialStore.clearSession()
         return loginAsGuest(advanceDevice = false)
     }
 

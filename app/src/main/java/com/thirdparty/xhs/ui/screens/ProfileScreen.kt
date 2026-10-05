@@ -160,10 +160,16 @@ fun ProfileScreen(
                         // VIP expiry, when the account has one
                         val end = state.profile?.vipEnd ?: 0L
                         if (end > System.currentTimeMillis() / 1000) {
+                            // 用 LocalConfiguration 里的 locale 作为依赖：直接读 Locale.getDefault()
+                            // 在组合里是非可观察的（lint NonObservableLocale），系统语言变了不会重算
+                            val locale =
+                                androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
+                            val formatted = remember(end, locale) {
+                                java.text.SimpleDateFormat("MM-dd HH:mm", locale)
+                                    .format(java.util.Date(end * 1000))
+                            }
                             Text(
-                                "会员有效期至 " + java.text.SimpleDateFormat(
-                                    "MM-dd HH:mm", java.util.Locale.getDefault()
-                                ).format(java.util.Date(end * 1000)),
+                                "会员有效期至 $formatted",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.tertiary
                             )

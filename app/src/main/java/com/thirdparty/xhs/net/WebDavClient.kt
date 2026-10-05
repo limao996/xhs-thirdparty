@@ -168,6 +168,30 @@ class WebDavClient(
             )
         }
 
+        /**
+         * 校验用户填的服务器地址，返回错误说明或 null。
+         *
+         * 为什么单独校验：全局 `usesCleartextTraffic="true"` 是为了让**局域网**里的 http WebDAV
+         * 能用，但 WebDAV 走的是 Basic 认证 —— 地址填成公网 `http://` 时，账号密码就是 base64
+         * 明文过网（docs/REVIEW.md 附录A-P1-13 / C-P2-26）。
+         * 所以允许：https 任意主机；http 仅限私网地址（10./172.16-31./192.168./localhost/::1）。
+         */
+        fun validate(url: String): String? {
+            val trimmed = url.trim()
+            if (trimmed.isEmpty()) return "请先填写服务器地址"
+            if (!trimmed.startsWith("http://", true) && !trimmed.startsWith("https://", true)) {
+                return "地址要以 https:// 或 http:// 开头"
+            }
+            if (trimmed.startsWith("https://", true)) return null
+            val host = runCatching { java.net.URI(trimmed).host }.getOrNull().orEmpty()
+            if (host.isEmpty()) return "地址格式不对"
+            val isPrivate = host == "localhost" || host == "::1" || host == "127.0.0.1" ||
+                host.startsWith("10.") || host.startsWith("192.168.") ||
+                Regex("^172\\.(1[6-9]|2[0-9]|3[01])\\.").containsMatchIn(host)
+            return if (isPrivate) null
+            else "公网地址必须用 https://（http 会把账号密码明文发出去）"
+        }
+
         fun save(context: Context, cfg: WebDavConfig) {
             context.getSharedPreferences("webdav", Context.MODE_PRIVATE).edit()
                 .putString("url", cfg.url.trim())

@@ -1,5 +1,10 @@
 # 深度审查报告（2026-10-06）
 
+> **修复进度**：P0-2~P0-7 已按用户取舍全部修掉（P0-1「仓库里的 token」按用户要求不动）；
+> 附录 A/B/C 的 P1 大部分已修（换号并发、备份安全与事务、闸门单飞、清凭据、图片/更新/WebDAV 硬化、
+> 失败态与分页、路由与死代码、lint 40→1）；剩余 P2 见文末「未修清单」。
+> 逐条改动与证据在 `docs/CHANGELOG.md` 的**阶段二十三 / 二十四**。
+
 > 审查对象：`xhs-thirdparty`（Kotlin + Compose，82 个 Kotlin 文件 / 15038 行，debug APK 25.15 MB）
 > 审查方式：①`gradlew lintDebug` 全量跑（96 项：**40 error / 47 warning / 9 hint**，
 > 报告 `app/build/reports/lint-results-debug.xml`）；②人工逐文件审读账号链路、播放器所有权、
@@ -161,7 +166,6 @@
 ---
 
 # 附录 A · 网络与账号层专项（并行审查，只读）
-
 范围：`net/` 全部 7 个文件 + `data/` 中网络/身份相关文件 + 调用它们的 ViewModel / App / Activity / Manifest。
 
 ## A-P0

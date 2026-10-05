@@ -46,6 +46,11 @@ jobs:
       - name: 运行单元测试
         run: ./gradlew testDebugUnitTest --stacktrace --no-daemon
 
+      # release 路径（R8 + 资源压缩）才是真正会崩的那条：proguard 规则就是"跑过 release 才发现"
+      # 的产物，所以 CI 至少构建一次（docs/REVIEW.md 附录C-P2-20）。
+      - name: 构建 release 包（验证 R8 / 签名）
+        run: ./gradlew assembleRelease --stacktrace --no-daemon
+
       - name: 上传产物（仅用于排查，不发布）
         if: always()
         uses: actions/upload-artifact@v4

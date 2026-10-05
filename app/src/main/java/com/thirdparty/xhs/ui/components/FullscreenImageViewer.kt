@@ -252,7 +252,7 @@ fun FullscreenImageViewer(
                         scaleX = if (active) renderScale else 1f,
                         scaleY = if (active) renderScale else 1f,
                         translationX = if (active) renderOffset.x else 0f,
-                        translationY = if (active) offset.y else 0f
+                        translationY = if (active) renderOffset.y else 0f
                     )
                 )
             }

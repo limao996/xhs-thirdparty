@@ -33,11 +33,11 @@ class CredentialStore(context: Context) {
      * use different identities and each launch would create a throwaway account.
      */
     val deviceId: String
-        get() {
+        get() = synchronized(this) {
             prefs.getString(KEY_DEVICE, null)?.let { return it }
             val fresh = IdentityGuess.randomFresh()
             prefs.edit().putString(KEY_DEVICE, fresh).apply()
-            return fresh
+            fresh
         }
 
     /** Switch to a specific identity. */
@@ -45,6 +45,34 @@ class CredentialStore(context: Context) {
         // a cached VIP window belongs to the account it was read from
         prefs.edit()
             .putString(KEY_DEVICE, identity)
+            .putLong(KEY_VIP_END, 0L)
+            .apply()
+    }
+
+    /**
+     * 换号前清掉**上一条会话**：token 与 hash 必须一起清。
+     *
+     * 只清 hash 会留下"新设备身份 + 旧 token"的组合，服务端只会回 `-1 用戶ID錯誤`；
+     * 而这两次写原本是两次 `apply()`，中间状态可被其它协程读到（docs/REVIEW.md 附录A-P1-9）。
+     * 现在合并成一次提交。
+     */
+    fun clearSession() {
+        prefs.edit()
+            .remove(KEY_TOKEN)
+            .remove(KEY_HASH)
+            .putLong(KEY_VIP_END, 0L)
+            .apply()
+    }
+
+    /**
+     * 彻底清空账号凭据（设备身份也换掉）。供"退出 / 清账号"用；
+     * 目前没有 UI 入口，但换号与备份恢复都依赖它的一致性语义。
+     */
+    fun clearCredentials() {
+        prefs.edit()
+            .remove(KEY_TOKEN)
+            .remove(KEY_HASH)
+            .remove(KEY_DEVICE)
             .putLong(KEY_VIP_END, 0L)
             .apply()
     }
