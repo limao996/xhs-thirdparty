@@ -4,7 +4,7 @@
 
 这个仓库只有客户端源码和文档，不含任何内容数据，也不提供任何服务器。
 
-![Android](https://img.shields.io/badge/Android-7.0%2B-3DDC84?logo=android&logoColor=white)
+![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.1.21-7F52FF?logo=kotlin&logoColor=white)
 ![Material 3](https://img.shields.io/badge/Material%203-Expressive-6750A4)
 ![License](https://img.shields.io/badge/License-MIT-FFC73D)
