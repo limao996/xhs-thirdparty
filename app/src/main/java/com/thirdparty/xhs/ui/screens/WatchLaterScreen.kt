@@ -2,8 +2,6 @@ package com.thirdparty.xhs.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
-import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,8 +18,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.DeleteSweep
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -33,13 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.withFrameNanos
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -126,50 +116,24 @@ fun WatchLaterScreen(
             return@Scaffold
         }
 
-        // ---- 排序 ------------------------------------------------------------
-        // 只做**上移 / 下移一格**：一次点击 = 与相邻行交换，顺序立刻写回数据库。
-        //
-        // 曾经做过长按拖动（含边缘自动滚动、双指滚动、内容坐标补偿），实机反馈始终不稳定，
-        // 用户要求直接去掉 —— 排序按钮没有任何手势歧义，也不会和列表的滚动打架。
-        //
-        // `committed` 是"刚落库的顺序"：写库是异步的，等 Room 读回来之前如果按旧列表渲染，
-        // 被移动的那一行会先闪回原位再跳过去，所以先按这份顺序画，等库里对上再撤掉。
-        var committed by remember { mutableStateOf<List<Long>?>(null) }
-        val items = committed?.let { ids ->
-            val byId = state.items.associateBy { it.noteId }
-            ids.mapNotNull { byId[it] }.takeIf { it.size == ids.size }
-        } ?: state.items
-        LaunchedEffect(state.items, committed) {
-            val want = committed ?: return@LaunchedEffect
-            if (state.items.map { it.noteId } == want) committed = null
-        }
-
-        fun move(from: Int, to: Int) {
-            if (from < 0 || to < 0 || from > items.lastIndex || to > items.lastIndex) return
-            val ids = items.map { it.noteId }.toMutableList()
-            ids.add(to, ids.removeAt(from))
-            committed = ids
-            viewModel.setOrder(ids)
-            haptics.confirm()
-        }
+        // ---- 列表 ------------------------------------------------------------
+        // 队列**不提供排序**（用户最终要求）：先后顺序就按加入时间，列表里没有序号、没有排序按钮。
+        // 历史的三种排序实现（长按拖动换位 / 内容坐标 + 边缘自动滚动 / 行内上下按钮）全部删除，
+        // 只保留"加入顺序"这一个含义 —— 少一个可变的量，就少一类"顺序不对"的问题。
+        val items = state.items
 
         Column(
             Modifier.fillMaxSize().padding(pad).verticalScroll(rememberScrollState())
         ) {
             Text(
-                "用右侧上下按钮调整顺序",
+                "按加入时间排列 · 在瀑布流或推荐页长按作品可加入",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = Spacing.l, top = Spacing.s, bottom = Spacing.xs)
             )
-            items.forEachIndexed { index, item ->
+            items.forEach { item ->
                 QueueRow(
                     item = item,
-                    position = index + 1,
-                    canMoveUp = index > 0,
-                    canMoveDown = index < items.lastIndex,
-                    onMoveUp = { move(index, index - 1) },
-                    onMoveDown = { move(index, index + 1) },
                     onClick = { onOpenDetail(item.noteId) },
                     onRemove = { viewModel.remove(item.noteId) }
                 )
@@ -191,7 +155,10 @@ fun WatchLaterScreen(
                 }) { Text("清空") }
             },
             dismissButton = {
-                TextButton(onClick = { confirmClear = false }) { Text("取消") }
+                TextButton(onClick = {
+                    haptics.tick()
+                    confirmClear = false
+                }) { Text("取消") }
             }
         )
     }
@@ -200,12 +167,6 @@ fun WatchLaterScreen(
 @Composable
 private fun QueueRow(
     item: NoteItem,
-    /** 第几件（从 1 开始） */
-    position: Int,
-    canMoveUp: Boolean,
-    canMoveDown: Boolean,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit,
     onClick: () -> Unit,
     onRemove: () -> Unit
 ) {
@@ -222,14 +183,6 @@ private fun QueueRow(
             Modifier.fillMaxSize().padding(start = Spacing.s, end = Spacing.xs),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 序号 + 右侧竖直排列的小号上下按钮（原来那个拖动把手去掉了：实测拖不动）
-            Text(
-                "$position",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.width(18.dp)
-            )
-            Spacer(Modifier.width(Spacing.xs))
             XhsAsyncImage(
                 url = item.cover.ifEmpty { item.thumbnail },
                 contentDescription = null,
@@ -254,37 +207,6 @@ private fun QueueRow(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1
-                    )
-                }
-            }
-            // 上下排序：竖直排列的小号按钮（禁用态在两端，一眼看出到头了）
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                IconButton(
-                    onClick = {
-                        haptics.tick()
-                        onMoveUp()
-                    },
-                    enabled = canMoveUp,
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Icon(
-                        Icons.Filled.KeyboardArrowUp,
-                        contentDescription = "上移",
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-                IconButton(
-                    onClick = {
-                        haptics.tick()
-                        onMoveDown()
-                    },
-                    enabled = canMoveDown,
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Icon(
-                        Icons.Filled.KeyboardArrowDown,
-                        contentDescription = "下移",
-                        modifier = Modifier.size(18.dp)
                     )
                 }
             }

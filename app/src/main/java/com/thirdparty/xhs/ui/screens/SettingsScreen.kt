@@ -138,13 +138,18 @@ fun SettingsScreen(
                         Switch(
                             checked = bioOn,
                             enabled = biometricAvailable,
-                            onCheckedChange = { bioOn = it; onSetBiometricLock(it) }
+                            onCheckedChange = {
+                                haptics.tick()
+                                bioOn = it
+                                onSetBiometricLock(it)
+                            }
                         )
                     },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     modifier = Modifier.clickable {
                         // never let the toggle be flipped on where it cannot be honoured
                         if (biometricAvailable) {
+                            haptics.tick()
                             bioOn = !bioOn
                             onSetBiometricLock(bioOn)
                         }
@@ -166,10 +171,15 @@ fun SettingsScreen(
                     supportingContent = { Text("当前账号 VIP 到期时自动切换到有 VIP 的账号") },
                     leadingContent = { Icon(Icons.Filled.Autorenew, null, tint = MaterialTheme.colorScheme.primary) },
                     trailingContent = {
-                        Switch(checked = autoOn, onCheckedChange = { autoOn = it; onSetAutoVip(it) })
+                        Switch(checked = autoOn, onCheckedChange = {
+                            haptics.tick()
+                            autoOn = it
+                            onSetAutoVip(it)
+                        })
                     },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     modifier = Modifier.clickable {
+                        haptics.tick()
                         autoOn = !autoOn
                         onSetAutoVip(autoOn)
                     }
@@ -211,12 +221,14 @@ fun SettingsScreen(
                             headlineContent = { Text(mode.label()) },
                             leadingContent = {
                                 RadioButton(selected = mode == themeMode, onClick = {
+                                    haptics.tick()
                                     onSetTheme(mode)
                                     pickTheme = false
                                 })
                             },
                             colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
                             modifier = Modifier.clickable {
+                                haptics.tick()
                                 onSetTheme(mode)
                                 pickTheme = false
                             }
@@ -224,7 +236,7 @@ fun SettingsScreen(
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { pickTheme = false }) { Text("关闭") } }
+            confirmButton = { TextButton(onClick = haptics.click { pickTheme = false }) { Text("关闭") } }
         )
     }
 
@@ -239,6 +251,7 @@ fun SettingsScreen(
                             headlineContent = { Text("$n 条" + if (n == limit) "（当前）" else "") },
                             leadingContent = {
                                 RadioButton(selected = n == limit, onClick = {
+                                    haptics.tick()
                                     limit = n
                                     onSetHistoryLimit(n)
                                     pickLimit = false
@@ -246,6 +259,7 @@ fun SettingsScreen(
                             },
                             colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
                             modifier = Modifier.clickable {
+                                haptics.tick()
                                 limit = n
                                 onSetHistoryLimit(n)
                                 pickLimit = false
@@ -254,7 +268,7 @@ fun SettingsScreen(
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { pickLimit = false }) { Text("关闭") } }
+            confirmButton = { TextButton(onClick = haptics.click { pickLimit = false }) { Text("关闭") } }
         )
     }
 

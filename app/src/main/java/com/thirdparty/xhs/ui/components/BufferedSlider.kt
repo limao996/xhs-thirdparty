@@ -92,24 +92,13 @@ fun BufferedSlider(
         activeTrackColor = playedColor,
         inactiveTrackColor = inactiveColor
     )
-    // 拖动时的触感：按 5% 一档节流，不然一次拖动会连发几十次
-    val lastNotch = remember { java.util.concurrent.atomic.AtomicInteger(-1) }
-    LaunchedEffect(Unit) { lastNotch.set(-1) }
 
     Slider(
         state = state,
-        onValueChange = {
-            haptics?.let { h ->
-                val notch = (it.coerceIn(0f, 1f) * 20).toInt()
-                if (notch != lastNotch.getAndSet(notch)) h.segment()
-            }
-            onValueChange(it)
-        },
-        onValueChangeFinished = {
-            lastNotch.set(-1)
-            onValueChangeFinished()
-        },
-        modifier = modifier,
+        onValueChange = onValueChange,
+        onValueChangeFinished = onValueChangeFinished,
+        // 触感是"按下即触发"（用户要求），不是拖动中按 5% 一档发 —— 后者手一滑就抖一串
+        modifier = modifier.pressHaptic(haptics),
         colors = colors,
         track = { sliderState ->
             Box {

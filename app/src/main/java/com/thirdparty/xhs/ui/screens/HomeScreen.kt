@@ -252,7 +252,11 @@ fun HomeScreen(
                     Spacer(Modifier.width(Spacing.m))
                     Text(guest, style = MaterialTheme.typography.labelSmall,
                         color = Scrim.onMediaVariant, maxLines = 1, modifier = Modifier.weight(1f))
-                    IconButton(onClick = onOpenSearch) {
+                    IconButton(onClick = {
+                        // 推荐页这个标题栏是另写的（不是 HomeHeader），触感要单独补
+                        haptics.tick()
+                        onOpenSearch()
+                    }) {
                         Icon(Icons.Filled.Search, "搜索", tint = Scrim.onMedia)
                     }
                 }

@@ -405,6 +405,10 @@ private fun VideoPage(
                         // 信息条是"可点的"东西，波纹要用系统的 ripple（M3），并显式给它
                         // 媒体层上的浅色 —— 默认色是深色 onSurface，压在暗色信息栏上看不出来
                         // （用户反馈"波纹不明显"）。
+                        //
+                        // 这里**不接 onDoubleClick**：combinedClickable 带双击时，单击必须等
+                        // 双击判定窗口（~300ms）过去才会触发，用户的感觉就是"点了半天才跳转"。
+                        // 双击暂停交给上面那层视频区域（它才需要区分单击/双击）。
                         interactionSource = remember { MutableInteractionSource() },
                         indication = androidx.compose.material3.ripple(color = Scrim.onMedia),
                         onClick = {
@@ -438,10 +442,6 @@ private fun VideoPage(
                                 }
                             }
                             onClickDetail()
-                        },
-                        onDoubleClick = {
-                            haptics.tick()
-                            togglePlayback(currentPlayer.value)
                         }
                     )
                     .padding(Spacing.l)

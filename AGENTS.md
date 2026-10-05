@@ -23,13 +23,15 @@
 | 13 | 缓存清理**一项勾选只清一项**：`AppCaches.clear()` 按 `CacheKind` 分别调用，`XhsRepository.clearHttpCache()` 只清磁盘、不得顺手清内存位图缓存 | 之前清磁盘会连带清内存，确认框列的是 2 项、实际清了 3 项，与用户勾选不符 |
 | 14 | 启动自动检查更新**只在真有新版时弹窗**，其余（无正式版 / 限流 / 断网 / 已是最新）一律静默；「跳过这个版本」必须持久化到 `settings` | 每次启动都弹会骚扰用户；GitHub 匿名 API 只有 60 次/小时/IP，实测会 403 |
 | 15 | 自动检查更新**12 小时一次**（`settings.update_checked_at`），且只有**成功**的检查才写时间戳 | 每次冷启动都查既打扰用户、也会把匿名额度烧光（实测 403） |
-| 16 | 任何菜单 / 弹窗一律用**原生的 `material3.AlertDialog`**（带遮罩与动画），不要用 `DropdownMenu`，也**不要自绘对话框外壳**（不要自己画遮罩/自己写入场动画，用户明确否决过）；稍后观看队列的排序用**行内竖直排列的小号上移/下移按钮**，不要再做长按拖动 | 下拉面板没有半透明遮罩、没有入场动画，铺在瀑布流卡片或全屏视频上还容易被边缘裁掉；原生对话框系统会负责遮罩与动画（动画受系统"动画时长比例"影响，用户关掉就瞬间完成，这是设置不是缺陷）。拖动排序做过三版（换位式、内容坐标式、边缘自动滚动式）实机始终不稳定，上下按钮没有任何手势歧义、也不和列表滚动打架 |
+| 16 | 任何菜单 / 弹窗一律用**原生的 `material3.AlertDialog`**（带遮罩与动画），不要用 `DropdownMenu`，也**不要自绘对话框外壳**（不要自己画遮罩/自己写入场动画，用户明确否决过） | 下拉面板没有半透明遮罩、没有入场动画，铺在瀑布流卡片或全屏视频上还容易被边缘裁掉；原生对话框系统会负责遮罩与动画（动画受系统"动画时长比例"影响，用户关掉就瞬间完成，这是设置不是缺陷） |
 | 17 | 画中画：播放器交给 `PipController` 后**详情页销毁不得 release**（`PipController.isHandedOver`）；「展开」用 `PlaybackHandoff.givePlayer` 交回详情页，「关闭」在 `MainActivity.onDestroy` 里 `closeAndRelease()`；入口在**播放器的菜单**（`MediaPlayer(onEnterPip=…)`），小窗控制栏用**三个** `RemoteAction`：后退 10 秒 / 播放暂停 / 前进 10 秒（不要再加别的，尤其不要把稍后观看队列塞进小窗） | 缺交接登记 = 小窗黑屏（播放器被详情页销毁）；不销毁 = 关掉小窗后还有声音；PiP 最多显示 3 个自定义按钮，队列属于主界面（见 `docs/ai/GOTCHAS.md` H 节） |
 | 18 | 同一角落的浮动按钮必须**一起排**（`ui/components/CornerFabStack.kt`：刷新在上、稍后观看在下），不许各画各的 | 曾经两个 FAB 各自贴在右下角，后画的把前一个完全盖住，用户当场发现"稍后观看替代了刷新" |
 | 19 | 交互一律用**系统触感 API**（`ui/components/Haptics.kt` → `LocalHapticFeedback`），**不要用 `Vibrator`**；四档语义按注释用（轻点 `tick()`=`ContextClick`、**不要**用 `TextHandleMove`；长按 `longPress()`；换挡 `segment()`；确认/移除 `confirm()`/`reject()`）。新写的可点元素直接用 `haptics.click { }` / `confirmClick { }` / `rejectClick { }` 包装回调，别只写裸 `onClick`。**返回/关闭这类"退出去"的操作不要加触感**（系统返回本身已有反馈，用户明确要求去掉） | 系统 API 尊重用户的触感开关与强度，也不需要 `VIBRATE` 权限；成员版包装函数让"加触感"只是一行，避免反复漏加（用户已经反馈过三轮） |
-| 20 | 作品列表项（收藏 / 最近浏览 / 稍后观看队列）统一用 `FeeBadge` 显示标签，**不要**在作者名前加序号 | 标签（图文/粉丝圈/VIP/免费）和瀑布流保持一套；顺序由行内上移/下移按钮表达，序号只会让行更挤 |
+| 20 | 稍后观看队列**不提供排序**：按加入时间排列，**不要**序号、**不要**上移/下移按钮、**不要**长按拖动（三种排序实现都被用户否掉了）。作品列表项（收藏 / 最近浏览 / 队列）统一用 `FeeBadge` 显示标签，不要在作者名前加序号 | 队列顺序不是用户要的功能，而每一种排序交互都带来一类新问题（拖动不稳、按钮挤、序号占位）；标签与瀑布流保持一套即可 |
 | 21 | 关注按钮只有一套实现：`ui/components/FollowPill.kt`（未关注 = 主色实心「关注」，已关注 = 次级容器色「已关注」），详情页 / 关注页 / 关注 tab / 粉丝圈 tab 全部用它，**不要再引入 `Button` / `OutlinedButton`**；取消关注一律先弹 `ConfirmActionDialog`，关注直接生效 | M3 的 Button 在列表行里又高又宽，把作者名挤窄（用户反馈"按钮太大"）；取消关注误触会让作者从列表里消失，而页面本身不给反馈 |
 | 22 | 分享一律走**系统分享面板**（`Intent.ACTION_SEND` + `text/plain` + `createChooser`），不要再自己写"剪贴板 + Toast"式的分享 | 用户点分享是要"发出去"；面板里同样能复制，还能直接发到聊天应用 |
+| 23 | 拖动类控件（进度条 / 倍速条）的触感是**按下即触发**（`Modifier.pressHaptic(haptics)`：`PointerEventPass.Initial` 观察 Press，不消费事件），**不要**在拖动过程中按比例连发 | 用户要的是"按下去抖一下"，拖动中连发会显得吵；观察而非消费事件，所以不影响控件自身手势 |
+| 24 | 可点区域里**不要同时**挂单击与双击语义（`combinedClickable(onClick=…, onDoubleClick=…)`）：单击必须等双击判定窗口（~300ms）才触发，用户会感觉"点了半天才跳转"。信息条这类"点一下就走"的区域用普通 `clickable`，双击暂停留给视频画面那一层 | 这是系统手势判定的固有代价，不是性能问题；把两种语义分层放，点击才跟手 |
 
 ## 1. 项目一句话
 
@@ -58,7 +60,7 @@
 | `net/WebDavClient.kt` | WebDAV 客户端 | 备份固定写 `xhs/` 子目录 |
 | `net/UpdateChecker.kt` | 检查更新（GitHub Releases，**全应用唯一不经 AES 的请求**） | 必须用**独立的 OkHttpClient**（共用的带 64 MB 磁盘缓存会把应答缓存住），且必须带 `User-Agent`（否则 GitHub 403）；见 `docs/ai/GOTCHAS.md` G1。启动时由 `App.checkUpdateOnLaunch()` 自动查一次，仅 `Newer` 且不等于「已跳过版本」时才写 `App.pendingUpdate` → `MainActivity` 弹 `ui/components/UpdateAvailableDialog.kt`；GitHub 匿名 API 上限 60 次/小时/IP，超了是 403（映射成 `Failed`，UI 如实显示"检查失败：GitHub 限流"） |
 | `data/AppCaches.kt` | 可清理缓存的枚举、逐项体积与清理（含顶层 `formatBytes`） | 每种缓存**各自一个 `CacheKind`、各自一个勾选框**，清理必须一一对应（硬约束 13）；`IMAGE_DISK` 走 `XhsRepository.clearHttpCache()`，`IMAGE_MEMORY` 走 `ui/components/XhsAsyncImage.kt` 的 `clearImageMemoryCache()`；`TEMP_FILES` 只含 `cache/` 下除 `http_cache/` 与 SQLite 锁文件 `xhs_local.db.lck` 之外的文件（`isClearableTemp`） |
-| `ui/components/PipController.kt` + `ui/components/WatchLaterFab.kt` / `WatchLaterBar.kt` + `ui/screens/WatchLaterScreen.kt` | 画中画小窗的持有者（会话 / 控制栏 `RemoteAction` / 展开与关闭）与稍后观看队列的三种入口 | 画中画的播放器所有权见硬约束 17 与 `docs/ai/GOTCHAS.md` H 节；队列排序只能靠**行内上移/下移按钮**（硬约束 16） |
+| `ui/components/PipController.kt` + `ui/components/WatchLaterFab.kt` / `WatchLaterBar.kt` + `ui/screens/WatchLaterScreen.kt` | 画中画小窗的持有者（会话 / 控制栏 `RemoteAction` / 展开与关闭）与稍后观看队列的三种入口 | 画中画的播放器所有权见硬约束 17 与 `docs/ai/GOTCHAS.md` H 节；队列按加入时间排列、不提供排序（硬约束 20） |
 | `navigation/AppNavHost.kt` + `Routes.kt` | 唯一路由注册处 | 新页面必须同时登记 `Routes` 常量与 `HomeTab`（如属底部页） |
 | `ui/screens/*.kt` | 页面级组合函数 | 每个 screen 对应一个 `ui/viewmodel/`；子 tab 内容要包 `rememberSaveableStateHolder()`，列表滚动状态要按 `resetKey` 分组（`key(resetKey) { … }`），身份位同名却是新列表时必须单调递增（GOTCHAS C2/C8） |
 | `ui/components/*.kt` | 可复用组件（瀑布流/播放器/画廊/对话框/水印状态…） | 组件不要直接访问 Room |

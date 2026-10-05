@@ -518,7 +518,18 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 ---
 
-### 阶段十四 · 详情页去掉队列入口
+### 阶段十九 · 队列不再排序、拖动条按下即触感、信息条单击立刻跳转
+
+| # | 反馈 | 改动 | 证据 |
+| --- | --- | --- | --- |
+| 1 | 队列去掉序号与上下按钮，不提供排序 | 队列页彻底去掉排序：删掉序号、上移/下移按钮、`committed` 本地顺序与本轮残留的拖动相关导入；列表按加入时间渲染，标题改为「按加入时间排列 · 在瀑布流或推荐页长按作品可加入」 | 实机队列 dump：`按加入时间排列 · 在瀑布流或推荐页长按作品可加入 \| 抖音风 抖音18+ (125) \| VIP \| @老司机 \| 骚妈妈 \| …`；`HAS_MOVE_BUTTONS: False`、`HAS_INDEX_DIGITS: False`，截图 `v8-1-queue-final` |
+| 2 | 进度条触感改为按下触发 | `BufferedSlider` 去掉"拖动中每 5% 一档 segment"，改用新增的 `Modifier.pressHaptic(haptics)`（在 `PointerEventPass.Initial` 观察 `Press` 触发一次 `tick()`，不消费事件，因此不影响控件自身手势） | 代码 + 机制；模拟器上"按下瞬间"的计数未单独取证（如实记） |
+| 3 | 倍速拖动条缺少触感 | 倍速 `Slider` 同样接上 `pressHaptic(haptics)` | 代码 + 机制 |
+| 4 | 信息栏单击要等波纹/判定结束才跳转 | 信息条改为**普通 `clickable`**（保留 M3 ripple 与 `Scrim.onMedia` 配色），把 `onDoubleClick` 从信息条上移除 —— `combinedClickable` 带双击时单击必须等双击判定窗口（约 300ms）才触发，这就是"点了半天才跳"的来源；双击暂停仍由上面那层视频画面负责 | 实机：点信息条后 **0.9 秒**再次 dump 已在详情页（`明星淫梦：技师王鸥 \| VIP \| 490 \| 221 \| 4`） |
+| 5 | 推荐页标题栏搜索按钮缺触感 | 推荐页的标题栏是**另写**的（不是 `HomeHeader`，所以上一轮补漏了），给它补上 `haptics.tick()` | 代码；该按钮在 `HomeScreen` 推荐页分支内（`immersive && feedInfoVisible` 那一段） |
+| 6 | 设置页缺触感 | 补齐：指纹解锁开关行与 `Switch`、VIP 自动切换行与 `Switch`、外观主题对话框的 `RadioButton` 与每一行、历史上限对话框的 `RadioButton` 与每一行、两个对话框的「关闭」；禁用的开关不给触感（与"不能兑现就别反馈"一致） | 实机：设置页点「最近浏览上限」TICK `40 → 41` |
+
+---
 
 - 详情页不再渲染稍后观看浮动按钮（`DetailScreen` 的 `floatingActionButton` 清空，
   `onOpenWatchLater` 参数一并删除，`AppNavHost` 不再传）。入口只留：推荐页信息条、发现页 `CornerFabStack`、

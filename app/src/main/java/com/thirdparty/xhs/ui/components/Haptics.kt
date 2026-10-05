@@ -3,6 +3,7 @@ package com.thirdparty.xhs.ui.components
 import androidx.compose.foundation.clickable
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.runtime.remember
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -61,3 +62,23 @@ fun Modifier.hapticClickable(
     enabled: Boolean = true,
     onClick: () -> Unit
 ): Modifier = this.clickable(enabled = enabled) { haptics.tick(); onClick() }
+
+/**
+ * **按下即触感**：手指一碰到就反馈一次，和拖动过程无关。
+ *
+ * 拖动类控件（进度条 / 倍速条）本该如此 —— 之前是"拖动中每 5% 给一次 segment"，
+ * 用户反馈不对：他要的是"按下去那一下就抖一下"。用 `PointerEventPass.Initial` 观察但不消费事件，
+ * 所以不影响控件自己的手势。
+ */
+fun Modifier.pressHaptic(haptics: Haptics?): Modifier =
+    if (haptics == null) this
+    else this.pointerInput(haptics) {
+        awaitPointerEventScope {
+            while (true) {
+                val event = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                if (event.type == androidx.compose.ui.input.pointer.PointerEventType.Press) {
+                    haptics.tick()
+                }
+            }
+        }
+    }

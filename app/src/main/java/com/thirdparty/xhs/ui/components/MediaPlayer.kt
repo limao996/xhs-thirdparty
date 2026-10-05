@@ -611,7 +611,10 @@ private fun AutoHideController(
                                         },
                                         valueRange = MIN_SPEED..MAX_SPEED,
                                         steps = 10,
-                                        modifier = Modifier.padding(horizontal = Spacing.xs)
+                                        // 按下即触感（和进度条一致），不跟随拖动过程
+                                        modifier = Modifier
+                                            .padding(horizontal = Spacing.xs)
+                                            .pressHaptic(haptics)
                                     )
                                     if (onEnterPip != null) {
                                         HorizontalDivider()
