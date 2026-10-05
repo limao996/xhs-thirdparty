@@ -159,6 +159,14 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
     @Volatile
     private var currentRoute: String? = null
 
+    /** 判断 onStop 是"锁屏/息屏"还是"小窗真的没了" */
+    private val powerManager by lazy {
+        getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
+    }
+    private val keyguardManager by lazy {
+        getSystemService(android.content.Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+    }
+
     override fun onStart() {
         super.onStart()
         pipReceiver = com.thirdparty.xhs.ui.components.PipController.registerReceiver(
@@ -177,24 +185,30 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
         val pip = com.thirdparty.xhs.ui.components.PipController
         val justEntered =
             android.os.SystemClock.elapsedRealtime() - pipEnteredAtMs < PIP_ENTRY_GRACE_MS
+        // **锁屏不是关小窗**：息屏/锁屏时 Activity 同样会 stop，但小窗窗口是活着的；把它当成
+        // "小窗没了"就会把会话收掉，解锁后那个窗口只剩下（重新组合出来的）详情页 UI —— 用户看到
+        // 的"小窗里是视频外面套着详情页"就是这个（实测日志：`onStop pip=true session=true`）。
+        val screenOff = !powerManager.isInteractive || keyguardManager.isKeyguardLocked
         if (com.thirdparty.xhs.BuildConfig.DEBUG) {
             android.util.Log.i(
                 "XhsPip",
                 "onStop pip=${isInPictureInPictureMode} session=${pip.hasSession()} " +
-                    "justEntered=$justEntered exitPending=$pipExitPending exitCheck=${pipExitCheck?.isActive}"
+                    "justEntered=$justEntered exitPending=$pipExitPending " +
+                    "exitCheck=${pipExitCheck?.isActive} screenOff=$screenOff"
             )
         }
-        // 「有会话 + 走到 onStop」= 小窗已经没了：小窗里的 Activity 是**可见**的，不会 stop。
+        // 「有会话 + 走到 onStop + 屏幕是亮的」= 小窗已经没了：小窗里的 Activity 是**可见**的、
+        // 不会 stop（锁屏那一类例外已由 screenOff 排除）。
         //
         // 不再用 `isInPictureInPictureMode` 作判据：关闭小窗时这个值可能还停在 true，
         // 于是旧判据永远不成立、播放器永远不释放 —— 这正是用户两次反馈"关闭后还在后台放"的原因。
         //
         // 三种情况：
-        //   ① 配置变更 / 刚进小窗的过渡期 → 不动；
+        //   ① 配置变更 / 刚进小窗的过渡期 / 锁屏息屏 → 不动；
         //   ② **已经收到退出回调又走到 onStop** → 几乎肯定是被关掉了，但为了不和"展开过程中
         //      系统先给一次 onStop"打架，这里只是把判定窗口缩短（onResume 一到就取消）；
-        //   ③ 其余（没有退出回调，直接 stop）= 小窗没了 → 立刻收尾。
-        if (!isChangingConfigurations && !justEntered && pip.hasSession()) {
+        //   ③ 其余（亮屏、没有退出回调，直接 stop）= 小窗没了 → 立刻收尾。
+        if (!isChangingConfigurations && !justEntered && !screenOff && pip.hasSession()) {
             if (pipExitPending) {
                 schedulePipExitCheck(PIP_STOP_CONFIRM_MS)
             } else if (pipExitCheck?.isActive != true) {
@@ -208,6 +222,14 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
 
     override fun onResume() {
         super.onResume()
+        // 回来时如果系统说"还在小窗里"、而且我们手里确实有会话，就把导航内容重新藏起来：
+        // 锁屏/内存回收可能导致 Activity 被重建，`inPip` 这个内存标记会丢，于是小窗窗口会显示
+        // 整页详情 UI（用户反馈"小窗里是视频外面套着详情页"）。这条是幂等的兜底。
+        if (isInPictureInPictureMode &&
+            com.thirdparty.xhs.ui.components.PipController.hasSession()
+        ) {
+            com.thirdparty.xhs.ui.components.PipController.inPip.value = true
+        }
         if (com.thirdparty.xhs.BuildConfig.DEBUG) {
             android.util.Log.i(
                 "XhsPip",

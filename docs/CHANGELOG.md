@@ -631,7 +631,13 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 
 
-### 阶段十四 · 详情页去掉队列入口
+### 阶段二十八 · 小窗模式下锁屏再回来，小窗里变成"视频外面套着详情页"
+
+| # | 现象 | 根因 | 改动 | 证据 |
+| --- | --- | --- | --- | --- |
+| 1 | 小窗播放中锁屏再解锁，小窗窗口里显示的是**详情页 UI**（视频只是其中一块） | 锁屏/息屏时 Activity 同样走 `onStop`，而我的收尾规则是"有会话 + 走到 `onStop` = 小窗没了"——于是把小窗的会话收掉（`closeAndRelease`），`inPip` 被置 false；解锁后那个**仍然活着**的小窗窗口就按导航内容重新组合，显示出整页详情 UI。日志实测：`onStop pip=true session=true … screenOff=true` | ①`onStop` 增加判据：`PowerManager.isInteractive == false` 或 `KeyguardManager.isKeyguardLocked` 时**不当作关闭**（锁屏不是关小窗）；②`onResume` 兜底：系统说还在小窗里且手里有会话，就把 `inPip` 重新置 true（防 Activity 被重建导致内存标记丢失） | 实机（小窗播放 → 息屏 6 秒 → 解锁）：音频全程 `started=1`；解锁后截图 `docs/images/screenshots/pip-after-unlock.png` 显示小窗里**只有视频**、无详情页 UI；日志 `onStop … screenOff=true`（跳过收尾）+ `onResume pending=false session=true`（会话还在） |
+
+
 
 - 详情页不再渲染稍后观看浮动按钮（`DetailScreen` 的 `floatingActionButton` 清空，
   `onOpenWatchLater` 参数一并删除，`AppNavHost` 不再传）。入口只留：推荐页信息条、发现页 `CornerFabStack`、
