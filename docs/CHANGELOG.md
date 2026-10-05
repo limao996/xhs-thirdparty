@@ -507,6 +507,19 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 ---
 
+### 阶段十八 · 取消关注确认、系统分享、关注按钮统一尺寸、返回不加触感
+
+| # | 反馈 | 改动 | 证据 |
+| --- | --- | --- | --- |
+| 1 | 粉丝圈的关注按钮取消关注缺弹窗确认 | 粉丝圈作者卡片：点「已关注」先弹 `ConfirmActionDialog`（「取消关注？」/「将不再关注「作者」。」），确认后才真取消；关注仍然直接生效 | 实机 dump：`取消关注？ \| 将不再关注「成人漫画」。 \| 取消关注 \| 取消`（`HAS_CONFIRM: True`），截图 `v7-1-unfollow-confirm` |
+| 2 | 详情页分享改为系统 API 分享文本 | `shareNote()` 从"写剪贴板 + Toast"改为 `Intent.ACTION_SEND` + `text/plain` + `createChooser(…, "分享到")`（带 `FLAG_ACTIVITY_NEW_TASK`；无目标时 Toast「没有可用的分享目标」）。分享文本仍是 `ShareText` 的完整文案，口令仍在其中（对方粘贴回应用照样能被识别） | 实机：点详情页「分享」后 `mCurrentFocus=com.android.intentresolver/.ChooserActivity`（系统分享面板），`crash: 0` |
+| 3 | 详情页 / 关注页 / 关注 tab 的关注按钮太大 | 新增全局组件 `ui/components/FollowPill.kt`（对齐粉丝圈那个的尺寸与配色：`labelLarge` + `Spacing.m/s` 内边距 + `shapes.small`），详情页作者行、`FollowedAuthorRow`（关注页与关注 tab）、粉丝圈作者卡片四处统一改用同一实现 | 粉丝圈关注按钮实测 `110x53`；四处同组件，尺寸随之统一 |
+| 4 | 详情页图文全屏返回不该有触感 | 去掉 `FullscreenImageViewer` 关闭按钮的触感（返回类操作系统本身有反馈），其余"动作类"按钮的触感保留 | 代码 |
+
+---
+
+### 阶段十四 · 详情页去掉队列入口
+
 - 详情页不再渲染稍后观看浮动按钮（`DetailScreen` 的 `floatingActionButton` 清空，
   `onOpenWatchLater` 参数一并删除，`AppNavHost` 不再传）。入口只留：推荐页信息条、发现页 `CornerFabStack`、
   搜索 / 作者页 / 收藏 / 最近浏览的浮动按钮。

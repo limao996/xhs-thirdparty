@@ -73,7 +73,11 @@ fun FollowedAuthorRow(
                 )
             },
             trailingContent = {
-                OutlinedButton(onClick = rememberHaptics().rejectClick(onUnfollow)) { Text("已关注") }
+                // 小号关注按钮（与粉丝圈 tab / 详情页同一套）：整行不可点时按钮自己也要有触感
+                FollowPill(
+                    followed = true,
+                    onClick = rememberHaptics().rejectClick(onUnfollow)
+                )
             },
             modifier = Modifier.clickable(onClick = rememberHaptics().click(onClick))
         )

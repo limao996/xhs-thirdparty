@@ -731,28 +731,19 @@ private fun DetailContent(
                         )
                     },
                     trailingContent = {
-                        if (state.followed) {
-                            // unfollowing asks for confirmation; following does not
-                            OutlinedButton(onClick = {
-                                haptics.reject()
-                                onUnfollowRequest()
-                            }) {
-                                Icon(Icons.Filled.Check, contentDescription = null,
-                                    modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(Spacing.xs + 2.dp))
-                                Text("已关注", style = MaterialTheme.typography.labelLarge)
+                        // 小号关注按钮：和粉丝圈 tab / 关注页同一套（M3 的 Button 在行里太大）
+                        com.thirdparty.xhs.ui.components.FollowPill(
+                            followed = state.followed,
+                            onClick = {
+                                if (state.followed) {
+                                    haptics.reject()
+                                    onUnfollowRequest()
+                                } else {
+                                    haptics.confirm()
+                                    viewModel.toggleFollow()
+                                }
                             }
-                        } else {
-                            Button(onClick = {
-                                haptics.confirm()
-                                viewModel.toggleFollow()
-                            }) {
-                                Icon(Icons.Filled.Add, contentDescription = null,
-                                    modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(Spacing.xs + 2.dp))
-                                Text("关注", style = MaterialTheme.typography.labelLarge)
-                            }
-                        }
+                        )
                     },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     modifier = Modifier
@@ -965,27 +956,29 @@ private fun timeStr(ms: Long): String =
     SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(ms))
 
 /**
- * Share the note as a clipboard 口令.
+ * 分享：走**系统分享面板**（`ACTION_SEND` + `text/plain`）。
  *
- * Copies a full description rather than just `title\nlink` — see [ShareText] for
- * what it contains and why. The token is buried in that text on purpose: the
- * return-to-app flow finds it by regex, so the extra lines do not break it, and
- * the recipient gets something worth reading even if they never paste it back.
+ * 以前是"复制到剪贴板 + Toast"——那只是为了配合「回到应用自动打开口令」的流程，
+ * 但用户点分享时想要的是"发出去"，所以改成系统分享：面板里同样可以复制，
+ * 还能直接发到微信/QQ 等目标。分享的文本仍是 [ShareText] 的完整文案（口令藏在里面，
+ * 对方粘贴回应用时依然能被识别）。
  */
 private fun shareNote(context: android.content.Context, item: NoteItem?) {
     if (item == null) return
     val text = com.thirdparty.xhs.data.ShareText.of(item)
-    val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
-        as? android.content.ClipboardManager
-    val copied = runCatching {
-        cm?.setPrimaryClip(android.content.ClipData.newPlainText("link", text))
-        true
-    }.getOrDefault(false)
-    android.widget.Toast.makeText(
-        context,
-        if (copied) "分享文案已复制，回到应用可自动打开" else "复制失败",
-        android.widget.Toast.LENGTH_SHORT
-    ).show()
+    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(android.content.Intent.EXTRA_TEXT, text)
+        putExtra(android.content.Intent.EXTRA_TITLE, item.title.ifEmpty { "小黄书" })
+    }
+    val chooser = android.content.Intent.createChooser(send, "分享到").apply {
+        // 从非 Activity 上下文（比如 Application）启动时必须带这个 flag；从 Activity 启动也无害
+        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    runCatching { context.startActivity(chooser) }.onFailure {
+        android.widget.Toast.makeText(context, "没有可用的分享目标", android.widget.Toast.LENGTH_SHORT)
+            .show()
+    }
 }
 
 private fun com.thirdparty.xhs.data.NoteItem.detailTopic(): String =

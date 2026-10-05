@@ -409,6 +409,24 @@ private fun FanGroupTab(
         }
     }
     val followScope = rememberCoroutineScope()
+    // 取消关注前先确认（和作者主页/关注列表一致）
+    var confirmUnfollow by remember { mutableStateOf<FanGroupAuthor?>(null) }
+    confirmUnfollow?.let { author ->
+        com.thirdparty.xhs.ui.components.ConfirmActionDialog(
+            title = "取消关注？",
+            text = "将不再关注「${author.userName}」。",
+            confirmText = "取消关注",
+            onConfirm = {
+                confirmUnfollow = null
+                followScope.launch {
+                    App.repo.toggleFollowLocal(
+                        author.userId, author.userName, author.headImg, ""
+                    )
+                }
+            },
+            onDismiss = { confirmUnfollow = null }
+        )
+    }
     val noteFlags = com.thirdparty.xhs.ui.components.rememberNoteFlags()
     val noteActions = com.thirdparty.xhs.ui.components.rememberNoteActions()
     menuFor?.let { note ->
@@ -510,27 +528,23 @@ private fun FanGroupTab(
                             )
                         }
                     }
-                    // 「去看看」改成关注按钮：关注是这一屏真正要做的决定，进作者主页点整行就行
+                    // 「去看看」改成关注按钮（与详情页/关注页同一套小号按钮）：
+                    // 关注直接生效，**取消关注先弹窗确认**（误触会让作者从关注列表里消失）
                     val followed = a.userId in followedIds
-                    Surface(
+                    com.thirdparty.xhs.ui.components.FollowPill(
+                        followed = followed,
                         onClick = {
-                            if (followed) haptics.reject() else haptics.confirm()
-                            followScope.launch {
-                                App.repo.toggleFollowLocal(a.userId, a.userName, a.headImg, "")
+                            if (followed) {
+                                haptics.reject()
+                                confirmUnfollow = a
+                            } else {
+                                haptics.confirm()
+                                followScope.launch {
+                                    App.repo.toggleFollowLocal(a.userId, a.userName, a.headImg, "")
+                                }
                             }
-                        },
-                        shape = MaterialTheme.shapes.small,
-                        color = if (followed) MaterialTheme.colorScheme.secondaryContainer
-                        else MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = if (followed) MaterialTheme.colorScheme.onSecondaryContainer
-                        else MaterialTheme.colorScheme.onPrimaryContainer
-                    ) {
-                        Text(
-                            if (followed) "已关注" else "+ 关注",
-                            Modifier.padding(horizontal = Spacing.m, vertical = Spacing.s),
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                    }
+                        }
+                    )
                 }
 
                 // the author's latest works (previously discarded by the parser)

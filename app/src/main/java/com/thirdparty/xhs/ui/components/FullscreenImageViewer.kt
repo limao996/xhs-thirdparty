@@ -292,7 +292,8 @@ fun FullscreenImageViewer(
                 style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier.weight(1f).padding(start = Spacing.s)
             )
-            IconButton(onClick = haptics.click(onDismiss)) {
+            // 关闭按钮不给触感：这是"返回"类操作，系统返回本身已经有反馈（用户要求去掉）
+            IconButton(onClick = onDismiss) {
                 Icon(Icons.Filled.Close, contentDescription = "关闭", tint = Scrim.onMedia)
             }
         }
