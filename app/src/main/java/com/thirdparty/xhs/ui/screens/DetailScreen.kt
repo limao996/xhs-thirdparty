@@ -457,7 +457,7 @@ fun DetailScreen(
                     imagePage = imagePage,
                     onImagePage = { imagePage = it },
                     onOpenImage = { page ->
-                        haptics.tick()
+                        // 触感在 ImageGallery 内部给（点开 = tick，翻页 = segment），这里不重复
                         openImage = page
                         // Tapping a picture in the embedded gallery must go FULL screen,
                         // not open the viewer inside the page's content slot: there the

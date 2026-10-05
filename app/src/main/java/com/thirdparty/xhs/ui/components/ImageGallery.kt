@@ -61,6 +61,9 @@ fun ImageGallery(
     /** tapping an image opens the full-screen viewer at that page */
     onOpen: ((Int) -> Unit)? = null
 ) {
+    // 图文的触感都在这里给：翻页 = segment，点开大图 = tick。
+    // 放在组件内部而不是调用方，是为了"任何地方用到这个画廊都一致"（用户反馈详情页图文没触感）。
+    val haptics = rememberHaptics()
     // rememberPagerState must be called unconditionally: hoisting it above the
     // size checks keeps the slot count stable when the image list is swapped.
     val pagerState = rememberPagerState(
@@ -76,9 +79,14 @@ fun ImageGallery(
     }
     // ...and report our own swipes back out
     LaunchedEffect(pagerState, images.size) {
+        var first = true
         snapshotFlow { pagerState.currentPage }
             .distinctUntilChanged()
-            .collect { onPageChange?.invoke(it) }
+            .collect {
+                // 首帧不算"翻页"（那是恢复现场），只有真的换页才给反馈
+                if (first) first = false else haptics.segment()
+                onPageChange?.invoke(it)
+            }
     }
 
     if (images.isEmpty()) return
@@ -102,7 +110,10 @@ fun ImageGallery(
             modifier = modifier.fillMaxWidth()
                 .then(if (cappedHeight != null) Modifier.height(cappedHeight) else Modifier.aspectRatio(containerRatio))
                 .pointerInput(images[0].url) {
-                    detectTapGestures(onTap = { onOpen?.invoke(0) })
+                    detectTapGestures(onTap = {
+                        haptics.tick()
+                        onOpen?.invoke(0)
+                    })
                 }
         )
         return
@@ -121,7 +132,10 @@ fun ImageGallery(
                 modifier = Modifier.fillMaxWidth()
                     .then(if (cappedHeight != null) Modifier.height(cappedHeight) else Modifier.aspectRatio(containerRatio))
                     .pointerInput(images[page].url) {
-                        detectTapGestures(onTap = { onOpen?.invoke(page) })
+                        detectTapGestures(onTap = {
+                            haptics.tick()
+                            onOpen?.invoke(page)
+                        })
                     }
             )
         }

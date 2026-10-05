@@ -61,6 +61,17 @@ class CacheViewModel : ViewModel() {
         )
     }
 
+    /**
+     * 反选：勾上的取消、没勾的勾上。
+     *
+     * 用来替代原来的「全选 / 全不选」两个按钮 —— 清缓存时常见的是"除了图片之外都清"，
+     * 全选再取消一项要点两次，反选一次就够。
+     */
+    fun invertSelection() {
+        val all = _ui.value.entries.map { it.kind }.toSet()
+        _ui.value = _ui.value.copy(selected = all - _ui.value.selected)
+    }
+
     fun clearSelected() {
         val kinds = _ui.value.selected
         if (kinds.isEmpty() || _ui.value.clearing) return

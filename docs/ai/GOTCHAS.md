@@ -313,7 +313,19 @@
 
 ## I. 验证工具本身的坑
 
-**I1 · `uiautomator dump` 失败时会读到上一次的旧文件**
+**I2 · 触感取证不能用"累计计数"**
+- 触发：用 `dumpsys vibrator_manager | grep opPkg=com.thirdparty.xhs | measure` 的数量判断"这次点击有没有触感"。
+- 症状：连着点几下计数**卡住不动**（实测停在 47），看起来像"改的代码没生效"。
+- 原因：`vibrator_manager` 的 **`Previous vibrations` 只保留最近 50 条记录**，新记录进来旧记录滚出去，
+  所以条数在 50 附近饱和；它本来就不是累计计数器。
+- 正确做法：**看时间戳**。把最后几条 `createTime` 打出来，与刚才操作的时刻对齐即可（例如
+  `10-05 16:25:15.462 TICK`、`16:25:19.898 TICK` 就是点备份页按钮的那几下）。
+
+**I3 · 触感取证要看时间戳**（与 I2 同源，单独列出以免再踩）
+- 判据：`createTime` 落在"我刚才操作的那几秒"内，并且 `opPkg` 是本应用，就算通过。
+- 反例：把"记录条数有没有变大"当判据 —— 见 I2。
+
+---**I1 · `uiautomator dump` 失败时会读到上一次的旧文件**
 - 触发：脚本里 `uiautomator dump --compressed /sdcard/d.xml; cat /sdcard/d.xml`。
 - 症状（本次实测踩了十几分钟）：dump 失败会打印
   `ERROR: null root node returned by UiTestAutomationBridge` 或

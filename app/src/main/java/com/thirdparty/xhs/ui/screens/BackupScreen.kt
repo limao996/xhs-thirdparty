@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import com.thirdparty.xhs.App
 import com.thirdparty.xhs.data.BackupManager
 import com.thirdparty.xhs.net.WebDavClient
+import com.thirdparty.xhs.ui.components.rememberHaptics
 import com.thirdparty.xhs.ui.theme.Spacing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -65,6 +66,8 @@ import kotlinx.coroutines.withContext
 fun BackupScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    // 备份与恢复页所有按钮的点击反馈（用户反馈这一页整体没有触感）
+    val haptics = rememberHaptics()
 
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
@@ -147,7 +150,7 @@ fun BackupScreen(onBack: () -> Unit) {
                 title = { Text("上传备份到云端？") },
                 text = { Text("云端已有的备份会被覆盖，本机上已有的备份不受影响。") },
                 confirmButton = {
-                    androidx.compose.material3.TextButton(onClick = {
+                    androidx.compose.material3.TextButton(onClick = rememberHaptics().confirmClick {
                         confirmUpload = false
                         WebDavClient.save(context, WebDavClient.WebDavConfig(url, user, pass))
                         run("正在上传到云端") {
@@ -162,7 +165,9 @@ fun BackupScreen(onBack: () -> Unit) {
                     }) { Text("上传") }
                 },
                 dismissButton = {
-                    androidx.compose.material3.TextButton(onClick = { confirmUpload = false }) { Text("取消") }
+                    androidx.compose.material3.TextButton(
+                        onClick = rememberHaptics().click { confirmUpload = false }
+                    ) { Text("取消") }
                 }
             )
         }
@@ -174,14 +179,16 @@ fun BackupScreen(onBack: () -> Unit) {
                     Text(if (merge) "将把备份内容合并进当前数据，现有收藏/浏览/关注会保留。" else "将先清空本机收藏/浏览/关注，再写入备份内容，且不可撤销。")
                 },
                 confirmButton = {
-                    androidx.compose.material3.TextButton(onClick = {
+                    androidx.compose.material3.TextButton(onClick = rememberHaptics().confirmClick {
                         val act = action
                         confirmRestore = null
                         act()
                     }) { Text("恢复") }
                 },
                 dismissButton = {
-                    androidx.compose.material3.TextButton(onClick = { confirmRestore = null }) { Text("取消") }
+                    androidx.compose.material3.TextButton(
+                        onClick = rememberHaptics().click { confirmRestore = null }
+                    ) { Text("取消") }
                 }
             )
         }
@@ -215,13 +222,13 @@ fun BackupScreen(onBack: () -> Unit) {
             )
             Spacer(Modifier.height(Spacing.s))
             Row {
-                Button(onClick = {
+                Button(onClick = haptics.click {
                     // the chooser pauses this activity; tell the app lock not to fire
                     App.INSTANCE.systemPickerActive = true
                     saveLauncher.launch("xhs-thirdparty-backup.json.gz")
                 }) { Text("备份到文件") }
                 Spacer(Modifier.size(Spacing.s))
-                OutlinedButton(onClick = {
+                OutlinedButton(onClick = haptics.click {
                     confirmRestore = {
                         App.INSTANCE.systemPickerActive = true
                         openLauncher.launch(arrayOf("application/gzip", "application/json", "*/*"))
@@ -269,12 +276,12 @@ fun BackupScreen(onBack: () -> Unit) {
             // column, so the label appeared twice and the three buttons stacked
             // one per line.
             Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(onClick = {
+                OutlinedButton(onClick = haptics.click {
                     WebDavClient.save(context, WebDavClient.WebDavConfig(url, user, pass))
                     status = "配置已保存"
                 }) { Text("保存配置") }
                 Spacer(Modifier.size(Spacing.s))
-                OutlinedButton(onClick = {
+                OutlinedButton(onClick = haptics.click {
                     WebDavClient.save(context, WebDavClient.WebDavConfig(url, user, pass))
                     run("正在测试连接") {
                         val cfg = WebDavClient.WebDavConfig(url, user, pass)
@@ -287,9 +294,9 @@ fun BackupScreen(onBack: () -> Unit) {
 
             Spacer(Modifier.height(Spacing.s))
             Row {
-                Button(onClick = { confirmUpload = true }) { Text("上传备份") }
+                Button(onClick = haptics.click { confirmUpload = true }) { Text("上传备份") }
                 Spacer(Modifier.size(Spacing.s))
-                OutlinedButton(onClick = {
+                OutlinedButton(onClick = haptics.click {
                     WebDavClient.save(context, WebDavClient.WebDavConfig(url, user, pass))
                     confirmRestore = { run("正在从云端恢复") {
                         val cfg = WebDavClient.WebDavConfig(url, user, pass)
@@ -320,7 +327,7 @@ fun BackupScreen(onBack: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(Modifier.height(Spacing.xs))
-            OutlinedButton(onClick = { merge = !merge }) {
+            OutlinedButton(onClick = haptics.click { merge = !merge }) {
                 Text(if (merge) "当前：合并（点此改为覆盖）" else "当前：覆盖（点此改为合并）")
             }
             Spacer(Modifier.height(Spacing.l))

@@ -181,8 +181,12 @@ fun CacheScreen(
                         .fillMaxWidth()
                         .padding(horizontal = Spacing.s)
                 ) {
-                    TextButton(onClick = { viewModel.setAll(true) }) { Text("全选") }
-                    TextButton(onClick = { viewModel.setAll(false) }) { Text("全不选") }
+                    // 「反选」取代原来的「全选 / 全不选」：清缓存常见的是"除了某一项都清"，
+                    // 反选一次到位（用户要求），并且这一次带上触感
+                    TextButton(onClick = {
+                        haptics.tick()
+                        viewModel.invertSelection()
+                    }) { Text("反选") }
                     Spacer(Modifier.weight(1f))
                     Text(
                         "已选 ${selected.size} 项",
