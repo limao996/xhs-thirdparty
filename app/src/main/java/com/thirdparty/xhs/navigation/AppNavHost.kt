@@ -18,6 +18,8 @@ import com.thirdparty.xhs.ui.screens.AuthorScreen
 import com.thirdparty.xhs.ui.screens.AboutScreen
 import com.thirdparty.xhs.ui.screens.CacheScreen
 import com.thirdparty.xhs.ui.screens.UpdateScreen
+import com.thirdparty.xhs.ui.screens.WatchLaterScreen
+import com.thirdparty.xhs.ui.components.WatchLaterFab
 import com.thirdparty.xhs.ui.screens.DetailScreen
 import com.thirdparty.xhs.ui.screens.FollowedScreen
 import com.thirdparty.xhs.ui.screens.HomeScreen
@@ -64,7 +66,13 @@ import androidx.compose.material.icons.filled.Close
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun LocalListNav(title: String, mode: LocalListViewModel.Mode, onBack: () -> Unit, onOpenDetail: (Long) -> Unit) {
+private fun LocalListNav(
+    title: String,
+    mode: LocalListViewModel.Mode,
+    onBack: () -> Unit,
+    onOpenDetail: (Long) -> Unit,
+    onOpenWatchLater: () -> Unit
+) {
     val viewModel: LocalListViewModel = viewModel(
         key = mode.name,
         factory = object : androidx.lifecycle.ViewModelProvider.Factory {
@@ -109,6 +117,10 @@ private fun LocalListNav(title: String, mode: LocalListViewModel.Mode, onBack: (
                     }
                 )
             }
+        },
+        // 多选时不叠这个按钮：那时候整页都在选东西，浮动按钮只会碍事
+        floatingActionButton = {
+            if (!selecting) WatchLaterFab(onOpen = onOpenWatchLater)
         }
     ) { pad ->
         Box(Modifier.padding(pad)) {
@@ -305,6 +317,7 @@ fun AppNavHost(
                 onOpenSettings = { nav.navigate(Routes.SETTINGS) },
                 onOpenAbout = { nav.navigate(Routes.ABOUT) },
                 onOpenUpdate = { nav.navigate(Routes.UPDATE) },
+                onOpenWatchLater = { nav.navigate(Routes.WATCH_LATER) },
                 onSetBiometricLock = { on ->
                     App.repo.biometricLock = on
                     App.INSTANCE.notifyLockChanged()
@@ -329,7 +342,8 @@ fun AppNavHost(
             SearchScreen(
                 onBack = { nav.popBackStack() },
                 onOpenDetail = { noteId -> nav.navigate(Routes.detail(noteId)) },
-                onOpenAuthor = { uid -> nav.navigate(Routes.author(uid)) }
+                onOpenAuthor = { uid -> nav.navigate(Routes.author(uid)) },
+                onOpenWatchLater = { nav.navigate(Routes.WATCH_LATER) }
             )
         }
 
@@ -341,7 +355,8 @@ fun AppNavHost(
             DetailScreen(
                 noteId = noteId,
                 onBack = { nav.popBackStack() },
-                onOpenAuthor = { uid -> nav.navigate(Routes.author(uid)) }
+                onOpenAuthor = { uid -> nav.navigate(Routes.author(uid)) },
+                onOpenWatchLater = { nav.navigate(Routes.WATCH_LATER) }
             )
         }
 
@@ -422,7 +437,8 @@ fun AppNavHost(
             AuthorScreen(
                 userId = userId,
                 onBack = { nav.popBackStack() },
-                onOpenDetail = { noteId -> nav.navigate(Routes.detail(noteId)) }
+                onOpenDetail = { noteId -> nav.navigate(Routes.detail(noteId)) },
+                onOpenWatchLater = { nav.navigate(Routes.WATCH_LATER) }
             )
         }
 
@@ -440,14 +456,32 @@ fun AppNavHost(
             enterTransition = { fadeIn(tween(280)) + scaleIn(animationSpec = tween(280), initialScale = 0.97f) },
             popExitTransition = { fadeOut(tween(200)) + scaleOut(animationSpec = tween(200), targetScale = 0.98f) }
         ) {
-            LocalListNav("我的收藏", LocalListViewModel.Mode.SAVED, { nav.popBackStack() }) { nav.navigate(Routes.detail(it)) }
+            LocalListNav(
+                "我的收藏", LocalListViewModel.Mode.SAVED,
+                { nav.popBackStack() }, { nav.navigate(Routes.detail(it)) },
+                { nav.navigate(Routes.WATCH_LATER) }
+            )
         }
 
         composable(Routes.HISTORY,
             enterTransition = { fadeIn(tween(280)) + scaleIn(animationSpec = tween(280), initialScale = 0.97f) },
             popExitTransition = { fadeOut(tween(200)) + scaleOut(animationSpec = tween(200), targetScale = 0.98f) }
         ) {
-            LocalListNav("最近浏览", LocalListViewModel.Mode.HISTORY, { nav.popBackStack() }) { nav.navigate(Routes.detail(it)) }
+            LocalListNav(
+                "最近浏览", LocalListViewModel.Mode.HISTORY,
+                { nav.popBackStack() }, { nav.navigate(Routes.detail(it)) },
+                { nav.navigate(Routes.WATCH_LATER) }
+            )
+        }
+
+        composable(Routes.WATCH_LATER,
+            enterTransition = { fadeIn(tween(280)) + scaleIn(animationSpec = tween(280), initialScale = 0.97f) },
+            popExitTransition = { fadeOut(tween(200)) + scaleOut(animationSpec = tween(200), targetScale = 0.98f) }
+        ) {
+            WatchLaterScreen(
+                onBack = { nav.popBackStack() },
+                onOpenDetail = { noteId -> nav.navigate(Routes.detail(noteId)) }
+            )
         }
     }
 }

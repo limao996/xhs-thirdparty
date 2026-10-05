@@ -132,6 +132,87 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         consumeDeepLink(intent)
+        // 小窗控制栏点了「稍后观看队列」：这个 intent 就是把应用从画中画里拉出来
+        if (intent.getBooleanExtra(EXTRA_OPEN_WATCH_LATER, false)) {
+            com.thirdparty.xhs.ui.components.PipController.pendingOpenQueue.value = true
+        }
+    }
+
+    // ---- 画中画（小窗） ----------------------------------------------------
+
+    /** 小窗控制栏的广播接收者；必须持有引用，否则会被回收掉而收不到按钮点击。 */
+    private var pipReceiver: android.content.BroadcastReceiver? = null
+
+    override fun onStart() {
+        super.onStart()
+        pipReceiver = com.thirdparty.xhs.ui.components.PipController.registerReceiver(
+            activity = this,
+            onUpdateParams = { refreshPipParams() },
+            onOpenQueue = {
+                // 队列在应用里，不在小窗里：用 intent 把 Activity 拉到前台，
+                // 由 onNewIntent 记下「要打开队列」
+                startActivity(
+                    android.content.Intent(this, MainActivity::class.java).apply {
+                        addFlags(
+                            android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                                android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                        )
+                        putExtra(EXTRA_OPEN_WATCH_LATER, true)
+                    }
+                )
+            }
+        )
+    }
+
+    override fun onStop() {
+        pipReceiver?.let { r -> runCatching { unregisterReceiver(r) } }
+        pipReceiver = null
+        super.onStop()
+    }
+
+    /** 播放/暂停、循环方式变了以后刷新小窗那几个按钮的图标与文案。 */
+    private fun refreshPipParams() {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) return
+        if (!isInPictureInPictureMode) return
+        val params = com.thirdparty.xhs.ui.components.PipController.buildParams(
+            this,
+            com.thirdparty.xhs.ui.components.PipController.session.value?.player
+        ) ?: return
+        runCatching { setPictureInPictureParams(params) }
+    }
+
+    /**
+     * 小窗状态切换。
+     *
+     * 进入小窗：详情页已经退出（点「小窗播放」时就退了），画面由 Compose 侧的小窗宿主
+     * 接手（见 setContent 里的 VideoSurface）。
+     *
+     * 离开小窗：用户按了系统自带的展开按钮 → 把播放器交回给详情页并跳回那个作品。
+     * 「关闭小窗」不会走这里，而是直接把 Activity 销毁掉（见 [onDestroy]）。
+     */
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: android.content.res.Configuration
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        com.thirdparty.xhs.ui.components.PipController.inPip.value = isInPictureInPictureMode
+        if (!isInPictureInPictureMode) {
+            com.thirdparty.xhs.ui.components.PipController.session.value?.let { s ->
+                com.thirdparty.xhs.ui.components.PipController.pendingDetailId.value = s.noteId
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // 关掉小窗 = 没有界面了：播放器必须销毁，否则会留下一个看不见的 ExoPlayer
+        // 继续放声音。展开回详情页时 session 已经交回去了（pendingDetailId 被消费），
+        // 所以这里不会误伤。
+        if (!isChangingConfigurations &&
+            com.thirdparty.xhs.ui.components.PipController.hasSession()
+        ) {
+            com.thirdparty.xhs.ui.components.PipController.closeAndRelease()
+        }
     }
 
     /** Whether the user turned on the app lock. */
@@ -253,6 +334,51 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
                             )
                         }
                     }
+
+                    // ---- 画中画（小窗）------------------------------------------
+                    // 展开小窗：把播放器交回详情页并跳回去。用 PlaybackHandoff 交接而不是
+                    // 只记位置：详情页会直接认领同一个 ExoPlayer，于是画面接着播、不重头开始。
+                    val pipPendingDetail by
+                        com.thirdparty.xhs.ui.components.PipController.pendingDetailId
+                            .collectAsStateWithLifecycle()
+                    androidx.compose.runtime.LaunchedEffect(pipPendingDetail) {
+                        val id = pipPendingDetail ?: return@LaunchedEffect
+                        com.thirdparty.xhs.ui.components.PipController.handBackForDetail()
+                            ?.let { s ->
+                                com.thirdparty.xhs.ui.components.PlaybackHandoff.givePlayer(
+                                    s.noteId, s.player
+                                )
+                            }
+                        com.thirdparty.xhs.ui.components.PipController.pendingDetailId.value = null
+                        navController.navigate(com.thirdparty.xhs.navigation.Routes.detail(id))
+                    }
+                    // 小窗控制栏的「稍后观看队列」：回到应用并打开队列页
+                    val pipOpenQueue by
+                        com.thirdparty.xhs.ui.components.PipController.pendingOpenQueue
+                            .collectAsStateWithLifecycle()
+                    androidx.compose.runtime.LaunchedEffect(pipOpenQueue) {
+                        if (!pipOpenQueue) return@LaunchedEffect
+                        com.thirdparty.xhs.ui.components.PipController.pendingOpenQueue.value =
+                            false
+                        navController.navigate(
+                            com.thirdparty.xhs.navigation.Routes.WATCH_LATER
+                        )
+                    }
+                    // 小窗里只画视频：系统把整个 Activity 缩成小窗，其余 chrome 一律不要。
+                    val pipSession by
+                        com.thirdparty.xhs.ui.components.PipController.session
+                            .collectAsStateWithLifecycle()
+                    val pipActive by
+                        com.thirdparty.xhs.ui.components.PipController.inPip
+                            .collectAsStateWithLifecycle()
+                    if (pipActive) {
+                        pipSession?.let { s ->
+                            com.thirdparty.xhs.ui.components.VideoSurface(
+                                player = s.player,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -261,5 +387,7 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
     private companion object {
         /** last share link already offered, so the same clipboard does not re-prompt */
         const val KEY_LAST_CLIP = "last_clipboard_note"
+        /** 从画中画控制栏回来时要打开的页面：稍后观看队列 */
+        const val EXTRA_OPEN_WATCH_LATER = "open_watch_later"
     }
 }

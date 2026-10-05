@@ -99,6 +99,9 @@ fun FullscreenImageViewer(
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     var viewSize by remember { mutableStateOf(IntSize.Zero) }
+    // 双击放大/恢复：记住上一次「干净」的点击，两次够快、位置够近就算双击
+    var lastTapAt by remember { mutableStateOf(0L) }
+    var lastTapPos by remember { mutableStateOf(Offset.Zero) }
     // zoom is per-page: carrying it across a swipe would leave the next image
     // mysteriously cropped
     LaunchedEffect(pagerState.currentPage) {
@@ -146,13 +149,22 @@ fun FullscreenImageViewer(
                     // pager never saw a swipe and horizontal paging was dead. Take
                     // the gesture only for a pinch, or to pan an image that is
                     // already zoomed; otherwise leave the drag to the pager.
+                    //
+                    // Taps ride along in the same handler on purpose: a second
+                    // `pointerInput` for taps would compete with this one for the very
+                    // same events, and the only tap action here is 双击放大/恢复.
                     awaitEachGesture {
-                        awaitFirstDown(requireUnconsumed = false)
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val downAt = System.currentTimeMillis()
+                        var lastPos = down.position
+                        var travelled = 0f
+                        var pinched = false
                         do {
                             val event = awaitPointerEvent()
                             val pinch = event.calculateZoom()
                             val pan = event.calculatePan()
                             val multiTouch = event.changes.count { it.pressed } > 1
+                            if (multiTouch) pinched = true
                             if (multiTouch || scale > 1f) {
                                 scale = (scale * pinch).coerceIn(1f, MAX_ZOOM)
                                 // Panning used to be unbounded, so a zoomed image
@@ -166,7 +178,43 @@ fun FullscreenImageViewer(
                                 }
                                 event.changes.forEach { it.consume() }
                             }
+                            travelled += pan.getDistance()
+                            event.changes.firstOrNull { it.id == down.id }
+                                ?.let { lastPos = it.position }
                         } while (event.changes.any { it.pressed })
+
+                        val isTap = !pinched &&
+                            System.currentTimeMillis() - downAt < TAP_MAX_MS &&
+                            travelled < TAP_SLOP_PX
+                        if (!isTap) {
+                            // a drag/pinch ends the double-tap window
+                            lastTapAt = 0L
+                        } else {
+                            val now = System.currentTimeMillis()
+                            val doubled = now - lastTapAt < DOUBLE_TAP_MS &&
+                                (lastPos - lastTapPos).getDistance() < DOUBLE_TAP_SLOP_PX
+                            if (doubled) {
+                                lastTapAt = 0L
+                                if (scale > 1.01f) {
+                                    scale = 1f
+                                    offset = Offset.Zero
+                                } else {
+                                    // zoom towards the tapped point, so the spot the
+                                    // user aimed at stays under their finger
+                                    val centre = Offset(
+                                        viewSize.width / 2f, viewSize.height / 2f
+                                    )
+                                    scale = DOUBLE_TAP_ZOOM
+                                    offset = clampPan(
+                                        (centre - lastPos) * (DOUBLE_TAP_ZOOM - 1f),
+                                        DOUBLE_TAP_ZOOM, viewSize
+                                    )
+                                }
+                            } else {
+                                lastTapAt = now
+                                lastTapPos = lastPos
+                            }
+                        }
                     }
                 },
                 contentAlignment = Alignment.Center
@@ -244,3 +292,12 @@ private fun clampPan(offset: Offset, scale: Float, view: IntSize): Offset {
 
 /** How far a pinch may zoom in. */
 private const val MAX_ZOOM = 5f
+
+/** 双击放大的倍率（再双击一次回到 1x）。 */
+private const val DOUBLE_TAP_ZOOM = 2.5f
+
+/** 识别双击用的窗口：单击最长时长、两次点击最大间隔、允许的位移。 */
+private const val TAP_MAX_MS = 260L
+private const val DOUBLE_TAP_MS = 300L
+private const val TAP_SLOP_PX = 24f
+private const val DOUBLE_TAP_SLOP_PX = 140f

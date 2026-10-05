@@ -30,6 +30,8 @@ import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.ModeComment
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ListItem
@@ -102,6 +104,7 @@ fun DetailScreen(
     noteId: Long,
     onBack: () -> Unit,
     onOpenAuthor: (Int) -> Unit,
+    onOpenWatchLater: () -> Unit,
     viewModel: DetailViewModel = viewModel(
         key = "detail-$noteId",
         factory = object : androidx.lifecycle.ViewModelProvider.Factory {
@@ -147,6 +150,10 @@ fun DetailScreen(
     // 这个 composable。
     var confirmUnsave by remember { mutableStateOf(false) }
     var confirmUnfollow by remember { mutableStateOf(false) }
+    /** 「更多」菜单（小窗播放住在这里） */
+    var moreOpen by remember { mutableStateOf(false) }
+    /** 画中画要 API 26+；低版本不显示这个菜单项 */
+    val pipSupported = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O
 
     // ---- media plumbing, hoisted OUT of the metadata branch -------------------
     //
@@ -179,6 +186,28 @@ fun DetailScreen(
     else inherited?.player ?: remember(itemMediaUrl) {
         if (itemMediaUrl.isEmpty()) null
         else buildVideoPlayer(context.applicationContext, itemMediaUrl, longForm = true)
+    }
+    /**
+     * 「小窗播放」：把播放器交给画中画小窗，然后退出详情页。
+     *
+     * 顺序是有讲究的：**先交接、再导航**。交接只是把播放器登记到 PipController，
+     * 本页销毁时看到登记就会放过它（见下面那个 DisposableEffect）；反过来写的话，
+     * 本页的 onDispose 会先把播放器 release 掉，小窗里就只剩一块黑屏。
+     */
+    val enterPip: () -> Unit = {
+        val p = sharedPlayer
+        val act = context as? android.app.Activity
+        if (p != null && act != null && pipSupported) {
+            com.thirdparty.xhs.ui.components.PipController.start(
+                p, noteId, state.item?.title.orEmpty()
+            )
+            val params = com.thirdparty.xhs.ui.components.PipController.buildParams(act, p)
+            if (params != null) {
+                runCatching { act.enterPictureInPictureMode(params) }
+            }
+            // 弹出小窗即退出详情页；播放器已经在小窗手里，不再属于本页
+            onBack()
+        }
     }
     // A handed-over player arrives wearing the FEED's settings — it loops there, and
     // this screen must stop at the end (that is the 播完显示「重播」behaviour). Done
@@ -309,9 +338,15 @@ fun DetailScreen(
             // what stops audio continuing after 返回. The feed cannot take an adopted one
             // back — by the time this runs the feed has already recomposed and built its
             // own, so the two would just swap players mid-playback.
-            sharedPlayer?.stop()
-            sharedPlayer?.clearMediaItems()
-            sharedPlayer?.release()
+            //
+            // 唯一的例外：播放器已经交给画中画小窗（点「小窗播放」→ 退出详情页）。那时
+            // 它归小窗所有，这里 release 会把用户正在看的视频直接掐掉。
+            val p = sharedPlayer
+            if (p != null && !com.thirdparty.xhs.ui.components.PipController.isHandedOver(p)) {
+                p.stop()
+                p.clearMediaItems()
+                p.release()
+            }
         }
     }
 
@@ -370,9 +405,42 @@ fun DetailScreen(
                                 "全屏"
                             )
                         }
+                        // 小窗播放住在「更多」菜单里：它只有视频可用，摆成第四个图标太挤，
+                        // 而且它不是高频操作（用户明确要求放在菜单里）。
+                        if (videoNote && pipSupported) {
+                            Box {
+                                IconButton(onClick = { moreOpen = true }) {
+                                    Icon(Icons.Filled.MoreVert, contentDescription = "更多")
+                                }
+                                androidx.compose.material3.DropdownMenu(
+                                    expanded = moreOpen,
+                                    onDismissRequest = { moreOpen = false }
+                                ) {
+                                    androidx.compose.material3.DropdownMenuItem(
+                                        text = { Text("小窗播放") },
+                                        leadingIcon = {
+                                            Icon(
+                                                Icons.Filled.PictureInPictureAlt,
+                                                contentDescription = null
+                                            )
+                                        },
+                                        onClick = {
+                                            moreOpen = false
+                                            enterPip()
+                                        }
+                                    )
+                                }
+                            }
+                        }
                     }
                 )
             }
+        },
+        // 稍后观看：全屏时不叠这个按钮（整屏都是媒体，浮动按钮只会挡住画面）
+        floatingActionButton = {
+            if (!fullscreen) com.thirdparty.xhs.ui.components.WatchLaterFab(
+                onOpen = onOpenWatchLater
+            )
         }
     ) { pad ->
         when {

@@ -25,6 +25,8 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thirdparty.xhs.ui.components.EmptyState
 import com.thirdparty.xhs.ui.components.XhsWaterfallGrid
+import com.thirdparty.xhs.ui.components.rememberNoteActions
+import com.thirdparty.xhs.ui.components.rememberNoteFlags
 import com.thirdparty.xhs.ui.theme.Spacing
 import com.thirdparty.xhs.ui.viewmodel.LocalListViewModel
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -101,6 +103,8 @@ fun LocalListScreen(
                 XhsWaterfallGrid(
                     items = state.visible,
                     onOpenDetail = onOpenDetail,
+                    flags = rememberNoteFlags(),
+                    actions = rememberNoteActions(),
                     contentPadding = PaddingValues(
                         start = Spacing.s, end = Spacing.s, top = Spacing.s, bottom = Spacing.l
                     ),
@@ -109,6 +113,14 @@ fun LocalListScreen(
                     onLoadMore = { viewModel.loadMore() },
                     selectedIds = selected,
                     selectionMode = selecting,
+                    // 长按出菜单（收藏/稍后观看/多选），菜单里的「多选」进多选；
+                    // 多选模式下单击仍然是「选中/取消选中」。
+                    onEnterSelection = if (canSelect) { item ->
+                        onSelectionChange(
+                            if (item.noteId in selected) selected - item.noteId
+                            else selected + item.noteId
+                        )
+                    } else null,
                     onLongPress = if (canSelect) { item ->
                         onSelectionChange(
                             if (item.noteId in selected) selected - item.noteId

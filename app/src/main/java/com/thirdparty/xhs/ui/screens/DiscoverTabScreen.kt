@@ -73,6 +73,8 @@ import com.thirdparty.xhs.ui.components.FollowedAuthorRow
 import com.thirdparty.xhs.ui.components.XhsAsyncImage
 import com.thirdparty.xhs.ui.components.XhsAvatar
 import com.thirdparty.xhs.ui.components.XhsWaterfallGrid
+import com.thirdparty.xhs.ui.components.rememberNoteActions
+import com.thirdparty.xhs.ui.components.rememberNoteFlags
 import com.thirdparty.xhs.ui.theme.AvatarSize
 import com.thirdparty.xhs.ui.theme.BottomNavClearance
 import com.thirdparty.xhs.ui.theme.bottomNavClearance
@@ -341,6 +343,9 @@ private fun FeedCategoryPage(
     XhsWaterfallGrid(
         items = state.feed.items,
         onOpenDetail = onOpenDetail,
+        // 长按菜单：收藏 / 稍后观看（菜单要显示当前状态，所以两个 id 集合都要给）
+        flags = rememberNoteFlags(),
+        actions = rememberNoteActions(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(
             start = Spacing.s, end = Spacing.s, top = Spacing.xs, bottom = clear
         ),

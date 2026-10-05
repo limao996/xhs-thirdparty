@@ -58,6 +58,9 @@ import com.thirdparty.xhs.ui.components.FeeBadge
 import com.thirdparty.xhs.ui.components.XhsAsyncImage
 import com.thirdparty.xhs.ui.components.XhsAvatar
 import com.thirdparty.xhs.ui.components.XhsWaterfallGrid
+import com.thirdparty.xhs.ui.components.rememberNoteActions
+import com.thirdparty.xhs.ui.components.rememberNoteFlags
+import com.thirdparty.xhs.ui.components.WatchLaterFab
 import com.thirdparty.xhs.ui.theme.AvatarSize
 import com.thirdparty.xhs.ui.theme.Spacing
 import com.thirdparty.xhs.ui.theme.Thumb
@@ -71,6 +74,7 @@ fun SearchScreen(
     onBack: () -> Unit,
     onOpenDetail: (Long) -> Unit,
     onOpenAuthor: (Int) -> Unit,
+    onOpenWatchLater: () -> Unit,
     viewModel: SearchViewModel = viewModel(factory = RepoViewModelFactory())
 ) {
     val state by viewModel.ui.collectAsStateWithLifecycle()
@@ -108,7 +112,8 @@ fun SearchScreen(
                     ) { }
                 }
             }
-        }
+        },
+        floatingActionButton = { WatchLaterFab(onOpen = onOpenWatchLater) }
     ) { pad ->
         Column(Modifier.fillMaxSize().padding(pad)) {
             // mode switch (内容 / 作者)
@@ -211,6 +216,8 @@ fun SearchScreen(
                     XhsWaterfallGrid(
                         items = state.results,
                         onOpenDetail = onOpenDetail,
+                        flags = rememberNoteFlags(),
+                        actions = rememberNoteActions(),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(
                             start = Spacing.s, end = Spacing.s, top = Spacing.xs, bottom = Spacing.l
                         ),

@@ -50,3 +50,36 @@ interface HistoryDao {
     @Query("DELETE FROM history")
     suspend fun clearAll()
 }
+
+/**
+ * 稍后观看队列：本地有序表。
+ *
+ * 顺序只靠 [position]：移动一格就交换两个 position，增删之后由仓库层重排压紧。
+ * 不做链表/浮点 position —— 队列只有几十条，重写一遍比维护链表简单且不会积累误差。
+ */
+@Dao
+interface WatchLaterDao {
+    @Query("SELECT * FROM watch_later ORDER BY position ASC, addedAt ASC")
+    suspend fun all(): List<WatchLaterEntity>
+
+    @Query("SELECT * FROM watch_later WHERE noteId = :noteId LIMIT 1")
+    suspend fun byId(noteId: Long): WatchLaterEntity?
+
+    @Query("SELECT COUNT(*) FROM watch_later")
+    suspend fun count(): Int
+
+    @Query("SELECT COALESCE(MAX(position), -1) FROM watch_later")
+    suspend fun maxPosition(): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: WatchLaterEntity)
+
+    @Query("UPDATE watch_later SET position = :position WHERE noteId = :noteId")
+    suspend fun setPosition(noteId: Long, position: Int)
+
+    @Query("DELETE FROM watch_later WHERE noteId = :noteId")
+    suspend fun remove(noteId: Long)
+
+    @Query("DELETE FROM watch_later")
+    suspend fun clearAll()
+}

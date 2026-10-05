@@ -49,6 +49,9 @@ import androidx.compose.material.icons.filled.PhotoLibrary
 import com.thirdparty.xhs.ui.components.ConfirmActionDialog
 import com.thirdparty.xhs.ui.components.EmptyState
 import com.thirdparty.xhs.ui.components.XhsWaterfallGrid
+import com.thirdparty.xhs.ui.components.rememberNoteActions
+import com.thirdparty.xhs.ui.components.rememberNoteFlags
+import com.thirdparty.xhs.ui.components.WatchLaterFab
 import com.thirdparty.xhs.ui.components.XhsAvatar
 import com.thirdparty.xhs.ui.theme.AvatarSize
 import com.thirdparty.xhs.ui.theme.Corners
@@ -62,6 +65,7 @@ fun AuthorScreen(
     userId: Int,
     onBack: () -> Unit,
     onOpenDetail: (Long) -> Unit,
+    onOpenWatchLater: () -> Unit,
     viewModel: AuthorViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
         key = "author-$userId",
         factory = object : androidx.lifecycle.ViewModelProvider.Factory {
@@ -84,7 +88,8 @@ fun AuthorScreen(
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
                 }
             )
-        }
+        },
+        floatingActionButton = { WatchLaterFab(onOpen = onOpenWatchLater) }
     ) { pad ->
         Column(Modifier.fillMaxSize().padding(pad)) {
             // author header (MD3 container surface)
@@ -165,6 +170,8 @@ fun AuthorScreen(
                 XhsWaterfallGrid(
                     items = state.notes,
                     onOpenDetail = onOpenDetail,
+                    flags = rememberNoteFlags(),
+                    actions = rememberNoteActions(),
                     contentPadding = PaddingValues(
                         start = Spacing.s, end = Spacing.s, top = Spacing.s, bottom = Spacing.l
                     ),

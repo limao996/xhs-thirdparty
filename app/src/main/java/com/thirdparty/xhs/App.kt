@@ -114,16 +114,35 @@ class App : Application() {
      * Called from [onCreate] (i.e. every cold start) and again from [bump] after a
      * failed attempt. It uses the standalone client inside UpdateChecker — no
      * account, no AES envelope — so it works before any guest identity exists.
+     *
+     * At most once per [UPDATE_CHECK_INTERVAL_MS] (12h): the check is a courtesy, and
+     * GitHub's anonymous quota is 60 requests/hour/IP, so checking on every single
+     * launch both annoys the user and gets us rate-limited (HTTP 403) out of real
+     * checks. Only a check that actually reached GitHub counts as done — a failed one
+     * leaves the window open, so the retry in [bump] still works.
      */
     fun checkUpdateOnLaunch(force: Boolean = false) {
         if (!force && !autoUpdateTried.compareAndSet(false, true)) return
         appScope.launch {
+            if (!updateCheckDue()) return@launch
             val result = runCatching { UpdateChecker.check() }.getOrNull()
             autoUpdateWantsRetry = result == null || result is UpdateChecker.Result.Failed
+            if (result != null && result !is UpdateChecker.Result.Failed) {
+                markUpdateChecked()
+            }
             if (result is UpdateChecker.Result.Newer && result.version != ignoredUpdateVersion()) {
                 pendingUpdate.value = result
             }
         }
+    }
+
+    /** True when the last completed update check is outside the 12h window. */
+    private fun updateCheckDue(): Boolean =
+        System.currentTimeMillis() - settingsPrefs().getLong(KEY_UPDATE_CHECKED_AT, 0L) >=
+            UPDATE_CHECK_INTERVAL_MS
+
+    private fun markUpdateChecked() {
+        settingsPrefs().edit().putLong(KEY_UPDATE_CHECKED_AT, System.currentTimeMillis()).apply()
     }
 
     /** User closed the update dialog for now (it will be offered again next launch). */
@@ -277,5 +296,9 @@ class App : Application() {
         private const val HTTP_CACHE_BYTES = 64L * 1024 * 1024
         /** release version the user pressed 跳过这个版本 on */
         private const val KEY_IGNORED_UPDATE = "ignored_update_version"
+        /** when the last COMPLETED update check happened (see checkUpdateOnLaunch) */
+        private const val KEY_UPDATE_CHECKED_AT = "update_checked_at"
+        /** startup update checks are throttled to this interval */
+        private const val UPDATE_CHECK_INTERVAL_MS = 12L * 60L * 60L * 1000L
     }
 }

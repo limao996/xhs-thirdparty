@@ -25,6 +25,7 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
     private val savedDao get() = db.savedDao()
     private val historyDao get() = db.historyDao()
     private val followDao get() = db.followDao()
+    private val watchLaterDao get() = db.watchLaterDao()
 
     /** Feed page (discover). Throws on network/API error; caller handles state. */
     suspend fun discoverPage(categoryId: Int, groupId: Int, page: Int): List<NoteItem> =
@@ -179,6 +180,21 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
     }
 
     // ---- favorites, purely local ------------------------------------------
+    private val _savedVersion = MutableStateFlow(0)
+
+    /**
+     * Bumped on every save / unsave.
+     *
+     * The long-press menu in the waterfalls and on the 推荐 feed shows 收藏/取消收藏,
+     * and the same note usually appears on several screens at once (发现 → 详情 → 收藏).
+     * Without a counter those already-composed grids keep the label they read once.
+     */
+    val savedVersion: StateFlow<Int> = _savedVersion
+
+    /** Ids of everything favorited, for the long-press menu's 「取消收藏」 label. */
+    suspend fun savedIds(): Set<Long> =
+        withContext(Dispatchers.IO) { savedDao.all().map { it.noteId }.toSet() }
+
     suspend fun isSaved(noteId: Long): Boolean =
         withContext(Dispatchers.IO) { savedDao.byId(noteId) != null }
 
@@ -194,14 +210,18 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
                 savedAt = System.currentTimeMillis()
             )
         )
+        _savedVersion.value++
     }
 
-    suspend fun unsave(noteId: Long) = withContext(Dispatchers.IO) { savedDao.remove(noteId) }
+    suspend fun unsave(noteId: Long) = withContext(Dispatchers.IO) {
+        savedDao.remove(noteId)
+        _savedVersion.value++
+    }
 
     /** Toggle a localStorage favorite; returns the new saved state. */
     suspend fun toggleSaveLocal(item: NoteItem): Boolean =
         withContext(Dispatchers.IO) {
-            if (savedDao.byId(item.noteId) == null) {
+            val now = if (savedDao.byId(item.noteId) == null) {
                 savedDao.upsert(
                     SavedNoteEntity(
                         noteId = item.noteId,
@@ -218,6 +238,8 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
                 savedDao.remove(item.noteId)
                 false
             }
+            _savedVersion.value++
+            now
         }
 
     suspend fun savedList(): List<NoteItem> =
@@ -678,6 +700,81 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
 
     suspend fun followedAuthors(): List<FollowedEntity> =
         withContext(Dispatchers.IO) { followDao.all() }
+
+    // ---- 稍后观看队列（本地、有序） ----------------------------------------
+
+    private val _watchLaterVersion = MutableStateFlow(0)
+
+    /**
+     * Bumped whenever the queue changes (add / remove / reorder / clear).
+     *
+     * The queue is visible from several places at once — the floating button on every
+     * waterfall screen, the queue page, the PiP controls — so they all observe this
+     * instead of polling or holding a stale copy.
+     */
+    val watchLaterVersion: StateFlow<Int> = _watchLaterVersion
+
+    suspend fun watchLaterCount(): Int = withContext(Dispatchers.IO) { watchLaterDao.count() }
+
+    suspend fun watchLaterIds(): Set<Long> =
+        withContext(Dispatchers.IO) { watchLaterDao.all().map { it.noteId }.toSet() }
+
+    suspend fun isInWatchLater(noteId: Long): Boolean =
+        withContext(Dispatchers.IO) { watchLaterDao.byId(noteId) != null }
+
+    /** The queue in playing order. */
+    suspend fun watchLaterList(): List<NoteItem> = withContext(Dispatchers.IO) {
+        watchLaterDao.all().map { NoteItem(JSONObject(it.rawJson)) }
+    }
+
+    /** Add to the tail of the queue, or remove it when it is already there. */
+    suspend fun toggleWatchLater(item: NoteItem): Boolean = withContext(Dispatchers.IO) {
+        val now = if (watchLaterDao.byId(item.noteId) == null) {
+            watchLaterDao.upsert(
+                WatchLaterEntity(
+                    noteId = item.noteId,
+                    title = item.title,
+                    userName = item.userName,
+                    cover = item.cover,
+                    noteType = item.noteType,
+                    rawJson = item.rawJson.ifEmpty { fullSnapshot(item).toString() },
+                    position = watchLaterDao.maxPosition() + 1,
+                    addedAt = System.currentTimeMillis()
+                )
+            )
+            true
+        } else {
+            watchLaterDao.remove(item.noteId)
+            false
+        }
+        renumberWatchLater()
+        _watchLaterVersion.value++
+        now
+    }
+
+    suspend fun removeFromWatchLater(noteId: Long) = withContext(Dispatchers.IO) {
+        watchLaterDao.remove(noteId)
+        renumberWatchLater()
+        _watchLaterVersion.value++
+    }
+
+    suspend fun clearWatchLater() = withContext(Dispatchers.IO) {
+        watchLaterDao.clearAll()
+        _watchLaterVersion.value++
+    }
+
+    /** Rewrite the queue order after a drag (ids in the new order). */
+    suspend fun setWatchLaterOrder(orderedIds: List<Long>) = withContext(Dispatchers.IO) {
+        orderedIds.forEachIndexed { index, id -> watchLaterDao.setPosition(id, index) }
+        _watchLaterVersion.value++
+    }
+
+    /** Squeeze positions back to 0..n-1 so removals cannot leave gaps. */
+    private suspend fun renumberWatchLater() {
+        watchLaterDao.all().forEachIndexed { i, e ->
+            if (e.position != i) watchLaterDao.setPosition(e.noteId, i)
+        }
+    }
 
     // ---- local search history ---------------------------------------------
     fun searchHistory(): List<String> {

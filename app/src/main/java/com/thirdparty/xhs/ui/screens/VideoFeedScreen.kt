@@ -66,6 +66,10 @@ import com.thirdparty.xhs.ui.components.buildVideoPlayer
 import com.thirdparty.xhs.ui.components.rememberIsPlaying
 import com.thirdparty.xhs.ui.components.rememberPlaybackError
 import com.thirdparty.xhs.ui.components.retryPlayback
+import com.thirdparty.xhs.ui.components.NoteActionDialog
+import com.thirdparty.xhs.ui.components.WatchLaterBar
+import com.thirdparty.xhs.ui.components.rememberNoteActions
+import com.thirdparty.xhs.ui.components.rememberNoteFlags
 import com.thirdparty.xhs.ui.theme.Scrim
 import com.thirdparty.xhs.ui.theme.Spacing
 import com.thirdparty.xhs.ui.viewmodel.VideoFeedViewModel
@@ -98,6 +102,8 @@ fun VideoFeedScreen(
     infoVisible: Boolean = true,
     /** A tap flipped [infoVisible]; the shell owns the value. */
     onInfoVisibleChange: (Boolean) -> Unit = {},
+    /** 稍后观看队列：信息条用的入口（推荐页用信息条而不是浮动按钮） */
+    onOpenWatchLater: () -> Unit = {},
     viewModel: VideoFeedViewModel = viewModel(factory = RepoViewModelFactory())
 ) {
     val state by viewModel.ui.collectAsStateWithLifecycle()
@@ -148,27 +154,49 @@ fun VideoFeedScreen(
         return
     }
 
-    VerticalPager(
-        state = pagerState,
-        modifier = Modifier.fillMaxSize().background(Color.Black),
-        // keep the immediate neighbours composed so their players can pre-buffer
-        beyondViewportPageCount = 1
-    ) { index ->
-        val item = state.items[index]
-        val isCurrent = pagerState.currentPage == index
-        // Preload the neighbours, keyed on the *settled* page: `currentPage`
-        // changes continuously while dragging, which would create and destroy
-        // neighbour players repeatedly and cause jank.
-        val nearby = kotlin.math.abs(index - pagerState.settledPage) <= 1
-        VideoPage(
-            item = item,
-            active = isCurrent,
-            nearby = nearby,
-            infoVisible = infoVisible,
-            onToggleInfo = { onInfoVisibleChange(!infoVisible) },
-            onWatched = { viewModel.recordView(item) },
-            onClickDetail = { onOpenDetail(item.noteId) }
-        )
+    // 长按弹出的作品菜单（收藏 / 稍后观看）。状态放在这一层：整屏只可能有一个菜单，
+    // 而每一页各自去读「哪些作品已收藏」会把同一个查询做几十遍。
+    var menuFor by remember { mutableStateOf<NoteItem?>(null) }
+    val noteFlags = rememberNoteFlags()
+    val noteActions = rememberNoteActions()
+
+    Box(Modifier.fillMaxSize()) {
+        VerticalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize().background(Color.Black),
+            // keep the immediate neighbours composed so their players can pre-buffer
+            beyondViewportPageCount = 1
+        ) { index ->
+            val item = state.items[index]
+            val isCurrent = pagerState.currentPage == index
+            // Preload the neighbours, keyed on the *settled* page: `currentPage`
+            // changes continuously while dragging, which would create and destroy
+            // neighbour players repeatedly and cause jank.
+            val nearby = kotlin.math.abs(index - pagerState.settledPage) <= 1
+            VideoPage(
+                item = item,
+                active = isCurrent,
+                nearby = nearby,
+                infoVisible = infoVisible,
+                onToggleInfo = { onInfoVisibleChange(!infoVisible) },
+                onWatched = { viewModel.recordView(item) },
+                onClickDetail = { onOpenDetail(item.noteId) },
+                onLongPress = { menuFor = it },
+                onOpenWatchLater = onOpenWatchLater
+            )
+        }
+
+        // 视频是全屏的，「就地小面板」没有锚点可依附，所以用对话框
+        menuFor?.let { note ->
+            NoteActionDialog(
+                title = note.title,
+                saved = note.noteId in noteFlags.savedIds,
+                inWatchLater = note.noteId in noteFlags.watchLaterIds,
+                onToggleSave = { noteActions.toggleSave(note) },
+                onToggleWatchLater = { noteActions.toggleWatchLater(note) },
+                onDismiss = { menuFor = null }
+            )
+        }
     }
 
     // Every video starts with its chrome showing, the way the first one does.
@@ -194,7 +222,11 @@ private fun VideoPage(
     infoVisible: Boolean,
     onToggleInfo: () -> Unit,
     onWatched: () -> Unit,
-    onClickDetail: () -> Unit
+    onClickDetail: () -> Unit,
+    /** 长按：弹出作品菜单（收藏 / 稍后观看），由上层渲染 */
+    onLongPress: (NoteItem) -> Unit,
+    /** 信息条上的稍后观看入口 */
+    onOpenWatchLater: () -> Unit
 ) {
     // the video's real width/height ratio; used to size the surface so the
     // picture is never stretched (FILL would distort, ZOOM would crop).
@@ -253,7 +285,8 @@ private fun VideoPage(
                 interactionSource = noRipple,
                 indication = null,
                 onClick = onToggleInfo,
-                onDoubleClick = { togglePlayback(currentPlayer.value) }
+                onDoubleClick = { togglePlayback(currentPlayer.value) },
+                onLongClick = { onLongPress(item) }
             )
     ) {
         // poster cover behind the player so the page is never a black void.
@@ -361,6 +394,8 @@ private fun VideoPage(
                     )
                     .padding(Spacing.l)
             ) {
+                // 稍后观看信息条：排在标题上面（队列为空时它自己不画东西）
+                WatchLaterBar(onOpen = onOpenWatchLater)
                 Text(
                     item.title.ifEmpty { "(无标题)" },
                     color = Scrim.onMedia,

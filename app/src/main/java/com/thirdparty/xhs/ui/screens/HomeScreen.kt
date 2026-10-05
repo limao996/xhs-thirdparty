@@ -50,6 +50,8 @@ import com.thirdparty.xhs.App
 import com.thirdparty.xhs.navigation.HomeTab
 import com.thirdparty.xhs.ui.theme.Scrim
 import com.thirdparty.xhs.ui.theme.Spacing
+import com.thirdparty.xhs.ui.theme.bottomNavClearance
+import com.thirdparty.xhs.ui.components.WatchLaterFab
 import com.thirdparty.xhs.ui.theme.ThemeMode
 import com.thirdparty.xhs.ui.theme.XhsTheme
 import com.thirdparty.xhs.ui.viewmodel.GuestViewModel
@@ -78,6 +80,8 @@ fun HomeScreen(
     /** 关于 / 检查更新：入口在「我的」页，各是一个独立页面 */
     onOpenAbout: () -> Unit,
     onOpenUpdate: () -> Unit,
+    /** 稍后观看队列（浮动按钮） */
+    onOpenWatchLater: () -> Unit,
     onSetBiometricLock: ((Boolean) -> Unit)? = null,
     onSetHistoryLimit: ((Int) -> Unit)? = null,
     guestViewModel: GuestViewModel = viewModel(factory = RepoViewModelFactory())
@@ -158,7 +162,8 @@ fun HomeScreen(
                     onOpenDetail = onOpenDetail,
                     refreshTick = feedRefreshTick,
                     infoVisible = feedInfoVisible,
-                    onInfoVisibleChange = { feedInfoVisible = it }
+                    onInfoVisibleChange = { feedInfoVisible = it },
+                    onOpenWatchLater = onOpenWatchLater
                 )
                 HomeTab.DISCOVER -> Column(Modifier.fillMaxSize().statusBarsPadding()) {
                     HomeHeader(guest, rotating, onOpenSearch)
@@ -244,6 +249,21 @@ fun HomeScreen(
                         Icon(Icons.Filled.Search, "搜索", tint = Scrim.onMedia)
                     }
                 }
+            }
+
+            // 稍后观看入口：**发现 / 我的**这类普通标签页用浮动按钮；推荐页不用浮动
+            // 按钮，改成视频信息栏上方的一条信息条（见 VideoFeedScreen 里的 WatchLaterBar），
+            // 免得按钮压在画面上、又跟着「收起 chrome」忽隐忽现。
+            AnimatedVisibility(
+                visible = !immersive,
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier = Modifier.align(Alignment.BottomEnd)
+            ) {
+                WatchLaterFab(
+                    onOpen = onOpenWatchLater,
+                    modifier = Modifier.padding(end = Spacing.l, bottom = bottomNavClearance())
+                )
             }
 
             // bottom nav — translucent scrim over the video on the 推荐 tab.

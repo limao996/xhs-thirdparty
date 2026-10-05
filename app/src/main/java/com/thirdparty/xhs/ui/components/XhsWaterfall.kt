@@ -21,8 +21,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,6 +76,17 @@ fun XhsWaterfallGrid(
     /** long-press handler; enabling it turns on multi-select (null = disabled) */
     onLongPress: ((NoteItem) -> Unit)? = null,
     /**
+     * 长按弹窗菜单的两个动作（收藏 / 稍后观看）。
+     *
+     * 给了它就长按弹菜单；没给就退回 [onLongPress] 的老行为（多选页面的入口）。
+     * 两个都给的话：长按出菜单，菜单里的「多选」再进多选。
+     */
+    actions: NoteActions? = null,
+    /** 菜单要显示「收藏」还是「取消收藏」等，取决于这两个 id 集合 */
+    flags: NoteFlags = NoteFlags(),
+    /** 菜单里的「多选」入口（收藏 / 最近浏览这类有多选模式的页面） */
+    onEnterSelection: ((NoteItem) -> Unit)? = null,
+    /**
      * Identity of the list this grid is showing. The scroll position is saved
      * against it: a changed key starts at the top, the same key keeps the user's
      * place (sub-tab switch, returning from a detail page). It must be unique per
@@ -99,6 +113,9 @@ fun XhsWaterfallGrid(
     // page boundaries are not stable. Callers already de-dup on append; this
     // guarantees the grid can never crash regardless.
     val safeItems = remember(items) { items.distinctBy { it.noteId } }
+
+    // 当前展开了长按菜单的作品（同一时刻最多一个）
+    var menuFor by remember { mutableStateOf<NoteItem?>(null) }
 
     // Endless pagination — trigger when the tail becomes visible.
     //
@@ -133,16 +150,33 @@ fun XhsWaterfallGrid(
             key = { i -> safeItems[i].noteId }
         ) { index ->
             val note = safeItems[index]
-            WaterfallCard(
-                item = note,
-                selected = selectionMode && note.noteId in selectedIds,
-                // In selection mode a plain tap toggles instead of opening, which is
-                // what every gallery-style multi-select does.
-                onClick = {
-                    if (selectionMode) onLongPress?.invoke(note) else onOpenDetail(note.noteId)
-                },
-                onLongClick = onLongPress?.let { cb -> { cb(note) } }
-            )
+            // 每张卡片外面套一个 Box：长按菜单是以它自己的锚点弹出的（DropdownMenu 用
+            // 父节点的坐标定位），所以菜单必须和卡片在同一个 Box 里。
+            Box {
+                WaterfallCard(
+                    item = note,
+                    selected = selectionMode && note.noteId in selectedIds,
+                    // In selection mode a plain tap toggles instead of opening, which is
+                    // what every gallery-style multi-select does.
+                    onClick = {
+                        if (selectionMode) onLongPress?.invoke(note) else onOpenDetail(note.noteId)
+                    },
+                    onLongClick = {
+                        if (actions != null) menuFor = note else onLongPress?.let { cb -> cb(note) }
+                    }
+                )
+                if (actions != null && menuFor?.noteId == note.noteId) {
+                    NoteActionDialog(
+                        title = note.title,
+                        saved = note.noteId in flags.savedIds,
+                        inWatchLater = note.noteId in flags.watchLaterIds,
+                        onToggleSave = { actions.toggleSave(note) },
+                        onToggleWatchLater = { actions.toggleWatchLater(note) },
+                        onEnterSelection = onEnterSelection?.let { cb -> { cb(note) } },
+                        onDismiss = { menuFor = null }
+                    )
+                }
+            }
         }
         if (hasMore && safeItems.isNotEmpty()) {
             item(key = "__loading__") {
