@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.thirdparty.xhs.common.runCatchingCancellable
 
 /** UI state for the immersive short-video feed. */
 data class VideoFeedUiState(
@@ -72,7 +73,7 @@ class VideoFeedViewModel(private val repo: XhsRepository) : ViewModel() {
         loading = true
         _ui.update { it.copy(firstLoading = it.items.isEmpty(), error = false) }
         viewModelScope.launch {
-            val list = runCatching { repo.videoFeedPage(1) }.getOrNull()
+            val list = runCatchingCancellable { repo.videoFeedPage(1) }.getOrNull()
             if (list != null) {
                 page = 1
                 _ui.update {

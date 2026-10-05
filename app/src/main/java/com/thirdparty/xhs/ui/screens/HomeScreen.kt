@@ -55,6 +55,7 @@ import com.thirdparty.xhs.ui.theme.XhsTheme
 import com.thirdparty.xhs.ui.viewmodel.GuestViewModel
 import android.widget.Toast
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableIntStateOf
 
 /**
  * Root shell. The 推荐 tab is full-bleed immersive: the header and bottom nav
@@ -85,7 +86,7 @@ fun HomeScreen(
     val guest by guestViewModel.accountLabel.collectAsStateWithLifecycle()
     val rotating by guestViewModel.rotating.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableStateOf(HomeTab.FEED) }
-    var feedRefreshTick by rememberSaveable { mutableStateOf(0) }
+    var feedRefreshTick by rememberSaveable { mutableIntStateOf(0) }
     // 底部三 tab 切换的触感反馈（系统 API，尊重用户的触感开关）
     val haptics = rememberHaptics()
 

@@ -73,6 +73,8 @@ import kotlinx.coroutines.delay
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
+import com.thirdparty.xhs.common.runCatchingCancellable
+import androidx.compose.runtime.mutableIntStateOf
 
 /**
  * 推荐短视频（沉浸式）：
@@ -116,7 +118,7 @@ fun VideoFeedScreen(
     // composition, so after the user had refreshed once (`refreshTick == 1`)
     // every return from the detail page would reload the feed and jump back to
     // the first video — losing their place mid-session.
-    var refreshTickSeen by remember { mutableStateOf(-1) }
+    var refreshTickSeen by remember { mutableIntStateOf(-1) }
     LaunchedEffect(refreshTick) {
         if (refreshTickSeen == refreshTick) return@LaunchedEffect
         val isFirst = refreshTickSeen == -1
@@ -201,7 +203,7 @@ fun VideoFeedScreen(
     // bare as well, and the only way back was to tap blind.
     // 换到下一个视频（滑动落定）给一次"换挡"触感
     LaunchedEffect(pagerState.settledPage) { onInfoVisibleChange(true) }
-    var pipSegmentSeen by remember { mutableStateOf(-1) }
+    var pipSegmentSeen by remember { mutableIntStateOf(-1) }
     LaunchedEffect(pagerState.settledPage) {
         if (pipSegmentSeen != -1 && pipSegmentSeen != pagerState.settledPage) haptics.segment()
         pipSegmentSeen = pagerState.settledPage
@@ -297,7 +299,7 @@ private fun VideoPage(
             android.util.Log.i("XhsPip", "feed inPip 分支 handedOver=$handedOver")
         }
         if (!handedOver) {
-            runCatching { p.pause() }
+            runCatchingCancellable { p.pause() }
         }
     }
     val noRipple = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
@@ -434,14 +436,14 @@ private fun VideoPage(
                                 // playWhenReady, not isPlaying: the latter is false while
                                 // the player is momentarily buffering, and handing that
                                 // over reads as "the user had it paused".
-                                val playing = runCatching { it.playWhenReady }.getOrDefault(false)
-                                val pos = runCatching { it.currentPosition }.getOrDefault(0L)
-                                runCatching {
+                                val playing = runCatchingCancellable { it.playWhenReady }.getOrDefault(false)
+                                val pos = runCatchingCancellable { it.currentPosition }.getOrDefault(0L)
+                                runCatchingCancellable {
                                     com.thirdparty.xhs.ui.components.PlaybackHandoff.stash(
                                         item.noteId, pos, playing
                                     )
                                 }
-                                runCatching {
+                                runCatchingCancellable {
                                     com.thirdparty.xhs.ui.components.PlaybackHandoff
                                         .givePlayer(item.noteId, it)
                                 }

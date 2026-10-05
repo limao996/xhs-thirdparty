@@ -9,6 +9,8 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
+import com.thirdparty.xhs.common.runCatchingCancellable
+import androidx.core.content.edit
 
 /**
  * Minimal WebDAV client — enough to keep a backup file on a personal cloud drive.
@@ -63,7 +65,7 @@ class WebDavClient(
      * is why the media type is application/gzip rather than json.
      */
     suspend fun upload(name: String, content: ByteArray): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
+        runCatchingCancellable {
             val body = content.toRequestBody("application/gzip".toMediaType())
             val req = authed(Request.Builder().url(fileUrl(name)).put(body)).build()
             client.newCall(req).await().use { resp ->
@@ -81,9 +83,9 @@ class WebDavClient(
      * a backup uploaded by an earlier version is still recoverable.
      */
     suspend fun downloadBytes(name: String): Result<ByteArray> = withContext(Dispatchers.IO) {
-        runCatching {
+        runCatchingCancellable {
             val fromDir = fetchBytes(fileUrl(name))
-            if (fromDir != null) return@runCatching fromDir
+            if (fromDir != null) return@runCatchingCancellable fromDir
             val legacy = fetchBytes(legacyFileUrl(name))
                 ?: throw IOException("云端还没有备份文件（已查找 $DIR/ 与根目录）")
             legacy
@@ -102,7 +104,7 @@ class WebDavClient(
 
     /** Download; fails clearly when the file is not there yet. */
     suspend fun download(name: String): Result<String> = withContext(Dispatchers.IO) {
-        runCatching {
+        runCatchingCancellable {
             val req = authed(Request.Builder().url(fileUrl(name)).get()).build()
             client.newCall(req).await().use { resp ->
                 if (resp.code == 404) throw IOException("云端还没有备份文件")
@@ -121,7 +123,7 @@ class WebDavClient(
      * MKCOL but the collection is already there, which is fine.
      */
     suspend fun ensureDir(): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
+        runCatchingCancellable {
             val req = authed(
                 Request.Builder().url(dirUrl()).method("MKCOL", null)
             ).build()
@@ -181,11 +183,11 @@ class WebDavClient(
         }
 
         fun save(context: Context, cfg: WebDavConfig) {
-            context.getSharedPreferences("webdav", Context.MODE_PRIVATE).edit()
-                .putString("url", cfg.url.trim())
-                .putString("user", cfg.user.trim())
-                .putString("password", cfg.password)
-                .apply()
+            context.getSharedPreferences("webdav", Context.MODE_PRIVATE).edit {
+                putString("url", cfg.url.trim())
+                putString("user", cfg.user.trim())
+                putString("password", cfg.password)
+            }
         }
     }
 }

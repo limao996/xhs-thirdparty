@@ -90,7 +90,7 @@ xhs-thirdparty/
 └── .github/      CI 与 Issue / PR 模板
 ```
 
-技术栈：Kotlin 2.1.21、Jetpack Compose（BOM 2026.02.01，无 XML 布局）、Material 3 Expressive（material3 固定在 `1.5.0-alpha29`）、Room 2.8.5、OkHttp 5.1.0（请求体 AES/CBC 加密）、media3 ExoPlayer + HLS、androidx.biometric。构建：AGP 9.4.1 / Gradle 9.8.0 / KSP。
+技术栈：Kotlin 2.1.21、Jetpack Compose（BOM 2026.02.01，无 XML 布局）、Material 3 Expressive（material3 固定在 `1.5.0-alpha29`）、Room 2.8.5、OkHttp 5.5.0（请求体 AES/CBC 加密）、media3 ExoPlayer + HLS、androidx.biometric。构建：AGP 9.4.1 / Gradle 9.8.0 / KSP。
 
 ## 文档
 

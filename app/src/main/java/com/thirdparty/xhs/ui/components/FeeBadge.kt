@@ -82,7 +82,7 @@ private fun NoteItem.feeForVideo(): FeeKind = when {
  * these were previously indistinguishable.)
  */
 @Composable
-fun FeeBadge(item: NoteItem, compact: Boolean = false, modifier: Modifier = Modifier) {
+fun FeeBadge(item: NoteItem, modifier: Modifier = Modifier, compact: Boolean = false) {
     val kind = item.feeKind
     val container = when (kind) {
         FeeKind.PAID -> MaterialTheme.colorScheme.tertiary

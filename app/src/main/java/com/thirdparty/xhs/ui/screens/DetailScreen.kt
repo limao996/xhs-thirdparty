@@ -84,6 +84,7 @@ import kotlinx.coroutines.delay
 import com.thirdparty.xhs.ui.components.CommentRepliesDialog
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
+import com.thirdparty.xhs.common.runCatchingCancellable
 
 /**
  * 详情页：视频播放器 + 标题 + 作者 + 介绍 + 标签 + 评论区。
@@ -219,7 +220,7 @@ fun DetailScreen(
         com.thirdparty.xhs.ui.components.applyLongFormPlayerSettings(a.player)
         // Resume exactly the intent the feed handed over: playing (even if it was mid
         // buffer when the user tapped) stays playing, a deliberate pause stays paused.
-        if (a.playIntent) runCatching { a.player.play() } else runCatching { a.player.pause() }
+        if (a.playIntent) runCatchingCancellable { a.player.play() } else runCatchingCancellable { a.player.pause() }
     }
     // 状态栏/导航栏的处置权在 AppNavHost（它是这两条栏唯一的 owner），这里只声明意图：
     //  - 视频全屏 → 隐藏两条栏（沉浸观看）
@@ -279,7 +280,7 @@ fun DetailScreen(
         if (target > 0L) {
             // Seek immediately, so a player that is already prepared moves at once with
             // no extra frame of the opening seconds...
-            runCatching { sharedPlayer.seekTo(target) }
+            runCatchingCancellable { sharedPlayer.seekTo(target) }
             // ...and again once the media is ready. This is a second player built from
             // scratch, and on an HLS stream a seek issued before the playlist has
             // settled can be clamped or dropped — which showed up as the detail page
@@ -603,11 +604,17 @@ private fun DetailContent(
             val config = androidx.compose.ui.platform.LocalConfiguration.current
             val landscape = config.orientation ==
                 android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            // 尺寸一律从**窗口**读（不是 `Configuration.screenWidthDp`）：多窗口/分屏下
+            // screenWidthDp 给的是整个屏幕，窗口比它窄，算出来的播放器高度会溢出（lint 的建议）。
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            val windowSize = androidx.compose.ui.platform.LocalWindowInfo.current.containerSize
+            val windowWidth = with(density) { windowSize.width.toDp().value }
+            val windowHeight = with(density) { windowSize.height.toDp().value }
             // measured against the player's OWN width (the page inset is 2×Spacing.m),
             // so 16:10 stays 16:10 now that the card no longer runs edge to edge
-            val playerWidth = config.screenWidthDp - Spacing.m.value * 2f
+            val playerWidth = windowWidth - Spacing.m.value * 2f
             val floorHeight = (playerWidth * 10f / 16f).dp
-            val ceilingHeight = maxOf((config.screenHeightDp * 0.5f).dp, floorHeight)
+            val ceilingHeight = maxOf((windowHeight * 0.5f).dp, floorHeight)
             val windowedHeight = if (videoAspect <= 0f) floorHeight
             else (playerWidth / videoAspect).dp.coerceIn(floorHeight, ceilingHeight)
             // M3 Expressive hero media: inset from the page edges and clipped to the
@@ -667,10 +674,11 @@ private fun DetailContent(
             // Same half-screen cap the windowed video player uses. Without it a
             // tall portrait gallery filled most of the screen and pushed the
             // title / author / actions off the first screen.
-            val galleryConfig = androidx.compose.ui.platform.LocalConfiguration.current
+            val galleryDensity = androidx.compose.ui.platform.LocalDensity.current
+            val galleryWindow = androidx.compose.ui.platform.LocalWindowInfo.current.containerSize
             ImageGallery(
                 images = images,
-                maxHeight = (galleryConfig.screenHeightDp * 0.5f).dp,
+                maxHeight = (with(galleryDensity) { galleryWindow.height.toDp() }.value * 0.5f).dp,
                 // one shared index with the full-screen viewer (see [ImageGallery])
                 page = imagePage,
                 onPageChange = onImagePage,

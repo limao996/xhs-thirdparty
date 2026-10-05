@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.thirdparty.xhs.common.runCatchingCancellable
 
 /** Local Room-backed list state (shared by Saved and History screens). */
 data class LocalListUiState(
@@ -71,7 +72,7 @@ class LocalListViewModel(
     fun removeSaved(ids: Set<Long>) {
         if (ids.isEmpty()) return
         viewModelScope.launch {
-            ids.forEach { runCatching { repo.unsave(it) } }
+            ids.forEach { runCatchingCancellable { repo.unsave(it) } }
             reload()
         }
     }

@@ -8,5 +8,4 @@
         windowBackground/navigationBarColor used to point at `activity_bg`, which is
         what made every cold start flash a light surface before the black feed drew.
     -->
-    <color name="icon_bg">#3A2C52</color>
 </resources>

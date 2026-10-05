@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.thirdparty.xhs.common.runCatchingCancellable
 
 data class AuthorUiState(
     val author: AuthorInfo? = null,
@@ -62,7 +63,7 @@ class AuthorViewModel(
             return
         }
         viewModelScope.launch {
-            val author = runCatching { repo.authorProfile(userId) }.getOrNull()
+            val author = runCatchingCancellable { repo.authorProfile(userId) }.getOrNull()
             if (author != null) {
                 _ui.update {
                     it.copy(
@@ -92,7 +93,7 @@ class AuthorViewModel(
         loading = true
         _ui.update { it.copy(loadingMore = it.notes.isNotEmpty(), notesError = false) }
         viewModelScope.launch {
-            val list = runCatching { repo.authorNotes(userId, page + 1) }.getOrNull()
+            val list = runCatchingCancellable { repo.authorNotes(userId, page + 1) }.getOrNull()
             if (list != null) {
                 if (list.isNotEmpty()) page++
                 _ui.update {

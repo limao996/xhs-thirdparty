@@ -18,6 +18,9 @@
 | 新页面 | 同时登记 `navigation/Routes.kt` 常量与 `AppNavHost` 的 `composable`；属底部页则补 `HomeTab` |
 | DB 变更 | 改实体/表结构必须 `@Database(version = n+1)` **并写一个真迁移**（范例：v2→v3 的 `watch_later`）；不要依赖 `fallbackToDestructiveMigration` —— 那会静默清空用户的收藏/浏览/关注/队列 |
 | 错误处理 | 失败时保留已有数据 + 暴露错误态，禁止把失败显示成"空数据" |
+| 协程取消 | 包**可能挂起**的调用用 `com.thirdparty.xhs.common.runCatchingCancellable`（`runCatching` 会把 `CancellationException` 也吃掉，页面关了还在改状态）；纯同步计算仍可用 `runCatching` |
+| 状态写入 | 改 `MutableStateFlow` 一律 `_ui.update { it.copy(...) }`（原子），不要 `_ui.value = _ui.value.copy(...)`（读改写之间会被别的协程插进来） |
+| SharedPreferences | 写 prefs 用 KTX 的 `prefs.edit { putString(...) }`（自动 `apply()`），不要再手写 `edit().putX().apply()` |
 | Compose 状态 | 子 tab 内容包在 `rememberSaveableStateHolder().SaveableStateProvider(key)` 里；列表滚动状态按 `resetKey` 分组（`key(resetKey) { rememberLazyStaggeredGridState() }`），换 key = 回顶部、同 key = 保留位置；身份位在同名却是新列表时要单调递增（GOTCHAS C2/C8） |
 | 并发 | 协程只在 ViewModel / Repository（例外：`App.appScope` 做应用级后台任务、`MainActivity.lifecycleScope` 做与 Activity 生命周期绑定的收尾）；`Dispatchers.IO` 用于 IO；不在组合函数里做阻塞调用 |
 | 注释 | 只解释"为什么"（含约束来源），不复述代码 |

@@ -8,6 +8,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import com.thirdparty.xhs.common.runCatchingCancellable
 
 /**
  * Thin client for the examined app's HTTP API.
@@ -110,7 +111,7 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
                 // 后面的进去时闸门内的缓存判断会立刻返回 —— 这才是"一次尝试只建一个身份"。
                 accountGateMutex.withLock {
                     withContext(AccountGateMarker) {
-                        runCatching { gate() }.onFailure { e ->
+                        runCatchingCancellable { gate() }.onFailure { e ->
                             // 不再静默吞掉：闸门失败要能查（否则"换号失败"看起来像"内容为空"）
                             gateFailure = e
                             if (com.thirdparty.xhs.BuildConfig.DEBUG) {

@@ -51,6 +51,7 @@ import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.mutableLongStateOf
 
 /**
  * Full-screen image viewer.
@@ -72,13 +73,6 @@ fun FullscreenImageViewer(
     initialPage: Int,
     onDismiss: () -> Unit,
     /**
-     * Reports the page being shown, so the caller can keep ONE index for this viewer
-     * and the embedded gallery: swiping here and then closing lands back on the same
-     * picture instead of the one the gallery was left at (the two counters used to
-     * disagree).
-     */
-    onPageChange: ((Int) -> Unit)? = null,
-    /**
      * Applied to the root. Callers rendering this INSIDE a padded Scaffold content slot
      * must pass that padding: without it the viewer starts at y=0 and its top bar ends
      * up BEHIND the page's own app bar — which is exactly why the counter and close
@@ -88,7 +82,14 @@ fun FullscreenImageViewer(
      * the picture runs under the transparent system bars; the chrome below insets
      * itself for that case.
      */
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /**
+     * Reports the page being shown, so the caller can keep ONE index for this viewer
+     * and the embedded gallery: swiping here and then closing lands back on the same
+     * picture instead of the one the gallery was left at (the two counters used to
+     * disagree).
+     */
+    onPageChange: ((Int) -> Unit)? = null
 ) {
     if (images.isEmpty()) return
     val pagerState = rememberPagerState(
@@ -119,7 +120,7 @@ fun FullscreenImageViewer(
     }
     var viewSize by remember { mutableStateOf(IntSize.Zero) }
     // 双击放大/恢复：记住上一次「干净」的点击，两次够快、位置够近就算双击
-    var lastTapAt by remember { mutableStateOf(0L) }
+    var lastTapAt by remember { mutableLongStateOf(0L) }
     var lastTapPos by remember { mutableStateOf(Offset.Zero) }
     // zoom is per-page: carrying it across a swipe would leave the next image
     // mysteriously cropped

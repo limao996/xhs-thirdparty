@@ -146,7 +146,7 @@ fun MediaPlayer(
     // and fell back to fillMaxSize() — the full-screen picture would have been
     // stretched (and, before the surface fix, simply black).
     var videoAspect by remember(player) {
-        mutableStateOf(PipController.videoAspectOf(player.videoSize))
+        androidx.compose.runtime.mutableFloatStateOf(PipController.videoAspectOf(player.videoSize))
     }
     // report the natural aspect ratio so callers can size the container
     //

@@ -72,6 +72,27 @@ def compose(size: int, with_background: bool, ratio: float) -> Image.Image:
     return base
 
 
+def legacy_icon(size: int, ratio: float, inset_ratio: float = 0.09) -> Image.Image:
+    """Legacy (API < 26) icon: rounded square, inset with transparent padding.
+
+    Why the padding: Material 的旧版图标规范要求内容不要铺满整块 48dp 画布（lint 的
+    `IconLauncherShape` 就是这么判的），否则在圆形/方形遮罩下会贴着边。原来这里直接
+    把渐变铺满 48×48，于是 lint 报了 5 条。改成"内容缩到 82%、外面留透明边、圆角矩形"。
+    """
+    canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    inner = max(1, round(size * (1 - 2 * inset_ratio)))
+    bg = background(inner)
+    mask = Image.new("L", (inner, inner), 0)
+    ImageDraw.Draw(mask).rounded_rectangle(
+        (0, 0, inner - 1, inner - 1), radius=int(inner * 0.22), fill=255
+    )
+    bg.putalpha(mask)
+    off = (size - inner) // 2
+    canvas.alpha_composite(bg, (off, off))
+    canvas.alpha_composite(book(inner, ratio), (off, off))
+    return canvas
+
+
 def main() -> None:
     for name, scale in DENSITIES.items():
         out = os.path.join(RES, f"mipmap-{name}")
@@ -81,12 +102,13 @@ def main() -> None:
         fg = round(108 * scale)
         compose(fg, with_background=False, ratio=0.52).save(os.path.join(out, "ic_launcher_fg.png"))
 
-        # legacy icon: background baked in
+        # legacy icon: background baked in, inset per the launcher-icon guidance
         legacy = round(48 * scale)
-        compose(legacy, with_background=True, ratio=0.62).save(os.path.join(out, "ic_launcher.png"))
+        legacy_icon(legacy, ratio=0.62).save(os.path.join(out, "ic_launcher.png"))
 
         mask = Image.new("L", (legacy, legacy), 0)
         ImageDraw.Draw(mask).ellipse((0, 0, legacy - 1, legacy - 1), fill=255)
+        # 圆形图标必须是**真圆**（lint 会验），所以这里不套用上面那层圆角矩形，直接铺满再裁圆
         rnd = compose(legacy, with_background=True, ratio=0.54)
         rnd.putalpha(mask)
         rnd.save(os.path.join(out, "ic_launcher_round.png"))

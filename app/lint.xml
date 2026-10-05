@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Lint 配置（AGP 会自动读取模块根目录下的这个文件）。
+
+    只放**有明确理由的豁免**，不做全量降噪：
+
+    - `PropertyEscape`：命中的是 `local.properties` —— 那是本机生成、不进仓库的文件
+      （见 .gitignore），里面写的是 Windows 路径，转义方式不该阻断构建。
+      把它排除掉，`lintDebug` 才不会被一条与代码无关的告警判失败。
+-->
+<lint>
+    <issue id="PropertyEscape">
+        <ignore path="../local.properties" />
+    </issue>
+</lint>

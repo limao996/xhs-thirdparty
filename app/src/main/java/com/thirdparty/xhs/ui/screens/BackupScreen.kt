@@ -49,6 +49,7 @@ import com.thirdparty.xhs.ui.theme.Spacing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.thirdparty.xhs.common.runCatchingCancellable
 
 /**
  * 备份与恢复.
@@ -85,7 +86,7 @@ fun BackupScreen(onBack: () -> Unit) {
         busy = true
         status = "$label…"
         scope.launch {
-            status = runCatching { block() }
+            status = runCatchingCancellable { block() }
                 .getOrElse { e -> "失败：${e.message ?: e.javaClass.simpleName}" }
             busy = false
         }

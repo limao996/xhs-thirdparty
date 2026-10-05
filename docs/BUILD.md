@@ -129,7 +129,7 @@ CI（`.github/workflows/android.yml`）在 push / PR 上跑 `assembleDebug` → 
 | navigation-compose | 2.9.5 | — |
 | activity-compose | 1.11.0 | — |
 | biometric / fragment-ktx | 1.1.0 / **1.8.9** | fragment-ktx < 1.8.9 会导致 `Can only use lower 16 bits for requestCode` |
-| okhttp | 5.1.0 | JSON 用内置 `org.json`，无 gson/kotlinx-serialization |
+| okhttp | 5.5.0 | JSON 用内置 `org.json`，无 gson/kotlinx-serialization（测试 classpath 另加 `org.json:json:20260814`） |
 | room（runtime/ktx/ksp） | 2.8.5 | KSP 生成，不用 kapt |
 | media3（exoplayer/hls/ui） | 1.11.1 | HLS 播放 |
 | kotlinx-coroutines-android | 1.11.0 | — |

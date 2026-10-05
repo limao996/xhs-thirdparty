@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import com.thirdparty.xhs.common.runCatchingCancellable
 
 data class WatchLaterUiState(
     val items: List<NoteItem> = emptyList(),
@@ -34,7 +35,7 @@ class WatchLaterViewModel(private val repo: XhsRepository) : ViewModel() {
 
     fun load() {
         viewModelScope.launch {
-            val items = runCatching { repo.watchLaterList() }.getOrDefault(emptyList())
+            val items = runCatchingCancellable { repo.watchLaterList() }.getOrDefault(emptyList())
             _ui.value = WatchLaterUiState(items = items, loading = false)
         }
     }

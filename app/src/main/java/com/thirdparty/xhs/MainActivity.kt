@@ -23,6 +23,7 @@ import com.thirdparty.xhs.ui.components.UpdateAvailableDialog
 import com.thirdparty.xhs.ui.components.openUrl
 import com.thirdparty.xhs.ui.theme.XhsWindowBackground
 import com.thirdparty.xhs.ui.theme.XhsTheme
+import androidx.core.content.edit
 
 /**
  * Single-Activity Compose app. Theme follows the persisted mode (default system).
@@ -75,7 +76,7 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
         // 自己刚分享出去的那条：分享面板里的「复制」会把它放进剪贴板，用它去触发"打开这条笔记"
         // 纯属绕圈。标记成已看过，之后也不会再提示。
         if (com.thirdparty.xhs.data.ShareText.isSelfShared(noteId, text)) {
-            prefs.edit().putString(KEY_LAST_CLIP, noteId.toString()).apply()
+            prefs.edit { putString(KEY_LAST_CLIP, noteId.toString()) }
             return
         }
         if (prefs.getString(KEY_LAST_CLIP, null) == noteId.toString()) return
@@ -428,6 +429,8 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
         // Black regardless of theme: the app opens on the black 推荐 feed, so the
         // window colour must be black before Compose draws or every cold start
         // flashes the theme colour first. See XhsWindowBackground.
+        // lint 的 UseKtx 建议这里用 `Int.toDrawable`，但那个扩展在当前 core-ktx 上不可用
+        // （编译不过），所以保留直白的 ColorDrawable：一条风格告警不值得换不确定的 API。
         window.setBackgroundDrawable(
             android.graphics.drawable.ColorDrawable(XhsWindowBackground)
         )
@@ -453,6 +456,8 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
                     val pipActive by
                         com.thirdparty.xhs.ui.components.PipController.inPip
                             .collectAsStateWithLifecycle()
+                    // Activity 层面的对话框（剪贴板回流 / 更新提示）也要有触感（硬约束 19）
+                    val haptics = com.thirdparty.xhs.ui.components.rememberHaptics()
                     androidx.compose.runtime.DisposableEffect(owner) {
                         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
                             if (event == androidx.lifecycle.Lifecycle.Event.ON_PAUSE &&
@@ -516,16 +521,18 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
                             text = { Text("剪贴板里有一个作品链接，是否打开这个作品？") },
                             confirmButton = {
                                 androidx.compose.material3.TextButton(onClick = {
-                                    prefs.edit().putString(KEY_LAST_CLIP, noteId.toString()).apply()
+                                    haptics.tick()
+                                    prefs.edit { putString(KEY_LAST_CLIP, noteId.toString()) }
                                     clipboardNote.value = null
                                     pendingNote.value = noteId
                                 }) { Text("打开") }
                             },
                             dismissButton = {
                                 androidx.compose.material3.TextButton(onClick = {
+                                    haptics.tick()
                                     // remember the refusal too, else it re-asks on the
                                     // next resume with the same clipboard
-                                    prefs.edit().putString(KEY_LAST_CLIP, noteId.toString()).apply()
+                                    prefs.edit { putString(KEY_LAST_CLIP, noteId.toString()) }
                                     clipboardNote.value = null
                                 }) { Text("取消") }
                             }

@@ -35,8 +35,8 @@ import okhttp3.Request
 @Composable
 fun XhsAsyncImage(
     url: String?,
-    contentDescription: String? = null,
     modifier: Modifier = Modifier,
+    contentDescription: String? = null,
     contentScale: ContentScale = ContentScale.Crop
 ) {
     // All remember/LaunchedEffect calls are unconditional on purpose: an early
@@ -85,8 +85,8 @@ fun XhsAsyncImage(
 @Composable
 fun XhsAvatar(
     url: String?,
-    contentDescription: String? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null
 ) {
     XhsAsyncImage(
         url = url,

@@ -35,6 +35,7 @@ import com.thirdparty.xhs.App
 import com.thirdparty.xhs.data.CommentReply
 import com.thirdparty.xhs.ui.theme.AvatarSize
 import com.thirdparty.xhs.ui.theme.Spacing
+import androidx.compose.runtime.mutableIntStateOf
 
 /**
  * Full reply thread for one comment.
@@ -60,7 +61,7 @@ fun CommentRepliesDialog(
     onDismiss: () -> Unit
 ) {
     var replies by remember(commentId) { mutableStateOf(preview) }
-    var page by remember(commentId) { mutableStateOf(0) }
+    var page by remember(commentId) { mutableIntStateOf(0) }
     var loading by remember(commentId) { mutableStateOf(true) }
     var hasMore by remember(commentId) { mutableStateOf(true) }
     var exhausted by remember(commentId) { mutableStateOf(false) }

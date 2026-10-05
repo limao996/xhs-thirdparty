@@ -91,9 +91,12 @@ fun ImageGallery(
     val containerRatio = images.first().ratio.takeIf { it > 0f } ?: NoteImage.DEFAULT_RATIO
 
     // Resolve the cap once; `null` means "use the natural ratio height".
-    val config = LocalConfiguration.current
+    // 从窗口宽度算，而不是 Configuration.screenWidthDp（多窗口/分屏下后者是整个屏幕的宽度）
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val windowWidthDp =
+        with(density) { androidx.compose.ui.platform.LocalWindowInfo.current.containerSize.width.toDp() }
     val cappedHeight: Dp? = maxHeight?.let { cap ->
-        val natural = (config.screenWidthDp / containerRatio).dp
+        val natural = (windowWidthDp.value / containerRatio).dp
         if (natural > cap) cap else natural
     }
 

@@ -10,6 +10,7 @@ import kotlinx.coroutines.withContext
 import androidx.room.withTransaction
 import org.json.JSONArray
 import org.json.JSONObject
+import androidx.core.content.edit
 
 /**
  * Export / import of everything the user would miss after a reinstall.
@@ -413,7 +414,7 @@ private fun restoreSearchHistory(context: Context, arr: JSONArray) {
         .distinct()
         .take(10)   // same cap the app applies when saving
     context.getSharedPreferences("search_history", Context.MODE_PRIVATE)
-        .edit().putString("history", list.joinToString("\n")).apply()
+        .edit { putString("history", list.joinToString("\n")) }
 }
 
 /**

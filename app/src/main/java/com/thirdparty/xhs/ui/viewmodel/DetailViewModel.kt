@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
+import com.thirdparty.xhs.common.runCatchingCancellable
+import kotlinx.coroutines.flow.update
 
 data class DetailUiState(
     val item: NoteItem? = null,
@@ -45,7 +47,7 @@ class DetailViewModel(
         viewModelScope.launch {
             repo.followVersion.collect {
                 val uid = _ui.value.author?.userId ?: _ui.value.item?.userId ?: return@collect
-                if (uid > 0) _ui.value = _ui.value.copy(followed = repo.isFollowed(uid))
+                if (uid > 0) _ui.update { it.copy(followed = repo.isFollowed(uid)) }
             }
         }
         // Content follows the account.
@@ -80,7 +82,7 @@ class DetailViewModel(
             // fail, and the gate inside XhsApi never sees it. Asking here means the
             // account is fixed BEFORE the media is played, and the fresh fetch below
             // re-issues the URLs for the new one.
-            runCatching { repo.ensureAccountForRequest() }
+            runCatchingCancellable { repo.ensureAccountForRequest() }
             val cached = repo.cachedDetail(noteId)
             if (cached != null) {
                 _ui.value = DetailUiState(cached, loading = true, saved = repo.isSaved(noteId))
@@ -93,14 +95,14 @@ class DetailViewModel(
                 // report.
                 loadComments()
             }
-            val fresh = runCatching { repo.fetchDetail(noteId) }.getOrNull()
+            val fresh = runCatchingCancellable { repo.fetchDetail(noteId) }.getOrNull()
             if (fresh != null) {
                 val saved = repo.isSaved(noteId)
                 // `copy`, NOT a fresh DetailUiState: a whole new state discards whatever the
                 // cached branch above already loaded — the comments arrived first and were
                 // then thrown away, and since the cached branch is the one that asked, the
                 // page ended up with no comments at all ("评论 668 / 还没有评论").
-                _ui.value = _ui.value.copy(item = fresh, loading = false, saved = saved)
+                _ui.update { it.copy(item = fresh, loading = false, saved = saved) }
                 loadAuthor(fresh.userId)
                 // only when the cached branch did not already ask (no double request)
                 if (cached == null) loadComments()
@@ -110,7 +112,7 @@ class DetailViewModel(
                 // 有缓存、但新请求失败（离线打开收藏 / 最近浏览必现）：**必须**把 loading 收掉，
                 // 否则页面永远停在转圈、缓存内容永不渲染（审计 P1）。这里保留 `missing=false`，
                 // 让页面照常展示缓存内容，只是不再转圈。
-                _ui.value = _ui.value.copy(loading = false)
+                _ui.update { it.copy(loading = false) }
             }
         }
     }
@@ -118,10 +120,10 @@ class DetailViewModel(
     private fun loadAuthor(uid: Int) {
         if (uid <= 0) return
         viewModelScope.launch {
-            val author = runCatching { repo.authorProfile(uid) }.getOrNull()
+            val author = runCatchingCancellable { repo.authorProfile(uid) }.getOrNull()
             if (author != null) {
                 val followed = repo.isFollowed(uid)
-                _ui.value = _ui.value.copy(author = author, followed = followed)
+                _ui.update { it.copy(author = author, followed = followed) }
             }
         }
     }
@@ -136,8 +138,8 @@ class DetailViewModel(
         if (reset) commentPage = 0
         viewModelScope.launch {
             val next = if (reset) 1 else commentPage + 1
-            _ui.value = _ui.value.copy(commentsLoading = true, commentsError = false)
-            val page = runCatching { repo.comments(noteId, next) }.getOrNull()
+            _ui.update { it.copy(commentsLoading = true, commentsError = false) }
+            val page = runCatchingCancellable { repo.comments(noteId, next) }.getOrNull()
             if (page != null) {
                 if (page.isNotEmpty()) commentPage = next
                 val merged = if (reset) page else _ui.value.comments + page
@@ -147,18 +149,18 @@ class DetailViewModel(
                 // backend returns short pages mid-list, and a note with fewer
                 // than 10 comments would look like it has more.
                 val total = _ui.value.item?.commentCount ?: 0
-                _ui.value = _ui.value.copy(
+                _ui.update { it.copy(
                     comments = merged,
                     commentsLoading = false,
                     commentsHasMore = page.isNotEmpty() && (total <= 0 || merged.size < total),
                     commentsError = false
-                )
+                ) }
             } else {
                 // a failed request must not masquerade as "no comments"
-                _ui.value = _ui.value.copy(
+                _ui.update { it.copy(
                     commentsLoading = false,
                     commentsError = _ui.value.comments.isEmpty()
-                )
+                ) }
             }
             commentsInFlight = false
         }
@@ -173,7 +175,7 @@ class DetailViewModel(
             val now = repo.toggleFollowLocal(
                 author.userId, author.userName, author.headImg, author.signature
             )
-            _ui.value = _ui.value.copy(followed = now)
+            _ui.update { it.copy(followed = now) }
         }
     }
 
@@ -181,7 +183,7 @@ class DetailViewModel(
         val item = _ui.value.item ?: return
         viewModelScope.launch {
             val now = repo.toggleSaveLocal(item)
-            _ui.value = _ui.value.copy(saved = now)
+            _ui.update { it.copy(saved = now) }
         }
     }
 }

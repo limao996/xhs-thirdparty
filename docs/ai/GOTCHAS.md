@@ -231,7 +231,7 @@
 **G2 · JVM 单元测试里 Android 自带的 `org.json` 是空壳**
 - 触发：给解析 JSON 的代码写本地单元测试（`app/src/test`）。
 - 症状：`java.lang.RuntimeException: Method optString in org.json.JSONObject not mocked.`
-- 正确做法：`testImplementation 'org.json:json:20240303'`（只影响测试 classpath，不改应用的运行期行为）。
+- 正确做法：`testImplementation 'org.json:json:20260814'`（只影响测试 classpath，不改应用的运行期行为）。
 
 **G3 · debug 包的 `VERSION_NAME` 带 `-debug` 后缀**
 - 触发：写版本比较（检查更新）或把版本号显示给用户。

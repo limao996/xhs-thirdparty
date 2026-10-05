@@ -44,6 +44,7 @@ object XhsCrypto {
      * decrypted before the bitmap can be decoded. Mirrors the examined app's
      * AESUtils.zdecrypt.
      */
+    @Suppress("GetInstance") // ECB 是 CDN 侧既定的加密方式（见 docs/PROTOCOL.md §2），不是我们的选择
     fun zdecrypt(cipherBytes: ByteArray): ByteArray {
         val cipher = Cipher.getInstance("AES/ECB/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(KEY.toByteArray(Charsets.US_ASCII), "AES"))

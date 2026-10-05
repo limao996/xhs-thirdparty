@@ -2,9 +2,11 @@
 <!--
   Adaptive icon: deep-plum gradient ground + the golden open book as a transparent
   PNG foreground. The launcher supplies the mask, so the mark must stay inside the
-  central safe zone (see tools/gen_icon.py).
+  central safe zone (see tools/probes/gen_icon.py).
 -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@drawable/ic_launcher_bg" />
     <foreground android:drawable="@mipmap/ic_launcher_fg" />
+    <!-- 主题图标（Android 13+）：同一张前景图交给系统取色 -->
+    <monochrome android:drawable="@mipmap/ic_launcher_fg" />
 </adaptive-icon>

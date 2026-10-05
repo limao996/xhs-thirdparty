@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.update
 
 data class CacheUiState(
     val entries: List<CacheEntry> = emptyList(),
@@ -45,14 +46,14 @@ class CacheViewModel : ViewModel() {
             val entries = withContext(Dispatchers.IO) { AppCaches.entries() }
             // keep a selection the user still sees on screen; drop the rest
             val alive = _ui.value.selected.intersect(entries.map { it.kind }.toSet())
-            _ui.value = _ui.value.copy(entries = entries, selected = alive, loading = false)
+            _ui.update { it.copy(entries = entries, selected = alive, loading = false) }
         }
     }
 
     fun toggle(kind: CacheKind) {
         val next = _ui.value.selected.toMutableSet()
         if (!next.add(kind)) next.remove(kind)
-        _ui.value = _ui.value.copy(selected = next)
+        _ui.update { it.copy(selected = next) }
     }
 
     /**
@@ -63,26 +64,26 @@ class CacheViewModel : ViewModel() {
      */
     fun invertSelection() {
         val all = _ui.value.entries.map { it.kind }.toSet()
-        _ui.value = _ui.value.copy(selected = all - _ui.value.selected)
+        _ui.update { it.copy(selected = all - _ui.value.selected) }
     }
 
     fun clearSelected() {
         val kinds = _ui.value.selected
         if (kinds.isEmpty() || _ui.value.clearing) return
-        _ui.value = _ui.value.copy(clearing = true)
+        _ui.update { it.copy(clearing = true) }
         viewModelScope.launch {
             val freed = withContext(Dispatchers.IO) { AppCaches.clear(kinds) }
             val entries = withContext(Dispatchers.IO) { AppCaches.entries() }
-            _ui.value = _ui.value.copy(
+            _ui.update { it.copy(
                 entries = entries,
                 selected = emptySet(),
                 clearing = false,
                 freed = freed
-            )
+            ) }
         }
     }
 
     fun consumeFreed() {
-        _ui.value = _ui.value.copy(freed = null)
+        _ui.update { it.copy(freed = null) }
     }
 }

@@ -49,9 +49,8 @@ fun LocalListScreen(
     viewModel: LocalListViewModel,
     selected: Set<Long>,
     onSelectionChange: (Set<Long>) -> Unit,
-    /** host draws the contextual bar; the screen only reports the tap */
-    onRequestSelectAll: () -> Unit = {},
-    onRequestDelete: () -> Unit = {},
+    // （多选栏由 AppNavHost 自己画，这里不再暴露 onRequestSelectAll / onRequestDelete：
+    //  没人传、也没人用）
     /** false when the host renders its own app bar (then we render nothing) */
     showOwnAppBar: Boolean = false,
     title: String = "",

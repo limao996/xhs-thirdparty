@@ -1,6 +1,7 @@
 package com.thirdparty.xhs.net
 
 import android.content.Context
+import androidx.core.content.edit
 
 /**
  * Credentials for the current guest session.
@@ -18,11 +19,11 @@ class CredentialStore(context: Context) {
 
     var userToken: String
         get() = prefs.getString(KEY_TOKEN, "") ?: ""
-        set(v) = prefs.edit().putString(KEY_TOKEN, v).apply()
+        set(v) = prefs.edit { putString(KEY_TOKEN, v) }
 
     var userHash: String
         get() = prefs.getString(KEY_HASH, "") ?: ""
-        set(v) = prefs.edit().putString(KEY_HASH, v).apply()
+        set(v) = prefs.edit { putString(KEY_HASH, v) }
 
     /**
      * The identity currently in use.
@@ -36,17 +37,17 @@ class CredentialStore(context: Context) {
         get() = synchronized(this) {
             prefs.getString(KEY_DEVICE, null)?.let { return it }
             val fresh = IdentityGuess.randomFresh()
-            prefs.edit().putString(KEY_DEVICE, fresh).apply()
+            prefs.edit { putString(KEY_DEVICE, fresh) }
             fresh
         }
 
     /** Switch to a specific identity. */
     fun setDevice(identity: String) {
         // a cached VIP window belongs to the account it was read from
-        prefs.edit()
-            .putString(KEY_DEVICE, identity)
-            .putLong(KEY_VIP_END, 0L)
-            .apply()
+        prefs.edit {
+            putString(KEY_DEVICE, identity)
+            putLong(KEY_VIP_END, 0L)
+        }
     }
 
     /**
@@ -57,11 +58,11 @@ class CredentialStore(context: Context) {
      * 现在合并成一次提交。
      */
     fun clearSession() {
-        prefs.edit()
-            .remove(KEY_TOKEN)
-            .remove(KEY_HASH)
-            .putLong(KEY_VIP_END, 0L)
-            .apply()
+        prefs.edit {
+            remove(KEY_TOKEN)
+            remove(KEY_HASH)
+            putLong(KEY_VIP_END, 0L)
+        }
     }
 
     /**
@@ -75,7 +76,7 @@ class CredentialStore(context: Context) {
      */
     var vipEnd: Long
         get() = prefs.getLong(KEY_VIP_END, 0L)
-        set(v) = prefs.edit().putLong(KEY_VIP_END, v).apply()
+        set(v) = prefs.edit { putLong(KEY_VIP_END, v) }
 
     /**
      * Require the device's biometric lock when the app is opened. Off by default —
@@ -83,7 +84,7 @@ class CredentialStore(context: Context) {
      */
     var biometricLock: Boolean
         get() = prefs.getBoolean(KEY_BIOMETRIC, false)
-        set(v) = prefs.edit().putBoolean(KEY_BIOMETRIC, v).apply()
+        set(v) = prefs.edit { putBoolean(KEY_BIOMETRIC, v) }
 
     /**
      * When on, the app switches to a fresh account (which starts a new VIP window)
@@ -93,7 +94,7 @@ class CredentialStore(context: Context) {
         // ON by default: the account is anonymous and disposable, so silently
         // moving to one that still has VIP beats hitting a paywall mid-browse.
         get() = prefs.getBoolean(KEY_AUTO_VIP, true)
-        set(v) = prefs.edit().putBoolean(KEY_AUTO_VIP, v).apply()
+        set(v) = prefs.edit { putBoolean(KEY_AUTO_VIP, v) }
 
     /** Switch to a brand-new random identity and return it. */
     fun freshDevice(): String {
@@ -108,7 +109,7 @@ class CredentialStore(context: Context) {
      */
     var historyLimit: Int
         get() = prefs.getInt(KEY_HISTORY_LIMIT, DEFAULT_HISTORY_LIMIT)
-        set(v) = prefs.edit().putInt(KEY_HISTORY_LIMIT, v.coerceIn(100, 20000)).apply()
+        set(v) = prefs.edit { putInt(KEY_HISTORY_LIMIT, v.coerceIn(100, 20000)) }
 
     companion object {
         const val DEFAULT_HOST = "app.xiaohuangbook.net"

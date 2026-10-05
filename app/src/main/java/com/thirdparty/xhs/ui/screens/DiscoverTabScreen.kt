@@ -597,9 +597,9 @@ private fun FanGroupTab(
 private fun FanGroupNoteCard(
     item: com.thirdparty.xhs.data.NoteItem,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
     /** 长按：弹作品菜单（收藏 / 稍后观看），由 [FanGroupTab] 渲染 */
-    onLongClick: () -> Unit = {},
-    modifier: Modifier = Modifier
+    onLongClick: () -> Unit = {}
 ) {
     Surface(
         shape = MaterialTheme.shapes.medium,

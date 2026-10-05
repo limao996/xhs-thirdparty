@@ -151,7 +151,7 @@ Room 数据库 `xhs_local.db`，`@Database(version = 3)`，实体四张：
 ## 5. 导航与深链
 
 - `Routes.kt` 是唯一路由常量表：`home`、`detail/{noteId}`、`search`、`author/{userId}`、
-  （注：`Routes.PROFILE` 这个常量**没有注册任何 composable**，属历史遗留；底部「我的」走的是 `HomeTab` 的 `tab/profile`）
+
   `saved`、`history`、`followed`、`following`（关注，走 `member/follow-list`）、`fans`（粉丝，走 `member/fun-list`）、
   `backup`、`settings`、`cache`（清除缓存）、`about`（关于）、`update`（检查更新）、`watch_later`（稍后观看队列）；
   辅助构造函数 `detail(noteId)` / `author(userId)`。

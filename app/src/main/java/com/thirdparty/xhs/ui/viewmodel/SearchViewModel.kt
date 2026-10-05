@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.thirdparty.xhs.common.runCatchingCancellable
 
 enum class SearchResultMode { CONTENT, USER }
 
@@ -45,7 +46,7 @@ class SearchViewModel(private val repo: XhsRepository) : ViewModel() {
 
     init { refreshHistory() }
 
-    fun onQueryChange(q: String) { _ui.value = _ui.value.copy(query = q) }
+    fun onQueryChange(q: String) { _ui.update { it.copy(query = q) } }
 
     /**
      * Empty the field **and** drop the results it produced.
@@ -81,13 +82,13 @@ class SearchViewModel(private val repo: XhsRepository) : ViewModel() {
 
     fun setMode(mode: SearchResultMode) {
         if (_ui.value.mode == mode) return
-        _ui.value = _ui.value.copy(
+        _ui.update { it.copy(
             mode = mode,
             results = emptyList(),
             users = emptyList(),
             empty = false,
             error = false
-        )
+        ) }
         if (_ui.value.query.isNotBlank()) runSearch(_ui.value.query)
     }
 
@@ -99,7 +100,7 @@ class SearchViewModel(private val repo: XhsRepository) : ViewModel() {
     }
 
     fun chooseHistory(q: String) {
-        _ui.value = _ui.value.copy(query = q)
+        _ui.update { it.copy(query = q) }
         addHistory(q)
         runSearch(q)
     }
@@ -124,7 +125,7 @@ class SearchViewModel(private val repo: XhsRepository) : ViewModel() {
             try {
                 when (_ui.value.mode) {
                     SearchResultMode.CONTENT -> {
-                        val list = runCatching { repo.searchNote(q, 1) }.getOrNull()
+                        val list = runCatchingCancellable { repo.searchNote(q, 1) }.getOrNull()
                         // A response that lands after the field was cleared (or after
                         // a newer query was typed) must not repopulate the page it no
                         // longer belongs to — that is exactly how 清除 used to look
@@ -142,7 +143,7 @@ class SearchViewModel(private val repo: XhsRepository) : ViewModel() {
                         }
                     }
                     SearchResultMode.USER -> {
-                        val users = runCatching { repo.searchUsers(q, 1) }.getOrNull()
+                        val users = runCatchingCancellable { repo.searchUsers(q, 1) }.getOrNull()
                         if (_ui.value.query.trim() != q) return@launch
                         _ui.update {
                             it.copy(
@@ -177,7 +178,7 @@ class SearchViewModel(private val repo: XhsRepository) : ViewModel() {
         _ui.update { it.copy(loadingMore = true) }
         viewModelScope.launch {
             val next = page + 1
-            val list = runCatching { repo.searchNote(q, next) }.getOrNull()
+            val list = runCatchingCancellable { repo.searchNote(q, next) }.getOrNull()
             // 换关键词 / 清空之后，这一页已经不属于当前查询了：必须丢弃，否则旧关键词的第 N 页
             // 会被 append 进新结果里（审计 P2）。runSearch 顶部也有同样的守卫。
             if (_ui.value.query.trim() != q) {
@@ -207,7 +208,7 @@ class SearchViewModel(private val repo: XhsRepository) : ViewModel() {
     }
 
     private fun refreshHistory() {
-        _ui.value = _ui.value.copy(history = repo.searchHistory())
+        _ui.update { it.copy(history = repo.searchHistory()) }
     }
 
     /** Clear the local search history (from the "最近搜索" header). */

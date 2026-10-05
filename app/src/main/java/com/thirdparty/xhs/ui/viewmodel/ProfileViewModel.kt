@@ -8,6 +8,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import com.thirdparty.xhs.common.runCatchingCancellable
+import kotlinx.coroutines.flow.update
 
 data class ProfileUiState(
     val profile: UserProfile? = null,
@@ -31,7 +33,7 @@ class ProfileViewModel(private val repo: XhsRepository) : ViewModel() {
         viewModelScope.launch {
             repo.followVersion.collect {
                 val n = repo.followedAuthors().size
-                _ui.value = _ui.value.copy(followedCount = n)
+                _ui.update { it.copy(followedCount = n) }
             }
         }
     }
@@ -39,7 +41,7 @@ class ProfileViewModel(private val repo: XhsRepository) : ViewModel() {
     /** Re-readable counts; called when the profile screen is shown. */
     fun load() {
         viewModelScope.launch {
-            val profile = runCatching { repo.myProfile() }.getOrNull()
+            val profile = runCatchingCancellable { repo.myProfile() }.getOrNull()
             val saved = repo.savedList().size
             val history = repo.history().size
             val followed = repo.followedAuthors().size

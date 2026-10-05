@@ -214,6 +214,11 @@ object PipController {
      */
     fun buildParams(activity: Activity, player: ExoPlayer?): PictureInPictureParams? {
         val builder = PictureInPictureParams.Builder()
+        // 明确关掉「按 Home 自动进小窗」（API 31+ 才有这个开关）：本应用的入口是**播放器菜单**
+        // 里的「小窗播放」，用户没点就不该自己缩成小窗（lint 的 PictureInPictureIssue 也要求显式表态）。
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            runCatching { builder.setAutoEnterEnabled(false) }
+        }
         player?.let { p ->
             val aspect = videoAspectOf(p.videoSize)
             if (com.thirdparty.xhs.BuildConfig.DEBUG) {

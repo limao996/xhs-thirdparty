@@ -10,6 +10,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
+import com.thirdparty.xhs.common.runCatchingCancellable
+import androidx.core.content.edit
 
 /**
  * Application holder: lightweight manual DI for the repository + a shared
@@ -138,7 +140,7 @@ class App : Application() {
         lastUpdateAttemptAt = now
         appScope.launch {
             if (!updateCheckDue()) return@launch
-            val result = runCatching { UpdateChecker.check() }.getOrNull()
+            val result = runCatchingCancellable { UpdateChecker.check() }.getOrNull()
             autoUpdateWantsRetry = result == null || result is UpdateChecker.Result.Failed
             if (result != null && result !is UpdateChecker.Result.Failed) {
                 markUpdateChecked()
@@ -155,7 +157,7 @@ class App : Application() {
             UPDATE_CHECK_INTERVAL_MS
 
     private fun markUpdateChecked() {
-        settingsPrefs().edit().putLong(KEY_UPDATE_CHECKED_AT, System.currentTimeMillis()).apply()
+        settingsPrefs().edit { putLong(KEY_UPDATE_CHECKED_AT, System.currentTimeMillis()) }
     }
 
     /** User closed the update dialog for now (it will be offered again next launch). */
@@ -166,7 +168,7 @@ class App : Application() {
     /** User pressed 跳过这个版本: never offer [version] again. */
     fun ignoreUpdateVersion(version: String) {
         pendingUpdate.value = null
-        settingsPrefs().edit().putString(KEY_IGNORED_UPDATE, version).apply()
+        settingsPrefs().edit { putString(KEY_IGNORED_UPDATE, version) }
     }
 
     fun ignoredUpdateVersion(): String? = settingsPrefs().getString(KEY_IGNORED_UPDATE, null)
@@ -280,7 +282,7 @@ class App : Application() {
 
     fun setThemeMode(mode: ThemeMode) {
         themeState.value = mode
-        settingsPrefs().edit().putString("theme_mode", mode.key).apply()
+        settingsPrefs().edit { putString("theme_mode", mode.key) }
     }
 
     /**

@@ -12,6 +12,8 @@ import okhttp3.OkHttpClient
 import org.json.JSONObject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import com.thirdparty.xhs.common.runCatchingCancellable
+import androidx.core.content.edit
 
 /**
  * Coordinates network fetches with the purely local favorite/history storage.
@@ -86,7 +88,7 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
             // made the first feed load take ~10 round-trips and show a spinner).
             val resolved = coroutineScope {
                 summaries.map { s ->
-                    async { s to runCatching { api.call("v2/note/view", mapOf("note_id" to s.noteId)) }.getOrNull() }
+                    async { s to runCatchingCancellable { api.call("v2/note/view", mapOf("note_id" to s.noteId)) }.getOrNull() }
                 }.awaitAll()
             }
 
@@ -125,7 +127,7 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
 
     // ---- on-disk HTTP cache (covers / avatars, up to 64MB) ------------------
     /** Current size of the on-disk image cache in bytes. */
-    fun httpCacheSizeBytes(): Long = runCatching {
+    fun httpCacheSizeBytes(): Long = runCatchingCancellable {
         http.cache?.let { c ->
             c.flush()
             c.size()
@@ -720,7 +722,7 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
 
     /** My own numeric guest id (v2/mine/user-info -> user_info.user_id). */
     suspend fun myUserId(): Int = withContext(Dispatchers.IO) {
-        runCatching { myProfile()?.userId ?: 0 }.getOrDefault(0)
+        runCatchingCancellable { myProfile()?.userId ?: 0 }.getOrDefault(0)
     }
 
     // ---- local follow (关注 · 本地) --------------------------------------
@@ -846,12 +848,12 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
     fun saveSearchHistory(q: String) {
         val s = appContext.getSharedPreferences("search_history", android.content.Context.MODE_PRIVATE)
         val list = (listOf(q) + searchHistory().filter { it != q }).take(10)
-        s.edit().putString("history", list.joinToString("\n")).apply()
+        s.edit { putString("history", list.joinToString("\n")) }
     }
 
     /** Wipe the locally stored search history. */
     fun clearSearchHistory() {
         appContext.getSharedPreferences("search_history", android.content.Context.MODE_PRIVATE)
-            .edit().remove("history").apply()
+            .edit { remove("history") }
     }
 }

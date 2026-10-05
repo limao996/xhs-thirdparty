@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
+import com.thirdparty.xhs.common.runCatchingCancellable
 
 /**
  * Guest account state: the current account and manual switching.
@@ -60,7 +61,7 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
             com.thirdparty.xhs.App.INSTANCE.networkEpoch.drop(1).collect {
                 val label = _accountLabel.value
                 if (label.contains("—") || label.contains("加载中")) {
-                    runCatching { repo.rotateGuest() }
+                    runCatchingCancellable { repo.rotateGuest() }
                 }
                 refreshLabel()
                 refreshVip()
@@ -83,7 +84,7 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
         viewModelScope.launch {
             _rotating.value = true
             _accountLabel.value = "游客ID：加载中…"
-            runCatching { repo.rotateGuest() }
+            runCatchingCancellable { repo.rotateGuest() }
             refreshLabel()
             refreshVip()
             _rotating.value = false
@@ -104,7 +105,7 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
         // apply immediately — the current account may already be expired
         viewModelScope.launch {
             _rotating.value = true
-            val switched = runCatching { repo.switchToVipAccount() }.getOrDefault(false)
+            val switched = runCatchingCancellable { repo.switchToVipAccount() }.getOrDefault(false)
             refreshLabel()
             refreshVip()
             _rotating.value = false
@@ -139,7 +140,7 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
         viewModelScope.launch {
             _rotating.value = true
             val fresh = repo.freshRandomMac()
-            val ok = runCatching { repo.switchGuestTo(fresh) }.getOrDefault(false)
+            val ok = runCatchingCancellable { repo.switchGuestTo(fresh) }.getOrDefault(false)
             refreshLabel()
             refreshVip()
             _rotating.value = false
@@ -149,14 +150,14 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
 
     private fun refreshLabel() {
         viewModelScope.launch {
-            val id = runCatching { repo.myUserId() }.getOrDefault(0)
+            val id = runCatchingCancellable { repo.myUserId() }.getOrDefault(0)
             _accountLabel.value = if (id > 0) "游客ID：$id" else "游客ID：—"
         }
     }
 
     private fun refreshVip() {
         viewModelScope.launch {
-            val profile = runCatching { repo.myProfile() }.getOrNull()
+            val profile = runCatchingCancellable { repo.myProfile() }.getOrNull()
             _vip.value = profile?.isVip == true
             _vipEnd.value = profile?.vipEnd ?: 0L
         }

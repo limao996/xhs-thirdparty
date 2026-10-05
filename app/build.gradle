@@ -140,7 +140,7 @@ dependencies {
     // ---- networking / crypto / json ----
     // org.json (bundled in the framework) is what every model already parses
     // with; gson was unused.
-    implementation 'com.squareup.okhttp3:okhttp:5.1.0'
+    implementation 'com.squareup.okhttp3:okhttp:5.5.0'
 
     // ---- local persistence (Room) ----
     implementation 'androidx.room:room-runtime:2.8.5'
@@ -158,5 +158,5 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
     // 本地单元测试里 android 自带的 org.json 是空壳（调用即 "not mocked"），
     // 检查更新的应答解析要真实现才能在 JVM 上测（只影响测试 classpath）。
-    testImplementation 'org.json:json:20240303'
+    testImplementation 'org.json:json:20260814'
 }

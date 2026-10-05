@@ -82,13 +82,13 @@ fun SettingsScreen(
     // !staleValue again, so it could never be toggled off. Mirror them locally.
     var bioOn by remember { mutableStateOf(biometricLock) }
     var autoOn by remember { mutableStateOf(autoVip) }
-    var limit by remember { mutableStateOf(historyLimit) }
+    var limit by remember { androidx.compose.runtime.mutableIntStateOf(historyLimit) }
     var pickLimit by remember { mutableStateOf(false) }
 
     // 数据 组的说明里要显示缓存总共占多少。量一次就够了：这张页面每次被打开
     // 都会重新组合（清缓存在另一个页面，回来时数值自然刷新），而且量磁盘缓存
     // 会 flush OkHttp 的日志，不能放在主线程。
-    var cacheBytes by remember { mutableStateOf(0L) }
+    var cacheBytes by remember { androidx.compose.runtime.mutableLongStateOf(0L) }
     LaunchedEffect(Unit) {
         cacheBytes = withContext(Dispatchers.IO) { AppCaches.totalBytes() }
     }

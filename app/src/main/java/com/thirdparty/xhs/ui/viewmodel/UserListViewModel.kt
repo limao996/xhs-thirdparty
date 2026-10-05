@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.thirdparty.xhs.common.runCatchingCancellable
 
 /** Which server-backed account list to show. */
 enum class UserListMode { FOLLOWING, FANS }
@@ -55,7 +56,7 @@ class UserListViewModel(
             )
         }
         viewModelScope.launch {
-            val batch = runCatching { fetch(next) }.getOrNull()
+            val batch = runCatchingCancellable { fetch(next) }.getOrNull()
             if (batch != null) {
                 page = next
                 _ui.update { s ->

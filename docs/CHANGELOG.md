@@ -249,7 +249,7 @@
   且必须用独立的 OkHttpClient，否则应答会被图片 CDN 用的 64 MB 磁盘缓存住（GOTCHAS G1）
 - `versionName` 1.1.0 → 1.2.0（`CLIENT_VERSION` 2.6.0 / `CLIENT_CHANNEL` 1333 保持不变，它们是协议版本）
 - 单元测试：`UpdateCheckerTest` 6 个用例（新版本/同版本/本地更高/无 apk 资产/缺字段/版本比较）；
-  JVM 测试里 Android 自带的 `org.json` 是空壳，需 `testImplementation 'org.json:json:20240303'`（GOTCHAS G2）
+  JVM 测试里 Android 自带的 `org.json` 是空壳，需 `testImplementation 'org.json:json:20260814'`（GOTCHAS G2；本轮从 `20240303` 升级）
 
 ### 开源发布
 
@@ -630,6 +630,30 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 | 1 | 关闭小窗后回到详情页，视频**从开头**播放 | 关小窗会 `closeAndRelease()` 把那台播放器销毁，而详情页重建播放器时**没有任何进度来源**（`PlaybackHandoff` 只用于"信息流 → 详情页"那条路） | `PipController.closeAndRelease()` 在 release **之前**把进度与播放意图交给同一个续播通道：`PlaybackHandoff.stash(noteId, currentPosition, playWhenReady)`；详情页 compose 时原有的 `take(noteId)` 分支会 `seekTo` 回去并按原意图继续播 | 实机日志：`closeAndRelease stash note=2010 pos=34037 playing=true` → `detail 续播 target=34037 handoff=34037`（**精确续播 34.0 秒**），回到应用 `started=1`。复现手段：小窗播放 15 秒后息屏（Activity 走 `onStop`、会话仍在 = 与"系统关掉小窗"同一条收尾分支），再回到应用 |
 
 
+
+### 阶段三十三 · 继续收尾：协程取消 / 状态竞态 / lint 61→8
+
+阶段三十二末尾列的"仍未修"里，凡是能安全修的都在这一轮做完；剩下 7 条 androidx 版本提示是**刻意不动**的（见本节末尾）。
+
+| # | 事项 | 做法 | 证据 |
+| --- | --- | --- | --- |
+| 1 | `runCatching` 吞 `CancellationException` | 新增 `common/runCatchingCancellable`（取消原样上抛），用脚本**只替换"处在协程里"的那些**（最近的 enclosing 作用域是 `launch/async/withContext/flow/…` 或 `suspend fun`；纯同步计算保留 `runCatching`）：**45 处 / 16 个文件** | 编译 + `testDebugUnitTest` 通过；涉及 App / Repository / WebDav / XhsApi / Detail·VideoFeed + 9 个 ViewModel |
+| 2 | `_ui.value = _ui.value.copy(...)` 读改写竞态 | 改成原子的 `_ui.update { it.copy(...) }`（含多行括号配对重写）：**20 处 / 4 个 ViewModel** | 编译通过；抽查 `SearchViewModel` 等改写正确 |
+| 3 | `LocalListScreen` 重复回调 | 删掉没人传的 `onRequestSelectAll` / `onRequestDelete`（多选栏由 `AppNavHost` 画） | grep 无引用 + 编译 |
+| 4 | 触感复查 | 全库扫"按钮 `onClick` 里看不到 `haptics`"的位置：补剪贴板回流对话框的「打开 / 取消」，`MainActivity` 补 `rememberHaptics()` | 扫描从 2 处 → 0 处 |
+| 5 | `UseKtx` | `prefs.edit().putX().apply()` → KTX `prefs.edit { putX() }`（单行 14 + 多行 6 处），补齐缺失的 `import androidx.core.content.edit`；`OpenUrl` 用 `String.toUri()` | 编译 + 冷启动实测推荐流正常 |
+| 6 | `IconLauncherShape` | 用仓库里的 `tools/probes/gen_icon.py` 重做旧版图标：方形图标改成"内容 82% + 透明边 + 圆角矩形"（原来铺满整块 48dp 画布）；圆形图标改回真圆 | 生成后角像素 alpha=0、中心 255；lint 该项 5 → 0 |
+| 7 | `lintDebug` 被 `local.properties` 的告警判失败 | 新增 `app/lint.xml`，仅豁免 `PropertyEscape`（命中的是本机生成、不入库的 `local.properties`） | `lintDebug` 现在 BUILD SUCCESSFUL |
+| 8 | 依赖升级（只升与 Compose 无关的两个） | okhttp `5.1.0 → 5.5.0`、测试用 `org.json 20240303 → 20260814`；README / BUILD / GOTCHAS 版本同步 | 安装后冷启动实测：推荐流正常加载（AES 包体 + OkHttp 5.5 都工作）、崩溃 0 |
+| 9 | `PictureInPictureIssue` | 显式 `setAutoEnterEnabled(false)`（API 31+）：入口是播放器菜单，按 Home 不该自己缩成小窗；保留上一轮的 `setSourceRectHint` | 实机进小窗正常（frame 533×400、`started=1`、崩溃 0） |
+| 10 | `GetInstance`（AES/ECB） | 加 `@Suppress("GetInstance")` 并注明：ECB 是 CDN 侧既定加密（协议决定），不是实现问题 | 编译 + 小窗播放实测正常 |
+
+**lint 总数：61 → 8**（剩余 8 = `GradleDependency` 7 + `UseKtx` 1）。
+
+**刻意不动、并写清理由**：
+- **7 条 androidx 版本提示**（core-ktx 1.19.1 / activity 1.13.0 / lifecycle 2.11.0 / navigation 2.10.2 / fragment-ktx 1.9.1）：它们与 Compose BOM 耦合（硬约束 3 把 material3 钉在 `1.5.0-alpha29`），单独升有版本错配风险，要升得连 BOM 一起评估 —— 属于需要用户拍板的决定。
+- **1 条 `UseKtx`**（`MainActivity` 的窗口背景色）：lint 建议 `Int.toDrawable`，但该扩展在当前 core-ktx 上**编译不过**，代码里留注释说明并保留 `ColorDrawable`。
+- 审查 P0-13（`tools/fixtures/` 里的真实凭据）：用户明确"不用管"。
 
 ### 阶段三十二 · 把上一轮"未修清单"能修的都修掉
 

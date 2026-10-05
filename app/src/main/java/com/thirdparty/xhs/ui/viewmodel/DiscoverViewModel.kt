@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.thirdparty.xhs.common.runCatchingCancellable
 
 /** Discover sub-tabs at the top of the 发现 screen. */
 enum class DiscoverTab(val label: String) {
@@ -83,9 +84,9 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
         // 关注 tab 的列表要跟着其它页面的关注操作走
         viewModelScope.launch { repo.followVersion.collect { refreshFollowed() } }
         viewModelScope.launch {
-            val cats = runCatching { repo.categories() }.getOrDefault(emptyList())
+            val cats = runCatchingCancellable { repo.categories() }.getOrDefault(emptyList())
             _ui.update { it.copy(categories = cats) }
-            myId = runCatching { repo.myUserId() }.getOrDefault(0)
+            myId = runCatchingCancellable { repo.myUserId() }.getOrDefault(0)
             loadFanGroup()
         }
         loadMore()
@@ -104,7 +105,7 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
                     // once at construction — an offline start leaves it 0, and with 0 the
                     // request is never even made (`recs = null`). So re-read it here, or
                     // this tab would stay empty even after the network comes back.
-                    if (myId <= 0) myId = runCatching { repo.myUserId() }.getOrDefault(0)
+                    if (myId <= 0) myId = runCatchingCancellable { repo.myUserId() }.getOrDefault(0)
                     loadFanGroup()
                 }
             }
@@ -150,7 +151,7 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
         }
         val catId = _ui.value.selectedCategory
         viewModelScope.launch {
-            val result = runCatching { repo.discoverPage(categoryId = catId, groupId = 0, page = feedPage + 1) }
+            val result = runCatchingCancellable { repo.discoverPage(categoryId = catId, groupId = 0, page = feedPage + 1) }
             val list = result.getOrNull()
             // The user may have moved to another category while this was in flight (the
             // waterfall is a pager now, so swiping makes that easy). Merging the old
@@ -213,9 +214,9 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
             )
         }
         viewModelScope.launch {
-            val cats = runCatching { repo.categories() }.getOrNull()
+            val cats = runCatchingCancellable { repo.categories() }.getOrNull()
             val catId = _ui.value.selectedCategory
-            val list = runCatching { repo.discoverPage(categoryId = catId, groupId = 0, page = 1) }.getOrNull()
+            val list = runCatchingCancellable { repo.discoverPage(categoryId = catId, groupId = 0, page = 1) }.getOrNull()
             feedPage = if (list != null) 1 else 0
             if (list != null) emptyPages = 0
             _ui.update { s ->
@@ -234,7 +235,7 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
                     }
                 )
             }
-            myId = runCatching { repo.myUserId() }.getOrDefault(myId)
+            myId = runCatchingCancellable { repo.myUserId() }.getOrDefault(myId)
             loadFanGroup()
             refreshFollowed()
             feedLoading = false
@@ -256,7 +257,7 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
         }
         viewModelScope.launch {
             val recs = if (myId > 0) {
-                runCatching { repo.funGroupRecommend(myId, next) }.getOrNull()
+                runCatchingCancellable { repo.funGroupRecommend(myId, next) }.getOrNull()
             } else null
             if (recs != null) {
                 fanGroupPage = next
@@ -302,7 +303,7 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
 
     private fun refreshFollowed() {
         viewModelScope.launch {
-            val followed = runCatching { repo.followedAuthors() }.getOrDefault(emptyList())
+            val followed = runCatchingCancellable { repo.followedAuthors() }.getOrDefault(emptyList())
             _ui.update { it.copy(followed = followed) }
         }
     }
