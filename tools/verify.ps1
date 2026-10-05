@@ -1,4 +1,4 @@
-# 快速验证工具（tools/ 已 gitignore，仅供本机使用）
+# 快速验证工具（本脚本**入库**；只有探针输出 tools/out/ 与截图 docs/images/screenshots/ 不入库）
 #
 # 为什么需要它：实测 adb 单步耗时
 #   adb shell echo            37 ms

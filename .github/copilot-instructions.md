@@ -4,7 +4,8 @@
 
 ## 技术栈事实（不要按"常见 Android 项目"猜）
 
-- 纯 Kotlin + Jetpack Compose，**没有 XML 布局**；只有一个 `AndroidManifest.xml` 与图标资源在 `res/`。
+- 纯 Kotlin + Jetpack Compose，**没有 XML 布局**；`res/` 里只有一个 `AndroidManifest.xml` 之外的图标资源：
+  启动图标（`mipmap-*`）+ 小窗控制栏矢量图标（`drawable/ic_pip_rewind|play|pause|forward|replay.xml`）+ `values/`（颜色、主题、字符串）。
 - 不引入 `appcompat`、`com.google.android.material` 或其它 UI 框架。
 - `material3` 必须是 `1.5.0-alpha29`（`MaterialExpressiveTheme` / `MotionScheme` 只在 alpha 线公开）。
 - `androidx.fragment:fragment-ktx` 必须 ≥ `1.8.9`（更低版本会让 biometric 抛 `Can only use lower 16 bits for requestCode`）。
@@ -38,6 +39,13 @@
 - **不得移除或绕开游客账号轮换链路**（`v2/app/init` → `login-with-guest` → 校验 VIP → 退避），也不要"顺手"把它改成定时轮询。
 - 文档/注释里**不要写"不破解付费 / 不绕过付费限制"这类与实现相反的声明**：本 App 的机制就是自动注册新游客身份、领取新游客体验窗口。
 - 不实现发评论、点赞等写操作（当前产品范围如此）。
+- 菜单 / 弹窗只用原生 `material3.AlertDialog`；不要 `DropdownMenu`，也不要自绘遮罩与入场动画。
+- 触感只用系统 API（`ui/components/Haptics.kt`，低版本按 SDK 降级）；屏幕上自己画的按钮都要有触感；拖动类控件是"按下即触发"，不在拖动中连发。
+- 关注按钮只有 `ui/components/FollowPill.kt` 一套；取消关注先弹确认。
+- 稍后观看队列**不提供排序**（无序号、无上下移、无拖动）；同一角落的浮动按钮一起排（`CornerFabStack`）。
+- 分享走系统分享面板 + 口令回流检测（`ShareText.markSelfShared`）；可点区域不要同时挂单击与双击。
+- 画中画：进小窗不要退出详情页；`inPip` 只由 `handBackForDetail()` / `closeAndRelease()` 翻转；"要不要暂停/释放"的归属判据只认小窗会话（`PipController.isHandedOver`）。
+- `minSdk` 保持 26；改 Room schema 必须写真迁移（现存 `MIGRATION_1_2` / `MIGRATION_2_3`），不要挂 `fallbackToDestructiveMigration()`。
 
 ## 提交与验证
 

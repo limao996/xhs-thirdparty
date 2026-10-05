@@ -77,6 +77,26 @@
 - 触发：在 `when` 的不同分支里各自 `remember` 页面状态。
 - 正确做法：分支切换会丢弃另一个分支的组合状态，用 `rememberSaveableStateHolder`（见 C8）或提升状态。
 
+**C3 · 修饰符顺序决定绘制与命中范围**
+- 触发：`background` / `padding` / `clip` / `clickable` 组合出非预期外观或点击区域。
+- 正确做法：按"越靠前越外层"逐层心算一次；点击区域只与它之前的 `size`/`padding` 有关。
+
+**C4 · 可点击子元素会吞掉父手势**
+- 触发：父容器用 `clickable` + 子元素也可点（如卡片里的按钮、进度条）。
+- 正确做法：明确谁负责手势；需要同时响应时用 `combinedClickable` 或把子元素区域的点击显式透传。
+
+**C5 · "改了主题" ≠ "UI 变了"**
+- 触发：声称完成了一次视觉改造。
+- 正确做法：截图或 dump 对比。改的是主题变量但实际渲染没变化，是本项目反复出现的假完成。
+
+**C6 · 空态/错误态可能渲染到屏幕外**
+- 触发：写 `Column` 里的空态或错误态。
+- 正确做法：确认它在可见视口内（滚动容器里尤其要看），别只看代码分支存在。
+
+**C7 · 控件没被点过就等于没验证**
+- 触发：新加了一个按钮/开关/入口。
+- 正确做法：真的点一次（或 `TapText`），并观察结果状态变化；只确认控件存在不算。
+
 **C8 · 列表滚动位置：三种成因，一个正确写法**
 - 触发：列表/瀑布流在"切走再回来""跳转返回"或"切换分类"后的位置不对。
 - 期望一：子 tab / 列表在**切走再回来、跳转详情返回**后要**保留**位置。两个前提：
@@ -98,26 +118,6 @@
 - 症状对照：滚 → 切子 tab / 进详情返回 → 归零 = 缺"期望一"；滚 → 滑到别的分类再滑回来 → 落在列表中间 = 缺"期望二"。
 - 验证方式：滚动 → 切子 tab / 进详情或作者页 → 返回，比对**首项文本与 y 坐标**是否一致（`docs/VERIFY.md` §4）；
   分类切换看**首卡是否完整可见**（内容文本会随重新拉取而变，断言不可靠，用截图判定）。
-
-**C3 · 修饰符顺序决定绘制与命中范围**
-- 触发：`background` / `padding` / `clip` / `clickable` 组合出非预期外观或点击区域。
-- 正确做法：按"越靠前越外层"逐层心算一次；点击区域只与它之前的 `size`/`padding` 有关。
-
-**C4 · 可点击子元素会吞掉父手势**
-- 触发：父容器用 `clickable` + 子元素也可点（如卡片里的按钮、进度条）。
-- 正确做法：明确谁负责手势；需要同时响应时用 `combinedClickable` 或把子元素区域的点击显式透传。
-
-**C5 · "改了主题" ≠ "UI 变了"**
-- 触发：声称完成了一次视觉改造。
-- 正确做法：截图或 dump 对比。改的是主题变量但实际渲染没变化，是本项目反复出现的假完成。
-
-**C6 · 空态/错误态可能渲染到屏幕外**
-- 触发：写 `Column` 里的空态或错误态。
-- 正确做法：确认它在可见视口内（滚动容器里尤其要看），别只看代码分支存在。
-
-**C7 · 控件没被点过就等于没验证**
-- 触发：新加了一个按钮/开关/入口。
-- 正确做法：真的点一次（或 `TapText`），并观察结果状态变化；只确认控件存在不算。
 
 ## D. 数据、播放器与资源生命周期
 
@@ -175,15 +175,15 @@
 - 触发：写脚本或文档里的路径。
 - 正确做法：脚本用 `$PSScriptRoot` / `Path(__file__).resolve().parents[n]`；外部工具走环境变量。
 
-**E5 · 文档声明必须与实现一致**
-- 触发：想写"本工具不破解付费 / 不绕过访问控制"这类免责话术。
-- 正确做法：本项目的机制就是**自动注册新游客身份、领取服务端发给新游客的 VIP 窗口**，照实描述；
-  与之相反的免责声明属于事实错误（AGENTS.md 硬约束 12）。
-
 **E4 · 不要"顺手纠正"账号轮换机制**
 - 触发：看到 `app/init` + `login-with-guest` + VIP 校验这套链路，觉得"多此一举"或"看着像作弊"就想删/改。
 - 正确做法：那是本项目**唯一的核心功能**（换新游客号续 VIP），删掉它 App 就只会显示付费墙。要动先读
   `AGENTS.md` 第 1 节与 `docs/ARCHITECTURE.md` §3.1。
+
+**E5 · 文档声明必须与实现一致**
+- 触发：想写"本工具不破解付费 / 不绕过访问控制"这类免责话术。
+- 正确做法：本项目的机制就是**自动注册新游客身份、领取服务端发给新游客的 VIP 窗口**，照实描述；
+  与之相反的免责声明属于事实错误（AGENTS.md 硬约束 12）。
 
 ## F. 游客账号与 VIP 续期
 
@@ -267,7 +267,8 @@
   ③再加边缘自动滚动与双指补偿（用户仍然反馈不灵）。
 - 根因（第①版）：换位会让这一行的**基准位置**立刻跳一行，而手势位移是在节点局部坐标里累加的，
   基准一跳就抵消掉累加量。
-- **最终形态（用户拍板）**：每行左侧序号 + 右侧**竖直排列的小号上移/下移按钮**，点一次与相邻行交换、
+- ~~**当时的最终形态**：每行左侧序号 + 右侧竖直排列的小号上移/下移按钮……~~ **已废弃**：用户后来要求彻底不排序
+  （硬约束 20），序号与按钮全部删除，下面这段只用来记录"为什么按钮方案也不行"。~~
   立刻写回数据库（`committed` 本地顺序避免写库往返期间的闪一下）。不再做任何拖动排序。
 - 结论：列表排序这类需求，按钮的确定性 > 拖动的"手感"；先把交互做对，再谈手感。
 
@@ -276,7 +277,9 @@
 - 症状：小窗里黑屏（播放器被详情页的 `onDispose` release 了）；或者关掉小窗之后声音还在放。
 - 正确做法：`PipController.isHandedOver(player)` 为真时详情页不得 release；
   「展开」= `onPictureInPictureModeChanged(false)` → `pendingDetailId` → `PlaybackHandoff.givePlayer` → 回详情页；
-  「关闭」= Activity 销毁 → `MainActivity.onDestroy` 里 `PipController.closeAndRelease()`（见硬约束 17）。
+  「关闭」的收尾挂在 **`onStop`**（`MainActivity` 里有序 `when`：退出回调 300ms 确认 / 刚进小窗瞬停 /
+锁屏只暂停 / 系统说仍在 PiP 则暂停 + 15s 复查 / 其余才 `closeAndRelease()`），`onDestroy` 只是兜底。
+**不要**再写成"关闭 = Activity 销毁"（见 H12 与硬约束 17）。
 
 **H4 · 画中画控制栏最多 3 个自定义按钮，就用标准的三个**
 - 触发：需求写「播放/暂停、播放顺序、稍后观看队列、全屏」。
@@ -287,6 +290,35 @@
   菜单是原生 `AlertDialog`）。图标必须是资源或 Bitmap：`res/drawable/ic_pip_{rewind,pause,play,forward}.xml`
   （用 Material 标准图形，别自己画）。动作经广播回到 `MainActivity` 注册的接收者，
   动作后记得 `setPictureInPictureParams` 重设一次（播放/暂停图标要换）。
+
+**H5 · 自动化验证的系统边界（本次踩到的两条）**
+- 画中画窗口的「关闭 / 展开」是系统覆盖层，**不吃 `adb shell input tap`**（注入触摸被忽略）。
+  验证「展开」改用 `am start --activity-reorder-to-front`（等于把任务拉到前台），
+  「关闭」只能做代码路径确认，如实写进 `docs/CHANGELOG.md`。
+- 全屏页面（图文查看器、视频真全屏）上 `uiautomator dump` 经常返回空串
+  （`Failed to write while dumping service user: Broken pipe`）。此时改用截图 + 查库取证；
+  要确保打开的是**图文**作品，先
+  `run-as <pkg> sqlite3 databases/xhs_local.db "select noteId from history where noteType=1"`
+  拿 id，再 `am start -a android.intent.action.VIEW -d "xhstp://note/<id>"` 直接打开。
+
+**H6 · 动画"不生效"先查 `animator_duration_scale`**
+- 触发：给双击缩放接了 `animateFloatAsState` + `tween(240ms)`，实机上却像瞬变。
+- 症状：在渲染值上挂探针，`logcat` 只得到 `1.0` 与 `2.5` 两个值（没有任何中间值）。
+- 原因：模拟器/开发者选项把 **动画时长比例设成了 0**（`settings get global animator_duration_scale`
+  → `0`），Compose 的动画会遵守这个比例，于是瞬间完成。代码本身没问题。
+- 正确做法：`settings put global animator_duration_scale 1` 再测；要抓中间帧而截图太慢
+  （`screencap` 单次接近秒级）时，把动画时长临时调到 10s 以上、在渲染值上挂一行 `Log.d`
+  数中间值，取证完**必须移除探针并把时长还原**（同时把 `animator_duration_scale` 改回去）。
+
+**H7 · 触感反馈用系统 API，验证靠 `dumpsys vibrator_manager`**
+- 触发：要给长按、切换、落位加振动。
+- 做法：`ui/components/Haptics.kt` 包一层 `LocalHapticFeedback`，四档语义别用错：
+  `LongPress`（长按/开始拖动）、**`ContextClick`（轻点，别用 `TextHandleMove` —— 那是文本光标移动的）**、
+  `SegmentTick`（滑视频/翻图片这类换挡）、`Confirm` / `Reject`（收藏与移除）。
+  **不要** `Vibrator`（系统 API 尊重用户的触感开关，也不需要 `VIBRATE` 权限）。
+- 验证：`adb shell dumpsys vibrator_manager | grep xhs` 能看到 `opPkg=com.thirdparty.xhs…`
+  的记录（长按是 `Prebaked{effect=HEAVY_CLICK}`，轻点是 `TICK`）。模拟器上 `scale: 0.00` 正常 ——
+  没有可用触感硬件/关掉了触感，调用本身已生效。
 
 **H8 · 不要自绘对话框外壳**
 - 触发：用户反馈"对话框没有遮罩和动画"，我先做了一版自绘遮罩 + 自绘入场动画的统一外壳。
@@ -301,32 +333,29 @@
 - 正确做法：`ui/components/CornerFabStack.kt` 统一排：小号刷新（次要色）在上、扩展稍后观看在下，
   间距 `Spacing.m`；队列为空时只剩刷新；画中画时整组隐藏。
 
-**H7 · 触感反馈用系统 API，验证靠 `dumpsys vibrator_manager`**
-- 触发：要给长按、切换、落位加振动。
-- 做法：`ui/components/Haptics.kt` 包一层 `LocalHapticFeedback`，四档语义别用错：
-  `LongPress`（长按/开始拖动）、**`ContextClick`（轻点，别用 `TextHandleMove` —— 那是文本光标移动的）**、
-  `SegmentTick`（滑视频/翻图片这类换挡）、`Confirm` / `Reject`（收藏与移除）。
-  **不要** `Vibrator`（系统 API 尊重用户的触感开关，也不需要 `VIBRATE` 权限）。
-- 验证：`adb shell dumpsys vibrator_manager | grep xhs` 能看到 `opPkg=com.thirdparty.xhs…`
-  的记录（长按是 `Prebaked{effect=HEAVY_CLICK}`，轻点是 `TICK`）。模拟器上 `scale: 0.00` 正常 ——
-  没有可用触感硬件/关掉了触感，调用本身已生效。
+**H10 · 同一个播放器被两个界面抢：小窗进驻时信息流必须"放过它"**
+- 触发：推荐页 → 详情页 → 小窗，三处都在用**同一个** `ExoPlayer` 实例。
+- 症状：小窗在前面放着，后面的推荐流也在放 → 两条声音混在一起；于是"进小窗就让信息流
+  `pause()`"，但**无差别 pause 会把小窗那一台一起按停**（实测：小窗里视频停住、
+  `dumpsys audio` 里那一路 `state:paused`）。
+- 正确做法：一律用 `PipController.isHandedOver(player)` 判断归属再决定要不要动它 ——
+  详情页销毁时不 release 是这条规则，信息流在小窗期间暂停也是这条规则。
+- 判断"现在到底有没有在放"：`adb shell dumpsys audio | grep 'AudioPlaybackConfiguration piid:'`
+  看本应用那几路的 `state:started / state:paused`。`logcat` 里的累计事件（`event:started` 计数）
+  是历史量，不能判断当前状态。
 
-## I. 验证工具本身的坑
-
-**I2 · 触感取证不能用"累计计数"**
-- 触发：用 `dumpsys vibrator_manager | grep opPkg=com.thirdparty.xhs | measure` 的数量判断"这次点击有没有触感"。
-- 症状：连着点几下计数**卡住不动**（实测停在 47），看起来像"改的代码没生效"。
-- 原因：`vibrator_manager` 的 **`Previous vibrations` 只保留最近 50 条记录**，新记录进来旧记录滚出去，
-  所以条数在 50 附近饱和；它本来就不是累计计数器。
-- 正确做法：**看时间戳**。把最后几条 `createTime` 打出来，与刚才操作的时刻对齐即可（例如
-  `10-05 16:25:15.462 TICK`、`16:25:19.898 TICK` 就是点备份页按钮的那几下）。
-
-**I3 · 触感取证要看时间戳**（与 I2 同源，单独列出以免再踩）
-- 判据：`createTime` 落在"我刚才操作的那几秒"内，并且 `opPkg` 是本应用，就算通过。
-- 反例：把"记录条数有没有变大"当判据 —— 见 I2。
-
----
-
+**H11 · 列表拖动排序要有边缘自动滚动，且位移只用一个坐标系**（⚠️ 队列的拖动排序**已删除**，见硬约束 20 / H2；本节只在其它页面将来真要做拖动排序时才参考）
+- 触发：队列排序需要"把第 1 行拖到屏幕外的第 N 行"。
+- 症状：只能拖到当前可见区域内的位置；第一版"手指位移累加 + 每过半行换位"更是只能挪一格（见 H2）。
+- 正确做法（现行）：
+  1. **只用一个坐标系**——内容坐标 = 视口坐标 + `scrollState.value`；手指位置反推为
+     `viewIndex * rowHeight + change.position.y − scrollState.value`，落点与行的位移都从内容坐标算。
+     这样"列表被滚动"和"手指移动"只是同一个数在变，不需要到处补正。
+  2. 边缘自动滚动：一个按帧跑的循环，在上下 110dp 内滚动，步长随接近程度衰减（上限 18dp/帧），
+     并把滚动量补回拖动位移（`dragOffset += moved`）。**密度只能在组合里读**，要先把 dp 换算成 px 再进协程。
+  3. 第二根手指的滑动天然可用：被拖行的手势只处理自己那个指针，`verticalScroll` 是它的父节点，
+     另一个指针的拖动归父节点 —— 前提是手势与 `clickable` 挂在同一个节点上（H2）。
+- 参考：本节只在"其它页面将来真要做拖动排序"时才用；队列页 `ui/screens/WatchLaterScreen.kt` 已无拖动实现（硬约束 20）。
 **H12 · 画中画"关闭"不保证销毁 Activity：收尾要挂在 `onStop`**
 - 触发：只在 `onDestroy()` 里 `PipController.closeAndRelease()`，以为"关掉小窗 = Activity 销毁"。
 - 症状：用户没在小窗里按暂停就关掉小窗，声音继续放（用户实测反馈）。
@@ -362,15 +391,18 @@
     500ms 的窗口会把展开误判成关闭（播放器被释放 → 详情页只能重建）。现在用 **2.5 秒**。
   - 顺序必须是 **先交接再恢复**：`handBackForDetail()` → `PlaybackHandoff.givePlayer()` →
     最后 `inPip = false`。反过来会让详情页提前重组、自建播放器，小窗那个变孤儿（背景音）。
-  - `PipController.isHandedOver` 要**同时**认 `PlaybackHandoff` 的持有：`handBackForDetail()` 会清掉
-    session，若只看 session，展开瞬间那次 `ON_STOP` 会把刚交回去的播放器暂停掉。
+  - `PipController.isHandedOver` **只认小窗会话**（`_session.value?.player === p`）。**不要**把
+    `PlaybackHandoff` 的持有并进来：信息流交给详情页的那台会永远留着那个标记，一合并详情页切后台/锁屏
+    就永不暂停、返回时也不释放（阶段三十修掉的正是这个）。"展开小窗刚交回详情页"那一瞬间另用
+    `PipController.isReturningToDetail`（= `PlaybackHandoff.isHeldForHandBack`）放过那次 `ON_STOP`。
   - 判"是不是已经在详情页"时注意 `destination.route` 是**模式串** `detail/{noteId}`，
     要和 `Routes.detail(id)` 比对必须把 `arguments["noteId"]` 拼回去。
   - 从**推荐页**点进详情再开小窗这条路上，暂停来自信息流自己：`VideoFeedScreen` 的
     `LaunchedEffect(active, player)` 在 `active=false` 时 `pause()`，而这一台正是被交给详情页、
     又交给小窗的同一台（日志：`feed active=false handedOver=false` → 小窗里停住）。
     → 信息流所有"停播"分支（`active=false`、`inPip`、dispose）都必须先问归属，
-    判据统一用 `PipController.isHandedOver(p)`（它同时认 `PlaybackHandoff` 的持有）。
+    判据统一用 `PipController.isHandedOver(p)`（**只认小窗会话**："要不要暂停/释放"用它；
+  "刚交回详情页那一瞬间"用 `isReturningToDetail`）。
 - **锁屏不是关小窗**：息屏/锁屏时 Activity 也会 `onStop`，但小窗窗口还活着。把它当"小窗没了"会
   收掉会话、`inPip` 置 false，解锁后那个窗口就按导航内容重组 → 用户看到"小窗里是视频外面套着详情页"。
   判据：`!PowerManager.isInteractive || KeyguardManager.isKeyguardLocked` 时不动会话；
@@ -407,6 +439,7 @@
 - 规矩：`PagerPageHaptics` 只对**本分页器自己的 `DragInteraction`** 置位的翻页给反馈
   （程序化滚动不产生拖动事件）。任何"共享页码的两处视图"都要按这个模式区分"用户操作"与"程序化同步"。
 
+## I. 验证工具本身的坑
 
 **I1 · `uiautomator dump` 失败时会读到上一次的旧文件**
 - 触发：脚本里 `uiautomator dump --compressed /sdcard/d.xml; cat /sdcard/d.xml`。
@@ -419,46 +452,18 @@
   界面"卡住不动"时先确认 dump 是不是旧文件，再去怀疑应用。
 - 相关：整机焦点丢失时（`mCurrentFocus` / `mResumedActivity` 都为空）`uiautomator` 会一直失败，
   按一次 `KEYCODE_WAKEUP` + `KEYCODE_HOME` 就能恢复，不必重启模拟器。
+- 反例：把"记录条数有没有变大"当判据 —— 见 I2。
 
-**H5 · 自动化验证的系统边界（本次踩到的两条）**
-- 画中画窗口的「关闭 / 展开」是系统覆盖层，**不吃 `adb shell input tap`**（注入触摸被忽略）。
-  验证「展开」改用 `am start --activity-reorder-to-front`（等于把任务拉到前台），
-  「关闭」只能做代码路径确认，如实写进 `docs/CHANGELOG.md`。
-- 全屏页面（图文查看器、视频真全屏）上 `uiautomator dump` 经常返回空串
-  （`Failed to write while dumping service user: Broken pipe`）。此时改用截图 + 查库取证；
-  要确保打开的是**图文**作品，先
-  `run-as <pkg> sqlite3 databases/xhs_local.db "select noteId from history where noteType=1"`
-  拿 id，再 `am start -a android.intent.action.VIEW -d "xhstp://note/<id>"` 直接打开。
+---
 
-**H6 · 动画"不生效"先查 `animator_duration_scale`**
-- 触发：给双击缩放接了 `animateFloatAsState` + `tween(240ms)`，实机上却像瞬变。
-- 症状：在渲染值上挂探针，`logcat` 只得到 `1.0` 与 `2.5` 两个值（没有任何中间值）。
-- 原因：模拟器/开发者选项把 **动画时长比例设成了 0**（`settings get global animator_duration_scale`
-  → `0`），Compose 的动画会遵守这个比例，于是瞬间完成。代码本身没问题。
-- 正确做法：`settings put global animator_duration_scale 1` 再测；要抓中间帧而截图太慢
-  （`screencap` 单次接近秒级）时，把动画时长临时调到 10s 以上、在渲染值上挂一行 `Log.d`
-  数中间值，取证完**必须移除探针并把时长还原**（同时把 `animator_duration_scale` 改回去）。
+**I2 · 触感取证不能用"累计计数"**
+- 触发：用 `dumpsys vibrator_manager | grep opPkg=com.thirdparty.xhs | measure` 的数量判断"这次点击有没有触感"。
+- 症状：连着点几下计数**卡住不动**（实测停在 47），看起来像"改的代码没生效"。
+- 原因：`vibrator_manager` 的 **`Previous vibrations` 只保留最近 50 条记录**，新记录进来旧记录滚出去，
+  所以条数在 50 附近饱和；它本来就不是累计计数器。
+- 正确做法：**看时间戳**。把最后几条 `createTime` 打出来，与刚才操作的时刻对齐即可（例如
+  `10-05 16:25:15.462 TICK`、`16:25:19.898 TICK` 就是点备份页按钮的那几下）。
 
-**H10 · 同一个播放器被两个界面抢：小窗进驻时信息流必须"放过它"**
-- 触发：推荐页 → 详情页 → 小窗，三处都在用**同一个** `ExoPlayer` 实例。
-- 症状：小窗在前面放着，后面的推荐流也在放 → 两条声音混在一起；于是"进小窗就让信息流
-  `pause()`"，但**无差别 pause 会把小窗那一台一起按停**（实测：小窗里视频停住、
-  `dumpsys audio` 里那一路 `state:paused`）。
-- 正确做法：一律用 `PipController.isHandedOver(player)` 判断归属再决定要不要动它 ——
-  详情页销毁时不 release 是这条规则，信息流在小窗期间暂停也是这条规则。
-- 判断"现在到底有没有在放"：`adb shell dumpsys audio | grep 'AudioPlaybackConfiguration piid:'`
-  看本应用那几路的 `state:started / state:paused`。`logcat` 里的累计事件（`event:started` 计数）
-  是历史量，不能判断当前状态。
+**I3 · 触感取证要看时间戳**（与 I2 同源，单独列出以免再踩）
+- 判据：`createTime` 落在"我刚才操作的那几秒"内，并且 `opPkg` 是本应用，就算通过。
 
-**H11 · 列表拖动排序要有边缘自动滚动，且位移只用一个坐标系**（⚠️ 队列的拖动排序**已删除**，见硬约束 20 / H2；本节只在其它页面将来真要做拖动排序时才参考）
-- 触发：队列排序需要"把第 1 行拖到屏幕外的第 N 行"。
-- 症状：只能拖到当前可见区域内的位置；第一版"手指位移累加 + 每过半行换位"更是只能挪一格（见 H2）。
-- 正确做法（现行）：
-  1. **只用一个坐标系**——内容坐标 = 视口坐标 + `scrollState.value`；手指位置反推为
-     `viewIndex * rowHeight + change.position.y − scrollState.value`，落点与行的位移都从内容坐标算。
-     这样"列表被滚动"和"手指移动"只是同一个数在变，不需要到处补正。
-  2. 边缘自动滚动：一个按帧跑的循环，在上下 110dp 内滚动，步长随接近程度衰减（上限 18dp/帧），
-     并把滚动量补回拖动位移（`dragOffset += moved`）。**密度只能在组合里读**，要先把 dp 换算成 px 再进协程。
-  3. 第二根手指的滑动天然可用：被拖行的手势只处理自己那个指针，`verticalScroll` 是它的父节点，
-     另一个指针的拖动归父节点 —— 前提是手势与 `clickable` 挂在同一个节点上（H2）。
-- 参考：`ui/screens/WatchLaterScreen.kt`。

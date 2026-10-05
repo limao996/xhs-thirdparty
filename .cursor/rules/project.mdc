@@ -10,19 +10,26 @@ alwaysApply: true
 
 # 小黄书第三方客户端（xhs-thirdparty）
 
-完整规则在 [`AGENTS.md`](../../AGENTS.md) 与 [`docs/ai/`](../../docs/ai/)；这里是必须当场生效的约束。
+完整规则在 [`AGENTS.md`](../../AGENTS.md) 与 [`docs/ai/`](../../docs/ai/)；**以 AGENTS.md 为准**（那里有 26 条硬约束，编号 1–24、另有 5b/17b）。下面是必须当场生效的一部分，不是全部。
 
 ## 硬约束
 
 1. 输出简体中文；代码、命令、标识符保持原文。
 2. 纯 Kotlin + Compose，**不写 XML 布局**，不引入 `appcompat` / `com.google.android.material`。
-3. `material3` = `1.5.0-alpha29`（不得降级）；`fragment-ktx` ≥ `1.8.9`。
+3. `material3` = `1.5.0-alpha29`（不得降级）；`fragment-ktx` ≥ `1.8.9`；`minSdk` = 26（Android 8.0）。
 4. `CLIENT_VERSION` = `2.6.0`（协议版本，勿动）；`versionCode` 用 `appVersionCode` 表达式。
 5. 不改 `keystore/release.jks` 与签名口令；不提交 APK / 截图 / `local.properties` / 构建缓存。
 6. 改文件用编辑工具，不要用 shell 拼字符串写源码。
-7. 声称"已修复/已验证"必须附可复现证据（编译输出、`uiautomator dump`、截图）。
+7. 声称"已修复/已验证"必须附可复现证据（编译输出、`uiautomator dump`、截图、日志行）。
 8. **不得移除或绕开游客账号轮换链路**（`v2/app/init` → `login-with-guest` → 校验 VIP → 退避）；它才是"VIP 一直有"的原因。
 9. 文档里不要写"不破解付费"这类与实现相反的声明——机制就是自动注册新游客身份领取新游客体验窗口。
+10. 菜单 / 弹窗一律用原生 `material3.AlertDialog`；不要 `DropdownMenu`，也不要自绘遮罩与入场动画（AGENTS 16）。
+11. 触感只用系统 API（`ui/components/Haptics.kt`，低版本按 SDK 降级）；屏幕上自己画的按钮**都要**有触感，不加的只有系统返回手势（AGENTS 19）。
+12. 关注按钮只有 `ui/components/FollowPill.kt` 一套；取消关注先弹确认（AGENTS 21）。
+13. 稍后观看队列**不提供排序**：无序号、无上移/下移、无拖动（AGENTS 20）。
+14. 分享走系统分享面板 + 口令回流检测（`ShareText.markSelfShared`、`EXTRA_EXCLUDE_COMPONENTS`）（AGENTS 22）。
+15. 画中画：进小窗**不要**退出详情页；`inPip` 只由 `handBackForDetail()` / `closeAndRelease()` 翻转；"要不要暂停/释放"的归属判据只认小窗会话（AGENTS 17 / 17b）。
+16. 改 Room schema 必须 bump version **并写真迁移**，不要依赖 `fallbackToDestructiveMigration()`（AGENTS 5b、CONVENTIONS）。
 
 ## 代码放置
 

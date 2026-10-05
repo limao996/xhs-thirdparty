@@ -42,9 +42,8 @@
 
             <!-- Share links: the 分享 action copies an `xhstp://note/<id>` token, and
                  opening such a link (browser, chat, anywhere) must come back here.
-                 The MAIN/LAUNCHER filter deliberately lives on the aliases below
-                 instead, so the launcher name/icon can be switched at runtime —
-                 having it here too would put a second, fixed icon on the desktop. -->
+                 （历史上这里曾把 MAIN/LAUNCHER 放到 activity-alias 上以便运行时换图标；
+                 现在 alias 已经删掉，启动入口就是上面那个 intent-filter。） -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />

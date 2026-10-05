@@ -48,7 +48,11 @@ app/src/main/java/com/thirdparty/xhs/
 │   └── ...
 ├── navigation/AppNavHost.kt + Routes.kt   唯一路由注册处
 ├── ui/screens/*.kt            页面（Home/DiscoverTab/Detail/VideoFeed/Search/Author/...）
-├── ui/components/*.kt         可复用组件（XhsWaterfall/VideoPlayer/ImageGallery/BiometricLock/...）
+├── ui/components/*.kt         可复用组件：瀑布流 XhsWaterfall / 播放 VideoPlayer·MediaPlayer·VideoSurface /
+│                              图文 ImageGallery·FullscreenImageViewer / 画中画 PipController·PlaybackHandoff /
+│                              队列入口 WatchLaterFab·WatchLaterBar·CornerFabStack / 触感 Haptics /
+│                              关注 FollowPill / 菜单 NoteActionDialog·ConfirmActionDialog /
+│                              锁 BiometricLock / 图片 XhsAsyncImage / 其它 EmptyState·FeeBadge
 ├── ui/viewmodel/*.kt          状态编排（每个 screen 一个）
 └── ui/theme/Theme.kt + Tokens.kt   M3 Expressive 主题、设计令牌
 ```
@@ -104,6 +108,9 @@ app/src/main/java/com/thirdparty/xhs/
 
 ## 6. 环境事实（本机，构建用）
 
+> 这张表里有**机器专属绝对路径**。它与 CONVENTIONS §5「文档不写死机器路径」的关系：这里是**环境事实记录**，
+> 不是给人复制执行的命令；换机器时只改这一张表，别处不要照搬这些路径。
+
 | 项 | 值 |
 | --- | --- |
 | JAVA_HOME | `D:\Scoop\apps\temurin17-jdk\current` |
@@ -123,6 +130,7 @@ app/src/main/java/com/thirdparty/xhs/
   进程内位图 LRU（`ui/components/XhsAsyncImage.kt` 的 `BitmapCache`，`maxMemory/8`）、`cache/` 下的其它临时文件。
   收藏 / 最近浏览 / 关注在 Room（`xhs_local.db`）里，是**数据不是缓存**，清理不会动它们；视频不落盘（边看边下，退出即释放）。
   入口：设置 → 数据 → 清除缓存（`ui/screens/CacheScreen.kt` + `ui/viewmodel/CacheViewModel.kt`）。
-- 检查更新：`net/UpdateChecker.kt` 查 GitHub `releases/latest`；启动时 `App.checkUpdateOnLaunch()` 自动查一次，
+- 检查更新：`net/UpdateChecker.kt` 查 GitHub `releases/latest`；启动时 `App.checkUpdateOnLaunch()` 自动查一次
+  （**12 小时节流**，且只有成功的检查才写时间戳 —— 硬约束 15；「跳过这个版本」记在 `settings.ignored_update_version`），
   只有 `Newer` 且未被「跳过这个版本」（`settings.ignored_update_version`）时才弹 `UpdateAvailableDialog`。
   GitHub 匿名额度 60 次/小时/IP，超出是 HTTP 403（页面上显示「检查失败：GitHub 限流」），限流/断网不会弹窗。

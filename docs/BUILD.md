@@ -68,11 +68,22 @@ Get-FileHash $apk -Algorithm MD5                          # 分发时贴这个�
 | --- | --- |
 | 大小 / md5 | `3,306,226 B` / `6d799ca08d1fab281aef854961c70057` |
 | sha256 | `1c1cbdecf1cfb9bf96b00e3fb992c41c175dafa65ab9d1f69f30e75669e7e860` |
-| versionName / versionCode | `1.3.0` / 时间戳表达式（每次构建递增） |
+| versionName / versionCode | 该包是 **`1.2.1` / `326862`**（`1.3.0` 源码尚未重新打过正式包） |
 | minSdk / targetSdk / compileSdk | `26` / `37` / `37` |
 | 签名 | v2 scheme（v1/v3 未启用），`CN=ThirdParty XHS Client`，RSA 2048 |
 | 权限（合并后） | `INTERNET`、`ACCESS_NETWORK_STATE`、`WAKE_LOCK` + `USE_BIOMETRIC`、`USE_FINGERPRINT`（biometric 库合入）+ `com.thirdparty.xhs.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`（androidx 合入） |
 | 可调试 | 否（manifest 里没有 `debuggable`） |
+| 画中画 / 任务 | `supportsPictureInPicture="true"`、`launchMode="singleTask"`（深链复用同一实例，避免第二个界面/第二个小窗） |
+| 明文流量 | `usesCleartextTraffic="true"`：**只为局域网 http WebDAV 放行**；公网地址在应用内会被 `WebDavClient.validate()` 拦掉（Basic 认证会明文过网） |
+
+### 单元测试与 CI
+
+```powershell
+gradlew.bat testDebugUnitTest      # 目前只有 net/UpdateCheckerTest（版本比较 + GitHub 应答解析）
+```
+
+CI（`.github/workflows/android.yml`）在 push / PR 上跑 `assembleDebug` → `testDebugUnitTest` → **`assembleRelease`**
+（release 走 R8 + 资源压缩，才是真正会崩的那条；签名用仓库里的 keystore）。
 
 装到设备后至少确认两件事：冷启动能看到顶栏的 `游客ID：…` 与瀑布流内容（这一步同时证明 R8 压缩没有破坏 AES 包体与 Room 路径），
 以及 `adb logcat` 里没有 `FATAL EXCEPTION`。release 与 debug 是两个 applicationId，可以共存；release 首次安装会新建一个游客身份。
@@ -91,7 +102,7 @@ Get-FileHash $apk -Algorithm MD5                          # 分发时贴这个�
 
 `versionName` 变了就更新 `docs/CHANGELOG.md` 的统计表与 `docs/ai/CONTEXT.md`。
 
-上一版 `v1.2.0` 的实测值留档：`3,289,838 B` / md5 `1ea558980a0f9d6085c232d0fc6b0462` / versionCode `321075`。
+发布留档：`v1.2.1`（`3,306,226 B` / md5 `6d799ca08d1fab281aef854961c70057` / versionCode `326862`）；再上一版 `v1.2.0`（`3,289,838 B` / md5 `1ea558980a0f9d6085c232d0fc6b0462` / versionCode `321075`）。
 
 ## 4. 签名
 

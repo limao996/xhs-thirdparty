@@ -2,7 +2,7 @@
 
 > **修复进度**：P0-2~P0-7 已按用户取舍全部修掉（P0-1「仓库里的 token」按用户要求不动）；
 > 附录 A/B/C 的 P1 大部分已修（换号并发、备份安全与事务、闸门单飞、清凭据、图片/更新/WebDAV 硬化、
-> 失败态与分页、路由与死代码、lint 40→1）；剩余 P2 见文末「未修清单」。
+> 失败态与分页、路由与死代码、lint 40→1）。**未修清单不在本文件**：逐条列在 `CHANGELOG.md` 阶段三十一末尾。
 > 逐条改动与证据在 `docs/CHANGELOG.md` 的**阶段二十三 / 二十四**。
 
 > 审查对象：`xhs-thirdparty`（Kotlin + Compose，82 个 Kotlin 文件 / 15038 行，debug APK 25.15 MB）
@@ -32,7 +32,7 @@
 | P0-14 | 「覆盖」恢复**不是原子的**：先清三张表再逐条写，无 `withTransaction` → 中途失败 = 用户数据已清空 | `data/BackupManager.kt:214-276` | 专项C |
 | P0-15 | Manifest **没有 `launchMode`**：深链会新建第二个 `MainActivity`，`onNewIntent` 永不触发（代码注释却断言会） | `AndroidManifest.xml:22-27` vs `MainActivity.kt:104-106` | 专项C（已复核） |
 | P0-16 | `versionName` 仍是 `1.2.1`，而 v1.2.1 之后已落地十几批功能 → 关于页与"检查更新"报"已是最新"是错的 | `app/build.gradle:25` | 专项C |
-| P0-17 | 交互规范（本项目自己的硬约束）被执行得**前后不一致**：作者页第 5 份自绘关注按钮（违反 21）；7 处「返回」与 9 处「关闭/取消」**错误地加了触感**（违反 19） | `AuthorScreen.kt:119-140`、`DetailScreen.kt:361`、`MediaPlayer.kt:632`、`ConfirmActionDialog.kt:39` 等 | 专项B（已复核 ①⑤） |
+| P0-17 | 交互规范（本项目自己的硬约束）被执行得**前后不一致**：作者页第 5 份自绘关注按钮（违反 21）。⚠️ 原文还写"返回/关闭错误地加了触感"，**该结论已作废**：用户后来明确要求屏幕上的返回/关闭/取消**都要**有触感，硬约束 19 已按此改写 | `AuthorScreen.kt:119-140`、`DetailScreen.kt:361`、`MediaPlayer.kt:632`、`ConfirmActionDialog.kt:39` 等 | 专项B（已复核 ①⑤） |
 
 >
 > 另有 3 条"低版本可能静默失效"的疑点值得单独提：`Haptics` 用的 `SegmentTick`/`Confirm`/`Reject`
@@ -134,7 +134,7 @@
    大多数项目的 proguard 文件是抄来的模板，这份是实证出来的。
 3. 全仓库 **0 处 `!!`、0 处 `runBlocking`、0 处 `GlobalScope`**；`Log.*` 全部用 `BuildConfig.DEBUG` 门控
    （`MediaPlayer.kt:375,407,419`）。
-4. 文档体系（`AGENTS.md` 24 条硬约束 + `CHANGELOG` 22 个阶段 + `GOTCHAS` 选题极细）——
+4. 文档体系（`AGENTS.md` 硬约束（当时 24 条，现 26 条）+ `CHANGELOG` 22 个阶段 + `GOTCHAS` 选题极细）——
    连"验证工具自己会骗人"（假 dump、vibrator 只留 50 条）都记了。
 5. 缓存清理**逐项对应勾选**（硬约束 13）且 `isClearableTemp` 明确排除 `http_cache` 与 SQLite 锁文件
    （`data/AppCaches.kt:90`），这类"顺手多删一个"的坑被提前挡住了。
@@ -350,7 +350,7 @@
 - `CONTEXT.md:47` 说 WebDAV 用 PROPFIND，代码里没有 PROPFIND。
 - `README.md:29` / `BackupScreen.kt:219` 说备份只含四类，实际还含搜索记录与 WebDAV 明文密码。
 - `AGENTS.md:62` / `VERIFY.md:99-101` 说锁文件在 `cache/`，`VERIFY.md:108` 自己把库写在 `databases/`。
-- `docs/README.md:21` 说 AGENTS 有 **12 条**硬约束（实际 24 条）；`:25` 的 GOTCHAS 索引只到 **G**（实际 A–I）。
+- （本条已修，留档）`docs/README.md` 曾把硬约束写成 12 条、GOTCHAS 索引只到 G；现在索引已写到 H/I，条数写法改为"编号 1–24、另有 5b/17b"。
 - `docs/README.md:39` / `CONVENTIONS.md:39` 要求"文档不含机器专属绝对路径"，而 `BUILD.md:7-9`、`CONTEXT.md:106-108` 写了 `D:\Scoop\...`。
 - `BUILD.md:71,94,110-125` 把 md5/体积/versionCode 当"当前值"留档，但仓库**没有任何 git tag**，无法核对。
 - `CHANGELOG.md:425` 与 `:439` 关于 RemoteAction 的记载前后相反（历史记录，建议加"已在阶段末修正"标注）。

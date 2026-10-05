@@ -64,11 +64,12 @@ app/src/main/java/com/thirdparty/xhs/
 │   │                             CommentRepliesDialog / ConfirmActionDialog / EmptyState /
 │   │                             UpdateAvailableDialog / NoteActionDialog（长按菜单）/ FeeBadge /
 │   │                             FollowedAuthorRow / PlaybackHandoff / PipController（画中画）/
-│   │                             WatchLaterFab / WatchLaterBar /
+│   │                             WatchLaterFab / WatchLaterBar / CornerFabStack / FollowPill /
+│   │                             NoteActions / NoteActionDialog（长按菜单）/ Haptics（触感）/
 │   │                             BiometricLock / XhsAsyncImage / MediaPlayer / ResetZoomButton
-│   ├── viewmodel/                Home / Discover / Detail / VideoFeed / Search / Author /
-│   │                             Followed / UserList / LocalList / Profile / Guest /
-│   │                             PagingGuard / Update / Cache / WatchLater
+│   ├── viewmodel/                Discover / Detail / VideoFeed / Search / Author / UserList /
+│   │                             LocalList / Profile / Guest / PagingGuard / Update / Cache /
+│   │                             WatchLater（HomeScreen 复用 GuestViewModel）
 │   └── theme/                    Theme.kt（M3 Expressive）+ Tokens.kt（设计令牌）
 └── res/                          仅图标与基础资源（values/values-night/自适应图标/背景色）
 ```
@@ -90,7 +91,7 @@ app/src/main/java/com/thirdparty/xhs/
 
 ### 3.1 VIP 续期：账号门（本项目最核心的机制）
 
-服务端会给**每一个新注册的设备身份**发一段 VIP 体验窗口。客户端不破解任何校验，而是**换号**：窗口将尽时注册一个全新随机身份，新号又自带 VIP。
+服务端会给**每一个新注册的设备身份**发一段 VIP 体验窗口。客户端的做法是**换号**：窗口将尽时注册一个全新随机身份，新号又自带 VIP。
 
 ```
 需要账号的请求 ──► XhsApi.call()
@@ -134,17 +135,17 @@ Room 数据库 `xhs_local.db`，`@Database(version = 3)`，实体四张：
 
 | 实体 | 表用途 | 相关 DAO |
 | --- | --- | --- |
-| `SavedNoteEntity` | 收藏 | `XhsDao`（`savedDao()`） |
-| `HistoryEntity` | 最近浏览（不记录未观看的视频） | `XhsDao`（`historyDao()`） |
+| `SavedNoteEntity` | 收藏 | `SavedNoteDao`（文件 `XhsDao.kt`，`savedDao()`） |
+| `HistoryEntity` | 最近浏览（不记录未观看的视频） | `HistoryDao`（`historyDao()`） |
 | `FollowedEntity` | 我关注的作者 | `FollowDao`（`followDao()`） |
-| `WatchLaterEntity` | 稍后观看队列（`position` 从 0 起，顺序就是队列顺序） | `XhsDao`（`watchLaterDao()`） |
+| `WatchLaterEntity` | 稍后观看队列（`position` 从 0 起，顺序就是队列顺序） | `WatchLaterDao`（`watchLaterDao()`） |
 
 - **迁移**：`2 → 3` 是**真迁移**（`MIGRATION_2_3` 只 `CREATE TABLE watch_later`）。已发布版本上的
   收藏 / 最近浏览 / 关注只有本机一份，靠 `fallbackToDestructiveMigration()` 兜底等于升级时删用户数据；
   **刻意不再挂 `fallbackToDestructiveMigration()`**：漏写迁移时宁可启动就报错，也不能静默清空用户的收藏 / 浏览 / 关注 / 队列。跨版本一律写真迁移（现存 `MIGRATION_1_2`、`MIGRATION_2_3`）。
 - 队列顺序只由 `position` 表达：**不提供排序**（按加入时间），增删之后 `renumberWatchLater()`
   压紧，不留空洞 —— 队列只有几十条，比维护链表/浮点 position 简单且不会积累误差。
-- 备份内容：收藏、最近浏览、关注、设置项、搜索记录、WebDAV 配置（**含 URL、用户名与密码**，JSON 明文；备份文件本身要放好）。**不包含账号凭据**（identity / token / user_hash / VIP 窗口都不导出）。
+- 备份内容：收藏、最近浏览、关注、**稍后观看队列**、设置项（主题 / 历史上限 / 应用锁 / 自动换号）、搜索记录、WebDAV 配置（**含 URL、用户名与密码**，JSON 明文；备份文件本身要放好）。**不包含账号凭据**（identity / token / user_hash / VIP 窗口都不导出），且**不恢复** `vipEnd`。
 - 备份落点：本地文件（用户选择）或 WebDAV 的 `xhs/` 子目录（固定，便于恢复时定位）。
 
 ## 5. 导航与深链
@@ -181,7 +182,7 @@ Room 数据库 `xhs_local.db`，`@Database(version = 3)`，实体四张：
 `ui/theme/Theme.kt`
 
 - `XhsTheme(mode = ThemeMode.SYSTEM)`：跟随系统深浅色。
-- API ≥ 31 使用 `dynamicLightColorScheme` / `dynamicDarkColorScheme`（壁纸取色）；否则回退品牌配色 `LightColors` / `DarkColors`（深紫 + 金色）。
+- API ≥ 31 使用 `dynamicLightColorScheme` / `dynamicDarkColorScheme`（壁纸取色）；否则回退品牌配色 `LightColors` / `DarkColors`（玫瑰红 `#BD1E59` + 金色）。
 - 主题入口是 `MaterialExpressiveTheme(colorScheme, motionScheme = MotionScheme.expressive(), typography = XhsTypography, shapes = XhsShapes)`，需要 `@OptIn(ExperimentalMaterial3ExpressiveApi::class)`。
 - 这就是 `material3` 必须停在 `1.5.0-alpha29` 的原因：该 API 在低版本是 internal。
 
@@ -227,6 +228,5 @@ Room 数据库 `xhs_local.db`，`@Database(version = 3)`，实体四张：
 ## 8. 不在范围内
 
 - 不做发评论 / 点赞写操作；不内置任何内容数据。
-- **不做（也不需要做）付费校验破解**：付费内容通过"换新游客号领新体验窗口"获得访问（见 §3.1），
-  客户端从不伪造付费凭证、不改包内校验、也不解密需要额外密钥的内容。
+- **不做本地校验改写**：付费内容通过"换新游客号领新体验窗口"获得访问（见 §3.1）；客户端不改包内校验、也不解密需要额外密钥的正片内容。
 - 不提供上架渠道（自签名密钥）、不做多进程、不做后台服务。

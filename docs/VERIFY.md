@@ -15,11 +15,13 @@ adb devices
 . .\tools\verify.ps1
 ```
 
-`verify.ps1` 提供的函数：`EnsureDevice`（等待并在需要时解锁，解锁密码 `1234`）、`LaunchApp`、
-`WaitFocused`、`DumpUi`（返回 UI dump 文本）、`TapText`（按文本点击）、`Shot`（截图到
-`docs/images/screenshots/`）、`CrashCount`（崩溃计数）、`SwitchStates`（开关状态读取）。
+`verify.ps1` 提供的函数：`EnsureDevice`（等待并在需要时解锁，解锁密码 `1234`）、`LaunchApp([deepLink])`、
+`WaitFocused`、`DumpUi`（返回 UI dump 文本）、`TapText`（按文本点击）、`TapXY`（按坐标点击）、
+`Texts`（把 dump 里的文本节点列出来，做断言方便）、`Shot`（截图到 `docs/images/screenshots/`）、
+`CrashCount`（崩溃计数）、`SwitchStates`（开关状态读取）、`Resolve-Adb`（解析 adb 路径）。
 
 默认包名 `com.thirdparty.xhs.debug`（`$script:PKG`）；截图目录由 `$PSScriptRoot` 推导，不依赖机器路径。
+`adb` 位置不写死：优先 `$env:ADB`，其次 Android SDK 环境变量，最后 `PATH`（见脚本顶部注释）。
 
 ## 2. 安装必须校验（不能只看"安装成功"）
 
@@ -121,7 +123,26 @@ adb shell "run-as com.thirdparty.xhs.debug cp /data/data/com.thirdparty.xhs.debu
 | `uiautomator dump` 自身 | 空文本、超时、偶发崩溃 | 重试并校验非空；把它算进时序 |
 | 旧进程未杀 | 观察到的行为与新代码不一致 | `am force-stop` 后再启动 |
 
-## 7. 临时探针要收尾
+## 7. 播放器 / 小窗类改动的取证手法（2026-10-06 实测可用）
+
+这类改动光看界面常常看不出差别（"到底在播还是暂停""小窗隐藏没隐藏"),下面几条是能给出**数字**的手法：
+
+| 要证明的东西 | 命令 | 判据 |
+| --- | --- | --- |
+| 音频到底在不在播 | `adb shell dumpsys audio` 里按 `AudioPlaybackConfiguration piid:.*<uid>` 过滤，数 `state:started` / `state:paused` | `started=N` 就是在放；改前改后**对比**，别只看一次 |
+| 有没有多起播放器（泄漏/重建） | `adb shell logcat -d | Select-String 'ExoPlayerImpl: Init'` 数行数 | 一条路径前后计数应保持一致；"展开小窗"从 1 变 2 就说明详情页自建了播放器 |
+| 小窗窗口的真实尺寸/比例 | `adb shell dumpsys input`，找 `com.thirdparty.xhs.debug/...MainActivity` 那条的 `frame=[l,t][r,b]` | 宽高比应与视频比例一致（如 4:3 片 → 533×400）；这也是唯一稳定的"小窗还在不在"证据 |
+| 小窗是否还在 PiP | `adb shell dumpsys activity activities | Select-String pictureInPicture`（`mLastReportedPictureInPictureMode=true`） | 注意：**不能**用它判断"用户是不是关掉了小窗"，关闭时它可能仍是 true |
+| 触感有没有触发（点击/翻页/长按） | `adb shell dumpsys vibrator_manager`，按 `opPkg=com.thirdparty.xhs.debug` 过滤 | 只看**最近 50 条**（会滚动截断），所以**用 `createTime` 时间戳**判断"这次操作新增了几条"，不要用累计数（GOTCHAS I2/I3） |
+| 前台到底是哪个应用 | `adb shell dumpsys activity activities | Select-String -m1 ResumedActivity` | 模拟器刚重启时界面可能停在别处，**不确认前台就点击会点到别的应用**（本轮真踩过） |
+| 图片/视频"是不是真的在动" | 间隔 1.3 秒各截一次屏，比较 md5：`adb shell screencap -p /sdcard/p1.png`（换 p2），`adb shell md5sum /sdcard/p1.png /sdcard/p2.png` | md5 不同 = 画面在变化（在播/在加载）；相同 = 停住了 |
+| "小窗里画的是不是只有视频" | `Shot` 截图后**看图**（或比对截图里是否出现详情页的标题/按钮文本） | 小窗里出现详情页 UI 就是状态错了（`inPip` 没藏住导航内容） |
+| 锁屏/息屏 | `adb shell input keyevent 26`（再按一次亮屏，无 PIN 时上滑解锁） | 用于验证"切后台/锁屏该不该暂停"这类规则 |
+
+**取不到的**：系统小窗的**关闭手势**（那是 SystemUI 的覆盖层，`input swipe` 注入不进去）。要验证"关闭小窗"的收尾，
+用同一条代码路径的等价触发：小窗播放中息屏（Activity 走 `onStop`、会话仍在），或等宽限任务到期；并在汇报里写明这不是真手势。
+
+## 8. 临时探针要收尾
 
 为定位问题临时加的日志、临时代码、临时环境改动，验证完成后：
 
@@ -130,7 +151,7 @@ adb shell "run-as com.thirdparty.xhs.debug cp /data/data/com.thirdparty.xhs.debu
 3. 还原临时环境改动（例如临时改的网络配置、临时的 SharedPreferences 值）；
 4. 重新编译一次，确认清理后仍可构建。
 
-## 8. 汇报格式
+## 9. 汇报格式
 
 ```
 需求：<原话或摘要>

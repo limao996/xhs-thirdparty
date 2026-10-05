@@ -26,7 +26,8 @@ object Routes {
     const val UPDATE = "update"
     /** 清除缓存：多选要清的缓存类型。入口在 设置 → 数据。 */
     const val CACHE = "cache"
-    /** 稍后观看队列：有序、可增删。入口是各个瀑布流页面的浮动按钮与小窗控制栏。 */
+    /** 稍后观看队列：按加入时间排列、**不提供排序**（硬约束 20）。入口是各瀑布流页面的浮动按钮、
+ * 播放页底部的队列条，以及列表卡片的长按菜单。 */
     const val WATCH_LATER = "watch_later"
 
     fun detail(noteId: Long): String = "detail/$noteId"
