@@ -79,6 +79,7 @@ fun AuthorScreen(
     // 取消关注先确认（+ 关注 直接生效）：误触会让作者从关注列表里消失，而这个页面
     // 本身不会给出任何反馈。
     var confirmUnfollow by remember { mutableStateOf(false) }
+    val haptics = com.thirdparty.xhs.ui.components.rememberHaptics()
 
     Scaffold(
         topBar = {
@@ -117,7 +118,13 @@ fun AuthorScreen(
                     Spacer(Modifier.width(Spacing.s))
                     Surface(
                         onClick = {
-                            if (state.followed) confirmUnfollow = true else viewModel.toggleFollow()
+                            if (state.followed) {
+                                haptics.reject()
+                                confirmUnfollow = true
+                            } else {
+                                haptics.confirm()
+                                viewModel.toggleFollow()
+                            }
                         },
                         shape = Corners.full,
                         color = if (state.followed) MaterialTheme.colorScheme.secondaryContainer

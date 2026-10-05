@@ -341,3 +341,21 @@
 - 正确做法：`settings put global animator_duration_scale 1` 再测；要抓中间帧而截图太慢
   （`screencap` 单次接近秒级）时，把动画时长临时调到 10s 以上、在渲染值上挂一行 `Log.d`
   数中间值，取证完**必须移除探针并把时长还原**（同时把 `animator_duration_scale` 改回去）。
+
+**H10 · 同一个播放器被两个界面抢：小窗进驻时信息流必须"放过它"**
+- 触发：推荐页 → 详情页 → 小窗，三处都在用**同一个** `ExoPlayer` 实例。
+- 症状：小窗在前面放着，后面的推荐流也在放 → 两条声音混在一起；于是"进小窗就让信息流
+  `pause()`"，但**无差别 pause 会把小窗那一台一起按停**（实测：小窗里视频停住、
+  `dumpsys audio` 里那一路 `state:paused`）。
+- 正确做法：一律用 `PipController.isHandedOver(player)` 判断归属再决定要不要动它 ——
+  详情页销毁时不 release 是这条规则，信息流在小窗期间暂停也是这条规则。
+- 判断"现在到底有没有在放"：`adb shell dumpsys audio | grep 'AudioPlaybackConfiguration piid:'`
+  看本应用那几路的 `state:started / state:paused`。`logcat` 里的累计事件（`event:started` 计数）
+  是历史量，不能判断当前状态。
+
+**H11 · 列表拖动排序要有边缘自动滚动**
+- 触发：队列排序需要"把第 1 行拖到屏幕外的第 N 行"。
+- 症状：只能拖到当前可见区域内的位置，手指到屏幕边缘列表不动。
+- 正确做法：记手指在**列表视口**里的纵坐标（`index * rowHeight + change.position.y − scrollState.value`），
+  一个按帧跑的循环在上下 96dp 内滚动（步长随接近程度衰减），并把滚动量补回拖动位移
+  （`dragOffset += moved`），否则落点不跟手指走。密度只能在组合里读，要先把 dp 换算成 px 再进协程。

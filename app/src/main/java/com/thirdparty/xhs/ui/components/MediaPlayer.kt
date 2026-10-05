@@ -345,15 +345,15 @@ private fun AutoHideController(
     // this the controls vanish immediately after a seek and the user never sees
     // where the video landed.
     var interaction by remember(player) { androidx.compose.runtime.mutableIntStateOf(0) }
-    // playback speed, cycled through SPEEDS by the speed button
-    var speedIdx by remember(player) { androidx.compose.runtime.mutableIntStateOf(DEFAULT_SPEED_IDX) }
+    // 播放倍速：拖动条给连续值（0.25x ~ 3x，步进 0.25），不再是固定档位列表
+    var speed by remember(player) { androidx.compose.runtime.mutableFloatStateOf(DEFAULT_SPEED) }
     // fine-seek step: ±5s by default, toggled to ±1s for frame-ish nudging
     var fineStep by remember(player) { mutableStateOf(false) }
     // 更多菜单：微调步长、倍速都收在这里
     var menuOpen by remember(player) { mutableStateOf(false) }
 
     // keep the speed applied
-    LaunchedEffect(speedIdx) { player.setPlaybackSpeed(SPEEDS[speedIdx]) }
+    LaunchedEffect(speed) { player.setPlaybackSpeed(speed) }
 
     fun seekBy(deltaMs: Long) {
         val d = player.duration
@@ -589,16 +589,26 @@ private fun AutoHideController(
                                         interaction++
                                     }
                                     HorizontalDivider()
-                                    SPEEDS.forEachIndexed { i, s ->
-                                        PlayerMenuRow(
-                                            label = if (i == speedIdx) "$s x  ✓" else "$s x",
-                                            highlighted = i == speedIdx
-                                        ) {
-                                            speedIdx = i
-                                            menuOpen = false
-                                            interaction++
-                                        }
+                                    // 倍速：拖动条（0.25x ~ 3x）。原来是 6 个固定档位的列表，
+                                    // 用户要求改成可拖的连续值
+                                    PlayerMenuRow(
+                                        label = "倍速 ${formatSpeed(speed)}x",
+                                        highlighted = speed != DEFAULT_SPEED
+                                    ) {
+                                        speed = DEFAULT_SPEED
+                                        interaction++
                                     }
+                                    Slider(
+                                        value = speed,
+                                        onValueChange = {
+                                            speed = (Math.round(it * 20f) / 20f)
+                                                .coerceIn(MIN_SPEED, MAX_SPEED)
+                                            interaction++
+                                        },
+                                        valueRange = MIN_SPEED..MAX_SPEED,
+                                        steps = 10,
+                                        modifier = Modifier.padding(horizontal = Spacing.xs)
+                                    )
                                     if (onEnterPip != null) {
                                         HorizontalDivider()
                                         PlayerMenuRow(label = "小窗播放") {
@@ -687,8 +697,8 @@ private fun AutoHideController(
                         modifier = Modifier.padding(start = Spacing.xs))
                     Spacer(Modifier.weight(1f))
                     // 当前倍速直接显示，否则用户在底栏看不出视频被改过速
-                    if (speedIdx != DEFAULT_SPEED_IDX) {
-                        Text("${SPEEDS[speedIdx]}x",
+                    if (speed != DEFAULT_SPEED) {
+                        Text("${formatSpeed(speed)}x",
                             color = MaterialTheme.colorScheme.primary,
                             style = MaterialTheme.typography.labelSmall,
                             modifier = Modifier.padding(end = Spacing.xs))
@@ -722,8 +732,14 @@ private fun PlayerMenuRow(label: String, highlighted: Boolean = false, onClick: 
     }
 }
 
-/** Playback speed steps offered by the speed button. */private val SPEEDS = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
-private const val DEFAULT_SPEED_IDX = 2
+/** 倍速范围与默认值（拖动条用；步进 0.25 由 `steps = 10` 表达）。 */
+private const val MIN_SPEED = 0.25f
+private const val MAX_SPEED = 3f
+private const val DEFAULT_SPEED = 1f
+
+/** 倍速显示：1.0 显示成「1」，1.25 显示成「1.25」，不留多余的零。 */
+private fun formatSpeed(v: Float): String =
+    if (v == v.toInt().toFloat()) v.toInt().toString() else ((v * 100).toInt() / 100f).toString()
 
 private fun fmt(ms: Long): String {
     // Round to the nearest second rather than truncating: truncation made a clip

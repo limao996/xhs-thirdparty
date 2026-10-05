@@ -3,6 +3,7 @@ package com.thirdparty.xhs.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,6 +33,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -142,6 +146,43 @@ fun WatchLaterScreen(
             if (state.items.map { it.noteId } == want) committed = null
         }
         val rowHeightPx = with(LocalDensity.current) { QueueRowHeight.toPx() }
+        val scrollState = rememberScrollState()
+        // 手指在**列表视口**里的纵坐标（拖动时才有意义）与视口高度：边缘自动滚动靠这两个
+        var pointerY by remember { mutableFloatStateOf(-1f) }
+        var viewportH by remember { mutableIntStateOf(0) }
+        // 自动滚动循环里要读"最新"的行数/行高/起始行 —— LaunchedEffect(Unit) 只在首帧跑一次，
+        // 直接闭包捕获会一直用第一次的旧值
+        val liveItems by rememberUpdatedState(items)
+        val liveRowH by rememberUpdatedState(rowHeightPx)
+        val liveFrom by rememberUpdatedState(dragFrom)
+
+        // 拖到屏幕上下边缘时自动滚动：不然"把第 1 行拖到屏幕外的第 20 行"根本做不到
+        // （用户实测反馈）。列表滚动之后，手指相对被拖行的位移要按滚动量补回来，
+        // 否则落点不会跟着手指走。
+        // 边缘自动滚动的两个常量（密度只能在组合里读，所以先算好再进协程）
+        val edgePx = with(LocalDensity.current) { 96.dp.toPx() }
+        val stepPx = with(LocalDensity.current) { 16.dp.toPx() }
+        LaunchedEffect(Unit) {
+            while (true) {
+                withFrameNanos { }
+                if (liveFrom < 0 || pointerY < 0f || viewportH <= 0) continue
+                val dy = when {
+                    pointerY < edgePx -> -stepPx * (1f - pointerY / edgePx)
+                    pointerY > viewportH - edgePx ->
+                        stepPx * (1f - (viewportH - pointerY) / edgePx)
+                    else -> 0f
+                }
+                if (dy == 0f) continue
+                val before = scrollState.value
+                scrollState.scrollBy(dy)
+                val moved = (scrollState.value - before).toFloat()
+                if (moved != 0f) {
+                    dragOffset += moved
+                    dragTarget = (liveFrom + (dragOffset / liveRowH).roundToInt())
+                        .coerceIn(0, liveItems.lastIndex)
+                }
+            }
+        }
 
         fun land() {
             val from = dragFrom
@@ -159,7 +200,9 @@ fun WatchLaterScreen(
         }
 
         Column(
-            Modifier.fillMaxSize().padding(pad).verticalScroll(rememberScrollState())
+            Modifier.fillMaxSize().padding(pad)
+                .onSizeChanged { viewportH = it.height }
+                .verticalScroll(scrollState)
         ) {
             Text(
                 "长按可以拖动排序",
@@ -185,16 +228,20 @@ fun WatchLaterScreen(
                             dragFrom = index
                             dragTarget = index
                             dragOffset = 0f
+                            pointerY = -1f
                             haptics.longPress()
                         },
                         onDrag = { change, amount ->
                             change.consume()
                             dragOffset += amount.y
+                            // 视口坐标 = 行的基准位置 + 手指在行内的位置 − 当前滚动量
+                            pointerY = index * rowHeightPx + change.position.y - scrollState.value
                             dragTarget = (index + (dragOffset / rowHeightPx).roundToInt())
                                 .coerceIn(0, items.lastIndex)
                         },
-                        onDragEnd = { land() },
+                        onDragEnd = { pointerY = -1f; land() },
                         onDragCancel = {
+                            pointerY = -1f
                             // 已经拖到别的位置就照样落库：手势被「取消」（系统抢走指针、
                             // 注入事件流被打断等）时把顺序弹回去，用户会觉得拖动白做了。
                             // 实测：`adb shell input draganddrop` 走的就是 cancel 分支。

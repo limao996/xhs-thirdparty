@@ -75,6 +75,8 @@ fun SettingsScreen(
     onOpenCache: () -> Unit
 ) {
     var pickTheme by remember { mutableStateOf(false) }
+    // 设置项的点击反馈（系统触感）
+    val haptics = com.thirdparty.xhs.ui.components.rememberHaptics()
     // The lock / limit / auto-switch values come from SharedPreferences, which is
     // NOT observable. Reading App.repo.* directly meant no recomposition after a
     // change: the switch stayed visually put and the next tap computed
@@ -118,7 +120,7 @@ fun SettingsScreen(
                     supportingContent = { Text(themeMode.label()) },
                     leadingContent = { Icon(Icons.Filled.Palette, null, tint = MaterialTheme.colorScheme.primary) },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    modifier = Modifier.clickable { pickTheme = true }
+                    modifier = Modifier.clickable { haptics.tick(); pickTheme = true }
                 )
             }
 
@@ -156,7 +158,7 @@ fun SettingsScreen(
                     supportingContent = { Text("当前保留 $limit 条，超出后自动清理最旧的") },
                     leadingContent = { Icon(Icons.Filled.History, null, tint = MaterialTheme.colorScheme.primary) },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    modifier = Modifier.clickable { pickLimit = true }
+                    modifier = Modifier.clickable { haptics.tick(); pickLimit = true }
                 )
 
                 ListItem(
@@ -180,7 +182,7 @@ fun SettingsScreen(
                     supportingContent = { Text("本地文件或 WebDAV，含收藏 / 浏览 / 关注（不含账号）") },
                     leadingContent = { Icon(Icons.Filled.CloudUpload, null, tint = MaterialTheme.colorScheme.primary) },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    modifier = Modifier.clickable { onOpenBackup() }
+                    modifier = Modifier.clickable { haptics.tick(); onOpenBackup() }
                 )
                 ListItem(
                     headlineContent = { Text("清除缓存") },
@@ -192,7 +194,7 @@ fun SettingsScreen(
                     },
                     leadingContent = { Icon(Icons.Filled.DeleteSweep, null, tint = MaterialTheme.colorScheme.primary) },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    modifier = Modifier.clickable { onOpenCache() }
+                    modifier = Modifier.clickable { haptics.tick(); onOpenCache() }
                 )
             }
         }

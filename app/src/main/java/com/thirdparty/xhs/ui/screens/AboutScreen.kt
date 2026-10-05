@@ -54,6 +54,7 @@ fun AboutScreen(
 ) {
     val context = LocalContext.current
     var showLicense by remember { mutableStateOf(false) }
+    val haptics = com.thirdparty.xhs.ui.components.rememberHaptics()
 
     Scaffold(
         topBar = {
@@ -105,7 +106,7 @@ fun AboutScreen(
                         )
                     },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    modifier = Modifier.clickable { onOpenUpdate() }
+                    modifier = Modifier.clickable { haptics.tick(); onOpenUpdate() }
                 )
             }
 
@@ -115,14 +116,14 @@ fun AboutScreen(
                     supportingContent = { Text("limao996/xhs-thirdparty") },
                     leadingContent = { Icon(Icons.Filled.Info, null, tint = MaterialTheme.colorScheme.primary) },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    modifier = Modifier.clickable { openUrl(context, UpdateChecker.REPO_URL) }
+                    modifier = Modifier.clickable { haptics.tick(); openUrl(context, UpdateChecker.REPO_URL) }
                 )
                 ListItem(
                     headlineContent = { Text("开源许可") },
                     supportingContent = { Text("MIT License") },
                     leadingContent = { Icon(Icons.Filled.Description, null, tint = MaterialTheme.colorScheme.primary) },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    modifier = Modifier.clickable { showLicense = true }
+                    modifier = Modifier.clickable { haptics.tick(); showLicense = true }
                 )
             }
 

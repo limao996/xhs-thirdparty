@@ -165,6 +165,8 @@ fun XhsWaterfallGrid(
                             haptics.tick()
                             onLongPress?.invoke(note)
                         } else {
+                            // 打开作品：轻点反馈（系统触感）
+                            haptics.tick()
                             onOpenDetail(note.noteId)
                         }
                     },

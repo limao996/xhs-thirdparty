@@ -61,6 +61,7 @@ fun CacheScreen(
     val state by viewModel.ui.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var confirm by remember { mutableStateOf(false) }
+    val haptics = com.thirdparty.xhs.ui.components.rememberHaptics()
 
     val selected = state.entries.filter { it.kind in state.selected }
     val selectedBytes = selected.sumOf { it.bytes }
@@ -88,7 +89,10 @@ fun CacheScreen(
         bottomBar = {
             Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
                 Button(
-                    onClick = { confirm = true },
+                    onClick = {
+                        haptics.tick()
+                        confirm = true
+                    },
                     enabled = state.selected.isNotEmpty() && !state.clearing,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -165,7 +169,10 @@ fun CacheScreen(
                         },
                         // the whole row toggles: a 48dp checkbox is a small target
                         // for a row the user is already reading
-                        modifier = Modifier.clickable { viewModel.toggle(entry.kind) }
+                        modifier = Modifier.clickable {
+                            haptics.tick()
+                            viewModel.toggle(entry.kind)
+                        }
                     )
                 }
                 Row(

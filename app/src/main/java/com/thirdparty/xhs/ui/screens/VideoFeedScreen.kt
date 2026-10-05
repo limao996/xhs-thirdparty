@@ -279,6 +279,21 @@ private fun VideoPage(
     // `player` is wrapped in rememberUpdatedState so the callback the node holds
     // never points at a released player.
     val currentPlayer = androidx.compose.runtime.rememberUpdatedState(player)
+    // 小窗接管播放时，信息流自己的播放器必须停：否则小窗在前面放着，
+    // 后面的推荐流也在放，用户听到的是两条声音混在一起（用户实测反馈）。
+    //
+    // 但要**放过小窗那一台**：从推荐页点进详情时交给详情页、再由详情页交给小窗的
+    // 就是同一台播放器，无差别 pause 会把小窗里的视频一起按停（实测：小窗里视频停住）。
+    // 判断归属用 PipController.isHandedOver，和详情页销毁时是同一套规则。
+    val inPip by com.thirdparty.xhs.ui.components.PipController.inPip
+        .collectAsStateWithLifecycle()
+    androidx.compose.runtime.LaunchedEffect(inPip) {
+        if (!inPip) return@LaunchedEffect
+        val p = currentPlayer.value ?: return@LaunchedEffect
+        if (!com.thirdparty.xhs.ui.components.PipController.isHandedOver(p)) {
+            runCatching { p.pause() }
+        }
+    }
     val noRipple = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     Box(
         Modifier.fillMaxSize().background(Color.Black)
@@ -383,8 +398,8 @@ private fun VideoPage(
                     // whenever the finger landed on the lower part of the video.
                     // same reasoning as the video surface above
                     .combinedClickable(
-                        interactionSource = noRipple,
-                        indication = null,
+                        // 信息条是"可点的"东西，要有波纹（用户要求）。整屏视频那层仍然不铺
+                        // 波纹 —— 铺上去每次点屏幕都会闪一下整块画面。
                         onClick = {
                             // Hand the player ITSELF over, not just its position: the
                             // detail page would otherwise build a second ExoPlayer on

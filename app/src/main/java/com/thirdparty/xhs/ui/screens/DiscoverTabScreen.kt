@@ -400,6 +400,15 @@ private fun FanGroupTab(
     // 粉丝圈里的作品长按出菜单（与瀑布流那套一致：收藏 / 稍后观看）
     var menuFor by remember { mutableStateOf<com.thirdparty.xhs.data.NoteItem?>(null) }
     val haptics = com.thirdparty.xhs.ui.components.rememberHaptics()
+    // 作者卡片上的关注按钮：本地关注表 + 版本号驱动刷新（和作者主页/关注列表同一份数据）
+    val followVersion by App.repo.followVersion.collectAsStateWithLifecycle()
+    var followedIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    LaunchedEffect(followVersion) {
+        followedIds = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            App.repo.followedAuthors().map { it.userId }.toSet()
+        }
+    }
+    val followScope = rememberCoroutineScope()
     val noteFlags = com.thirdparty.xhs.ui.components.rememberNoteFlags()
     val noteActions = com.thirdparty.xhs.ui.components.rememberNoteActions()
     menuFor?.let { note ->
@@ -475,9 +484,14 @@ private fun FanGroupTab(
     ) {
         items(recommended, key = { it.userId }) { a ->
             Column(Modifier.fillMaxWidth().padding(vertical = Spacing.s)) {
-                // author header
+                // author header —— 整行可点（进作者主页，带波纹），右侧是关注按钮
                 Row(
-                    Modifier.fillMaxWidth().padding(horizontal = Spacing.l),
+                    Modifier.fillMaxWidth()
+                        .clickable {
+                            haptics.tick()
+                            onOpenAuthor(a.userId)
+                        }
+                        .padding(horizontal = Spacing.l),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     XhsAvatar(
@@ -496,14 +510,23 @@ private fun FanGroupTab(
                             )
                         }
                     }
+                    // 「去看看」改成关注按钮：关注是这一屏真正要做的决定，进作者主页点整行就行
+                    val followed = a.userId in followedIds
                     Surface(
-                        onClick = { onOpenAuthor(a.userId) },
+                        onClick = {
+                            if (followed) haptics.reject() else haptics.confirm()
+                            followScope.launch {
+                                App.repo.toggleFollowLocal(a.userId, a.userName, a.headImg, "")
+                            }
+                        },
                         shape = MaterialTheme.shapes.small,
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                        color = if (followed) MaterialTheme.colorScheme.secondaryContainer
+                        else MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = if (followed) MaterialTheme.colorScheme.onSecondaryContainer
+                        else MaterialTheme.colorScheme.onPrimaryContainer
                     ) {
                         Text(
-                            "去看看",
+                            if (followed) "已关注" else "+ 关注",
                             Modifier.padding(horizontal = Spacing.m, vertical = Spacing.s),
                             style = MaterialTheme.typography.labelLarge
                         )
@@ -576,8 +599,6 @@ private fun FanGroupNoteCard(
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = modifier.combinedClickable(
-            interactionSource = remember { MutableInteractionSource() },
-            indication = null,
             onClick = onClick,
             onLongClick = onLongClick
         )
