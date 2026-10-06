@@ -118,7 +118,7 @@ app/src/main/java/com/thirdparty/xhs/
 | 解压版 Gradle（快） | `%USERPROFILE%\.gradle\wrapper\dists\gradle-9.8.0-bin\*\gradle-9.8.0\bin\gradle.bat` |
 | 模拟器 AVD | `xhs_test`（API 34、1080×2400、420dpi），位于 `%USERPROFILE%\.android\avd`，**不在仓库里** |
 | 构建产物 | `app/build/outputs/apk/{debug,release}/`（不入库） |
-| 最近一次实测 | 2026-10-04：`assembleRelease` 成功（Gradle 9.8.0 / AGP 9.4.1 / JDK 17），产物 `app-release.apk` 3,306,226 B、md5 `6d799ca08d1fab281aef854961c70057`（那一版是 `1.2.1` / versionCode `326862`；当前源码已是 `1.3.0`）；模拟器上装正式包实测通过（冷启动注册游客身份并拿到 VIP、设置 → 清除缓存逐项勾选与清理、关于页显示 `v1.2.1（build 326862）`、检查更新页正常），全程 `crash: 0` |
+| 最近一次实测 | 2026-10-06：`assembleRelease` 成功（Gradle 9.8.0 / AGP 9.4.1 / JDK 17，3 分 1 秒），产物 `app-release.apk` **3,317,161 B**、md5 `0bf90e90feb084d9f7010a490d4b43a5`、sha256 `2a77c42e9a2eca05ae4fa78e15561c27bf0471814aa23744d84bb16df59747f2`，versionName **`1.3.0`** / versionCode `469201`，已发布 [v1.3.0](https://github.com/limao996/xhs-thirdparty/releases/tag/v1.3.0)；模拟器上装正式包（`com.thirdparty.xhs`）实测：`pm path` 取出的 `base.apk` md5 与本地一致、冷启动拿到 `游客ID：68965284`、推荐流正常、`crash: 0`（上一版 v1.2.1 的留档见 `docs/BUILD.md`） |
 
 ## 7. 当前状态
 

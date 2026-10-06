@@ -62,13 +62,13 @@ Get-FileHash $apk -Algorithm MD5                          # 分发时贴这个�
 & "$bt\aapt2.exe" dump xmltree $apk --file AndroidManifest.xml | Select-String debuggable  # 应无输出
 ```
 
-`2026-10-04` 实测（`assembleRelease` **2 分 34 秒**，含 `lintVitalRelease` / `minifyReleaseWithR8` / `optimizeReleaseResources`）：
+`2026-10-06` 实测（`assembleRelease` **3 分 1 秒**，含 `lintVitalRelease` / `minifyReleaseWithR8` / `optimizeReleaseResources`）：
 
 | 项 | 值 |
 | --- | --- |
-| 大小 / md5 | `3,306,226 B` / `6d799ca08d1fab281aef854961c70057` |
-| sha256 | `1c1cbdecf1cfb9bf96b00e3fb992c41c175dafa65ab9d1f69f30e75669e7e860` |
-| versionName / versionCode | 该包是 **`1.2.1` / `326862`**（`1.3.0` 源码尚未重新打过正式包） |
+| 大小 / md5 | `3,317,161 B` / `0bf90e90feb084d9f7010a490d4b43a5` |
+| sha256 | `2a77c42e9a2eca05ae4fa78e15561c27bf0471814aa23744d84bb16df59747f2` |
+| versionName / versionCode | **`1.3.0` / `469201`**（已发布：[v1.3.0](https://github.com/limao996/xhs-thirdparty/releases/tag/v1.3.0)） |
 | minSdk / targetSdk / compileSdk | `26` / `37` / `37` |
 | 签名 | v2 scheme（v1/v3 未启用），`CN=ThirdParty XHS Client`，RSA 2048 |
 | 权限（合并后） | `INTERNET`、`ACCESS_NETWORK_STATE`、`WAKE_LOCK` + `USE_BIOMETRIC`、`USE_FINGERPRINT`（biometric 库合入）+ `com.thirdparty.xhs.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`（androidx 合入） |
@@ -102,7 +102,7 @@ CI（`.github/workflows/android.yml`）在 push / PR 上跑 `assembleDebug` → 
 
 `versionName` 变了就更新 `docs/CHANGELOG.md` 的统计表与 `docs/ai/CONTEXT.md`。
 
-发布留档：`v1.2.1`（`3,306,226 B` / md5 `6d799ca08d1fab281aef854961c70057` / versionCode `326862`）；再上一版 `v1.2.0`（`3,289,838 B` / md5 `1ea558980a0f9d6085c232d0fc6b0462` / versionCode `321075`）。
+发布留档：`v1.3.0`（`3,317,161 B` / md5 `0bf90e90feb084d9f7010a490d4b43a5` / sha256 `2a77c42e9a2eca05ae4fa78e15561c27bf0471814aa23744d84bb16df59747f2` / versionCode `469201`，2026-10-06）；`v1.2.1`（`3,306,226 B` / md5 `6d799ca08d1fab281aef854961c70057` / versionCode `326862`）；`v1.2.0`（`3,289,838 B` / md5 `1ea558980a0f9d6085c232d0fc6b0462` / versionCode `321075`）。
 
 ## 4. 签名
 

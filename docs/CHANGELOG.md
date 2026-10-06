@@ -631,7 +631,21 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 
 
-### 阶段三十四 · 回归修复：小窗回详情页丢画面（回退阶段三十二的 F6 做法）
+### 阶段三十五 · 发布 v1.3.0（正式包 + 推送 + Release）
+
+用户明确要求"构建、推送、发布正式包"，这是本项目第一次授权的推送。
+
+| 步骤 | 结果 |
+| --- | --- |
+| 构建 | `assembleRelease` **3 分 1 秒**（`lintVitalRelease` + `minifyReleaseWithR8` + `optimizeReleaseResources`），产物 `app/build/outputs/apk/release/app-release.apk` |
+| 正式包校验 | `aapt2 dump badging`：`com.thirdparty.xhs`、versionName **1.3.0**、versionCode **469201**（上一版 1.2.1 = 326862，单调递增）、minSdk 26 / targetSdk 37；`apksigner verify`：**v2 方案通过**，`CN=ThirdParty XHS Client`；manifest 无 `debuggable` |
+| 大小 / 校验值 | **3,317,161 B**；md5 `0bf90e90feb084d9f7010a490d4b43a5`；sha256 `2a77c42e9a2eca05ae4fa78e15561c27bf0471814aa23744d84bb16df59747f2` |
+| 安装实测 | 装正式包到模拟器：`pm path com.thirdparty.xhs` 取出的 `base.apk` **md5 与本地一致**；冷启动 `Status: ok`（TotalTime 518 ms）、顶栏显示 `游客ID：68965284`、推荐流有内容（证明 R8 没破坏 AES 包体与 Room 路径）、无崩溃 |
+| 推送 | `git push origin main`：**28 个本地提交**推上去（`04a47c9..af17f51`），工作区与 `origin/main` 同步 |
+| 发布 | GitHub Release [v1.3.0](https://github.com/limao996/xhs-thirdparty/releases/tag/v1.3.0)（标记 Latest），资产重命名为 `xhs-thirdparty-1.3.0-release.apk`（与 README 里的下载文件名一致）；**重新下载该资产算 md5/sha256，与本地包逐位相同** |
+| 档案 | `docs/BUILD.md` 的实测表与发布留档、`docs/ai/CONTEXT.md` 的"最近一次实测"都更新为本次数据 |
+
+
 
 **用户报的**：从小窗回到详情页，播放器丢失视频画面（此前是好的）。
 
