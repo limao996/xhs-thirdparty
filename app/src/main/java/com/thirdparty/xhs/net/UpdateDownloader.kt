@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import androidx.core.net.toUri
 
 /**
  * 应用内下载新版本的 APK，并给出"安装"的 Intent。
@@ -141,7 +142,7 @@ object UpdateDownloader {
     /** 系统设置里"安装未知应用"的授权页（用户拒绝安装后跳这里）。 */
     fun unknownSourcesSettingsIntent(context: Context): Intent =
         Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-            data = Uri.parse("package:${context.packageName}")
+            data = "package:${context.packageName}".toUri()
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
 }
