@@ -85,6 +85,7 @@ import com.thirdparty.xhs.ui.components.CommentRepliesDialog
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import com.thirdparty.xhs.common.runCatchingCancellable
+import com.thirdparty.xhs.ui.components.FooterRetry
 
 /**
  * 详情页：视频播放器 + 标题 + 作者 + 介绍 + 标签 + 评论区。
@@ -870,6 +871,12 @@ private fun DetailContent(
                     Box(Modifier.fillMaxWidth().padding(Spacing.s), contentAlignment = Alignment.Center) {
                         LoadingIndicator(Modifier.size(20.dp))
                     }
+                } else if (state.commentsError && state.comments.isNotEmpty()) {
+                    // 下一批评论失败：给一条能点的提示，而不是默默停住（硬约束 26）
+                    FooterRetry(
+                        onClick = { viewModel.loadMoreComments() },
+                        label = "评论加载失败，点这里重试"
+                    )
                 }
             }
         }

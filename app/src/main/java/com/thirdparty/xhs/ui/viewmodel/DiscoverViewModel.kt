@@ -36,6 +36,13 @@ data class FeedSection(
 
 data class DiscoverUiState(
     val categories: List<Category> = emptyList(),
+    /**
+     * 分类（顶部那一排 chip）加载失败。
+     *
+     * 以前这里失败是**完全静默**的（`getOrDefault(emptyList())`），于是发现页顶部就是一片空白，
+     * 用户只觉得"发现页坏了"却看不到任何提示 —— 用户报的"发现页缺少访问失败提示"。
+     */
+    val categoriesError: Boolean = false,
     val selectedCategory: Int = 0,
     val feed: FeedSection = FeedSection(),
     val fanGroup: List<FanGroupAuthor> = emptyList(),
@@ -84,8 +91,7 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
         // 关注 tab 的列表要跟着其它页面的关注操作走
         viewModelScope.launch { repo.followVersion.collect { refreshFollowed() } }
         viewModelScope.launch {
-            val cats = runCatchingCancellable { repo.categories() }.getOrDefault(emptyList())
-            _ui.update { it.copy(categories = cats) }
+            loadCategories()
             myId = runCatchingCancellable { repo.myUserId() }.getOrDefault(0)
             loadFanGroup()
         }
@@ -107,6 +113,11 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
                     // this tab would stay empty even after the network comes back.
                     if (myId <= 0) myId = runCatchingCancellable { repo.myUserId() }.getOrDefault(0)
                     loadFanGroup()
+                }
+                // 分类也要补：分类为空时发现页整块都是失败态，而它以前不在这个补载列表里 ——
+                // 网络恢复后页面就一直停在"分类加载失败"（实测：开回 Wi-Fi 8 秒仍未恢复）。
+                if (_ui.value.categories.isEmpty() && _ui.value.categoriesError) {
+                    loadCategories()
                 }
             }
         }
@@ -321,4 +332,27 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
      * away; auto-refreshing on every tab switch was just network work nobody asked for.
      */
     fun refreshFollowedList() = refreshFollowed()
+
+    /**
+     * 取分类那一排 chip。
+     *
+     * 失败时**保留旧列表**（有就继续用，别把界面清空），并且在"一个都没有"时把
+     * `categoriesError` 立起来，让发现页显示可点的失败提示（硬约束 26）。
+     */
+    private suspend fun loadCategories() {
+        val cats = runCatchingCancellable { repo.categories() }.getOrNull()
+        _ui.update {
+            if (cats == null) {
+                it.copy(categoriesError = it.categories.isEmpty() || it.categoriesError)
+            } else {
+                it.copy(categories = cats, categoriesError = false)
+            }
+        }
+    }
+
+    /** 分类失败后的手动重试（发现页顶部那条提示上的按钮）。 */
+    fun retryCategories() {
+        _ui.update { it.copy(categoriesError = false) }
+        viewModelScope.launch { loadCategories() }
+    }
 }

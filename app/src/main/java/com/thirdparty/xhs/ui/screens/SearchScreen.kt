@@ -230,6 +230,8 @@ fun SearchScreen(
                         ),
                         hasMore = state.hasMore,
                         loadingMore = state.loadingMore,
+                        // 下一页失败要看得见（硬约束 26）
+                        moreError = state.error,
                         resetKey = state.refreshTick,
                         onLoadMore = { viewModel.loadMore() }
                     )

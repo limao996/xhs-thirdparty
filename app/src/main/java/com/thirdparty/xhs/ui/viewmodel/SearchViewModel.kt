@@ -211,7 +211,9 @@ class SearchViewModel(private val repo: XhsRepository) : ViewModel() {
                 // A failed page must NOT flip hasMore to false — that would end
                 // pagination permanently with no way to retry. Leaving hasMore
                 // alone lets the next scroll attempt again.
-                _ui.update { it.copy(loadingMore = false) }
+                //
+                // 但必须把 error 立起来：否则"下一页失败"在界面上完全看不出来（硬约束 26）。
+                _ui.update { it.copy(loadingMore = false, error = it.results.isNotEmpty()) }
             }
             loading = false
         }

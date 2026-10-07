@@ -35,6 +35,7 @@
 | 23 | 拖动类控件（进度条 / 倍速条）的触感是**按下即触发**（`Modifier.pressHaptic(haptics)`：`PointerEventPass.Initial` 观察 Press，不消费事件），**不要**在拖动过程中按比例连发 | 用户要的是"按下去抖一下"，拖动中连发会显得吵；观察而非消费事件，所以不影响控件自身手势 |
 | 24 | 可点区域里**不要同时**挂单击与双击语义（`combinedClickable(onClick=…, onDoubleClick=…)`）：单击必须等双击判定窗口（~300ms）才触发，用户会感觉"点了半天才跳转"。信息条这类"点一下就走"的区域用普通 `clickable`，双击暂停留给视频画面那一层 | 这是系统手势判定的固有代价，不是性能问题；把两种语义分层放，点击才跟手 |
 | 25 | **接口在海外**（`app.xiaohuangbook.net` / GitHub 都要线路）：①没有**已验证**网络时**直接失败**（`App.hasValidatedNetwork()` 为假 → `XhsApi.NoUsableNetworkException` / 更新检查直接 `Failed`），不要等超时；②OkHttp 超时收紧（App 主客户端 connect 10s / read 15s / **callTimeout 20s**；更新检查 6/8/12s）；③**网络一恢复（开 VPN = 新的默认网络）要自动重试**：`App.watchNetwork()` → `bump()` → `networkEpoch` +1，各 ViewModel（Detail/Discover/VideoFeed/Guest/Search/Author/UserList/Profile）观察它并补载；同时 `bump()` 会**清掉更新检查的失败退避**并立刻重查 | 不这么做就是「没开 VPN 一直转圈（原来 30s×2 次重试 ≈ 1 分钟）、开了 VPN 又不及时恢复，连检查更新都被退避挡住」—— 用户实测反馈的原话 |
+| 26 | **凡是会发网络请求的页面 / 子 tab / 分页列表，都必须有「失败看得见 + 能重试」**：首屏失败 → `EmptyState`（带 `actionLabel = 重试`）；**分页**失败 → 底部 `FooterRetry`（`ui/components/LoadMoreFooter.kt`，列表非空时显示）；任何 `runCatching{…}.getOrDefault(emptyList())` 的兜底都要问一句「失败时用户看得见吗」。特别地：**`HorizontalPager(pageCount = { categories.size })` 这类「按数据条数建页」的容器，数据为空时必须早退成整块失败态**，否则内容区是**空白**，用户看不出是失败还是没内容 |用户报的「发现页缺少访问失败提示」就是这个：分类请求失败 → 顶部没 chip → pager 零页 → 整块空白；另一类是「下一页失败静默停下」，用户会以为内容就这些 |
 
 ## 1. 项目一句话
 

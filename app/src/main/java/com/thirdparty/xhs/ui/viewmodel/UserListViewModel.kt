@@ -87,7 +87,9 @@ class UserListViewModel(
                     it.copy(
                         loading = false,
                         loadingMore = false,
-                        error = it.users.isEmpty()
+                        // 分页失败也要立起 error：列表非空时由底部「重试」条显示（硬约束 26）。
+                        // 空列表的情况界面走「加载失败」整页态（见 UserListScreen 的 when 顺序）。
+                        error = true
                     )
                 }
             }

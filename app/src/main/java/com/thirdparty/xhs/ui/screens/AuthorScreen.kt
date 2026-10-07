@@ -165,6 +165,7 @@ fun AuthorScreen(
                     ),
                     hasMore = state.hasMore,
                     loadingMore = state.loadingMore,
+                    moreError = state.notesError,
                     resetKey = state.refreshTick,
                     onLoadMore = { viewModel.loadMore() }
                 )

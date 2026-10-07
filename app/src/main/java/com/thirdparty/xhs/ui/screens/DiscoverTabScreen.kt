@@ -76,6 +76,9 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.TextButton
+import com.thirdparty.xhs.ui.components.FooterRetry
+import com.thirdparty.xhs.ui.theme.Corners
 
 /** Clearance for the floating bottom NavigationBar (see theme/BottomNavClearance). */
 
@@ -145,7 +148,9 @@ fun DiscoverTabScreen(
                             loading = state.fanGroupLoading,
                             hasMore = state.fanGroupHasMore,
                             loadingMore = state.fanGroupMore,
+                            moreError = state.fanGroupError && state.fanGroup.isNotEmpty(),
                             onLoadMore = { viewModel.loadMoreFanGroup() },
+                            onRetryMore = { viewModel.loadMoreFanGroup() },
                             onOpenAuthor = onOpenAuthor,
                             onOpenDetail = onOpenDetail,
                             error = state.fanGroupError,
@@ -241,6 +246,25 @@ private fun FeedTab(
                     if (cat.id != current.selectedCategory) viewModel.selectCategory(cat.id)
                 }
             }
+    }
+    if (state.categories.isEmpty()) {
+        // 分类一个都没有 —— 这里**必须早退**：
+        // 分类内容是一个 `HorizontalPager(pageCount = { categories.size })`，一个分类都没有时
+        // 它一页都不画，于是整块内容区就是**空白**，用户看不出是失败还是没内容
+        // （用户报的"发现页缺少访问失败提示"就是这个：分类请求失败 → 顶部没 chip → 下面全白）。
+        Box(
+            Modifier.fillMaxSize().padding(bottom = clear),
+            contentAlignment = Alignment.Center
+        ) {
+            EmptyState(
+                title = if (state.categoriesError) "分类加载失败" else "没有可用的分类",
+                modifier = Modifier.fillMaxSize(),
+                description = "接口在海外，需要能访问海外的线路；网络恢复后会自动重试",
+                actionLabel = "重试",
+                onAction = { viewModel.retryCategories() }
+            )
+        }
+        return
     }
     Column(Modifier.fillMaxSize()) {
         // category chips (horizontal)
@@ -355,6 +379,8 @@ private fun FeedCategoryPage(
         ),
         hasMore = state.feed.hasMore,
         loadingMore = state.feed.loadingMore,
+        // 下一页失败要看得见（硬约束 26）
+        moreError = state.feed.error,
         // Identity of the list on screen: a refresh, or another category, starts
         // at the top.
         //
@@ -377,6 +403,9 @@ private fun FanGroupTab(
     hasMore: Boolean,
     loadingMore: Boolean,
     onLoadMore: () -> Unit,
+    /** 下一页失败：底部给重试（见 FooterRetry / 硬约束 26） */
+    moreError: Boolean = false,
+    onRetryMore: (() -> Unit)? = null,
     onOpenAuthor: (Int) -> Unit,
     onOpenDetail: (Long) -> Unit,
     /** true when the last load failed with nothing to show */
@@ -575,7 +604,11 @@ private fun FanGroupTab(
                     Modifier.fillMaxWidth().padding(Spacing.l),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (loadingMore) LoadingIndicator(Modifier.size(24.dp))
+                    when {
+                        // 下一页失败必须能看见（硬约束 26）
+                        moreError && !loadingMore -> FooterRetry(onClick = onRetryMore)
+                        loadingMore -> LoadingIndicator(Modifier.size(24.dp))
+                    }
                 }
             }
         } else {

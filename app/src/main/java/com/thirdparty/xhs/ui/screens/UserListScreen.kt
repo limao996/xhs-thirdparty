@@ -43,6 +43,7 @@ import com.thirdparty.xhs.ui.theme.Spacing
 import com.thirdparty.xhs.ui.viewmodel.UserListMode
 import com.thirdparty.xhs.ui.viewmodel.UserListViewModel
 import kotlinx.coroutines.flow.distinctUntilChanged
+import com.thirdparty.xhs.ui.components.FooterRetry
 
 /**
  * 关注 / 粉丝 list, opened from the counts on the profile card.
@@ -170,7 +171,13 @@ fun UserListScreen(
                                 Modifier.fillMaxWidth().padding(Spacing.l),
                                 contentAlignment = Alignment.Center
                             ) {
-                                if (state.loadingMore) LoadingIndicator(Modifier.size(24.dp))
+                                when {
+                                    // 下一页失败要看得见（硬约束 26）
+                                    state.error && !state.loadingMore ->
+                                        FooterRetry(onClick = { viewModel.load(reset = false) })
+
+                                    state.loadingMore -> LoadingIndicator(Modifier.size(24.dp))
+                                }
                             }
                         }
                     } else {

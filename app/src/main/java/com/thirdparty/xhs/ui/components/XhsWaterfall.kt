@@ -67,6 +67,13 @@ fun XhsWaterfallGrid(
     hasMore: Boolean = false,
     loadingMore: Boolean = false,
     onLoadMore: (() -> Unit)? = null,
+    /**
+     * 分页（下一页）失败：列表非空时在底部给一个「加载失败，点这里重试」。
+     *
+     * 以前只有 `loadingMore`，所以"下一页失败"在界面上**完全看不出来** —— 列表就那么停住，
+     * 用户以为博主就这些内容（硬约束 26）。
+     */
+    moreError: Boolean = false,
     /** ids currently ticked in multi-select mode */
     selectedIds: Set<Long> = emptySet(),
     /** when true a tap toggles selection instead of opening the note */
@@ -186,13 +193,17 @@ fun XhsWaterfallGrid(
                 }
             }
         }
-        if (hasMore && safeItems.isNotEmpty()) {
+        if ((hasMore || moreError) && safeItems.isNotEmpty()) {
             item(key = "__loading__") {
                 Box(
                     Modifier.fillMaxWidth().padding(Spacing.m),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (loadingMore) LoadingIndicator(Modifier.size(24.dp))
+                    when {
+                        // 失败优先：正在转圈和失败不会同时成立，但失败必须能看见
+                        moreError -> FooterRetry(onClick = onLoadMore)
+                        loadingMore -> LoadingIndicator(Modifier.size(24.dp))
+                    }
                 }
             }
         }
