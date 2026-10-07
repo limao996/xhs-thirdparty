@@ -71,7 +71,7 @@ Get-FileHash $apk -Algorithm MD5                          # 分发时贴这个�
 | versionName / versionCode | **`1.3.0` / `469201`**（已发布：[v1.3.0](https://github.com/limao996/xhs-thirdparty/releases/tag/v1.3.0)） |
 | minSdk / targetSdk / compileSdk | `26` / `37` / `37` |
 | 签名 | v2 scheme（v1/v3 未启用），`CN=ThirdParty XHS Client`，RSA 2048 |
-| 权限（合并后） | `INTERNET`、`ACCESS_NETWORK_STATE`、`WAKE_LOCK` + `USE_BIOMETRIC`、`USE_FINGERPRINT`（biometric 库合入）+ `com.thirdparty.xhs.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`（androidx 合入） |
+| 权限（合并后） | `INTERNET`、`ACCESS_NETWORK_STATE`、`WAKE_LOCK`、`REQUEST_INSTALL_PACKAGES`（应用内更新用）+ `USE_BIOMETRIC`、`USE_FINGERPRINT`（biometric 库合入）+ `com.thirdparty.xhs.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`（androidx 合入） |
 | 可调试 | 否（manifest 里没有 `debuggable`） |
 | 画中画 / 任务 | `supportsPictureInPicture="true"`、`launchMode="singleTask"`（深链复用同一实例，避免第二个界面/第二个小窗） |
 | 明文流量 | `usesCleartextTraffic="true"`：**只为局域网 http WebDAV 放行**；公网地址在应用内会被 `WebDavClient.validate()` 拦掉（Basic 认证会明文过网） |

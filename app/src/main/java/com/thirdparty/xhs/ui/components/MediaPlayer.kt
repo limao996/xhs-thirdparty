@@ -67,6 +67,10 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.size
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 
 /**
  * Detail page player: media3 surface + custom controller.
@@ -193,6 +197,16 @@ fun MediaPlayer(
     // leaving fullscreen or changing video must not carry the zoom over
     LaunchedEffect(fullscreen, url) { scale = 1f; offset = androidx.compose.ui.geometry.Offset.Zero }
 
+    /**
+     * 控制栏的可见性与实测高度。
+     *
+     * 状态放在**外层**（`AutoHideController` 只负责上报）：全屏时的「恢复」按钮在外层这一层，
+     * 它要根据控制栏是否显示、以及控制栏真实高度来决定往上让多少（用户反馈：视频放大后
+     * 「恢复」被控制栏压住）。
+     */
+    var controlsVisible by remember(player) { mutableStateOf(false) }
+    var controlBarHeight by remember { mutableStateOf(0.dp) }
+
     Box(
         modifier = modifier.background(Color.Black)
             .then(
@@ -235,7 +249,9 @@ fun MediaPlayer(
         AutoHideController(
             player, fullscreen, onToggleFullscreen, controlsHiddenInitially, title,
             topClearance = cutoutTop,
-            onEnterPip = onEnterPip
+            onEnterPip = onEnterPip,
+            onControlsVisibility = { controlsVisible = it },
+            onControlBarHeight = { controlBarHeight = it }
         )
         // Buffering feedback — but never together with the error panel: the
         // player keeps retrying in BUFFERING while the panel is up, so both
@@ -257,9 +273,14 @@ fun MediaPlayer(
         // Reset affordance while zoomed, same one the image viewer shows. Only in
         // fullscreen: that is the only mode where zooming is possible.
         if (fullscreen && scale > 1.01f) {
+            // 控制栏高度是**实测**的（AutoHideController 里的 onGloballyPositioned 报上来）：
+            // 以前写死 96dp，控制栏一显示就把「恢复」按钮压在它下面（用户反馈"没避让控制栏"）。
+            // 控制栏隐藏时按 96dp 托底；显示时按实测高度 + 一点间距抬上去。
+            val bottomInset = if (controlsVisible) controlBarHeight + Spacing.m else FULLSCREEN_RESET_INSET
             Box(
                 Modifier.align(Alignment.BottomCenter)
-                    .padding(bottom = FULLSCREEN_RESET_INSET),
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    .padding(bottom = bottomInset),
                 contentAlignment = Alignment.Center
             ) {
                 ResetZoomButton(onClick = {
@@ -308,9 +329,15 @@ private fun AutoHideController(
     /** status-bar height remembered while the bars were visible; see MediaPlayer */
     topClearance: androidx.compose.ui.unit.Dp = 0.dp,
     /** 「小窗播放」入口；为 null 时菜单里没有这一项 */
-    onEnterPip: (() -> Unit)? = null
+    onEnterPip: (() -> Unit)? = null,
+    /** 控制栏显示/隐藏要报给外层：全屏的「恢复」按钮要据此决定避让多少 */
+    onControlsVisibility: (Boolean) -> Unit = {},
+    /** 控制栏实测高度（dp）报给外层，同上 */
+    onControlBarHeight: (androidx.compose.ui.unit.Dp) -> Unit = {}
 ) {
     var visible by remember(player) { mutableStateOf(!startHidden) }
+    val density = LocalDensity.current
+    androidx.compose.runtime.LaunchedEffect(visible) { onControlsVisibility(visible) }
     // 播放器控件也给系统触感反馈：它和页面其他按钮是同一层交互
     val haptics = rememberHaptics()    // Seeded FROM the player, not from zero/false.
     //
@@ -646,6 +673,11 @@ private fun AutoHideController(
             val iconSize = if (dense) 20.dp else 24.dp
             Column(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    // 量一下控制栏的真实高度：全屏时的「恢复」按钮要据此避让，
+                    // 否则控制栏一显示就把它压在下面（用户反馈"没避让控制栏"）。
+                    .onGloballyPositioned { coords ->
+                        onControlBarHeight(with(density) { coords.size.height.toDp() })
+                    }
                     .background(Scrim.strong).padding(vertical = if (dense) 1.dp else Spacing.xs)
             ) {
                 val fraction = if (duration > 0f) (position / duration).coerceIn(0f, 1f) else 0f

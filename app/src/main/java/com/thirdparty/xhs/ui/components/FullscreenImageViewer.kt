@@ -52,6 +52,9 @@ import androidx.compose.animation.core.tween
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 
 /**
  * Full-screen image viewer.
@@ -265,6 +268,9 @@ fun FullscreenImageViewer(
         if (scale > 1.01f) {
             Box(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    // 查看器是边缘到边缘的（全屏时图片要跑到系统栏下面），所以这个
+                    // "恢复"按钮必须自己让开导航栏，否则会被手势条压住/挡住（用户反馈）。
+                    .windowInsetsPadding(WindowInsets.navigationBars)
                     .padding(bottom = Spacing.l),
                 contentAlignment = Alignment.Center
             ) {

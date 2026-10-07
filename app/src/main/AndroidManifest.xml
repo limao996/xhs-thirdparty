@@ -5,6 +5,9 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- video playback: media3 ExoPlayer wake lock + keep-screen-on -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- 「应用内下载新版本」要交给系统安装器装自己：Android 8.0+ 必须声明这个权限，
+         并且首次还要用户在系统设置里允许"安装未知应用"（见 UpdateDownloader）。 -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- A personal WebDAV drive may be plain http:// on the LAN; Android
          denies cleartext by default from API 28, which would make those
@@ -53,5 +56,17 @@
                 <data android:scheme="xhstp" android:host="note" />
             </intent-filter>
         </activity>
+
+        <!-- 应用内更新的 APK 要交给系统安装器，而 content:// 只能由 FileProvider 提供。
+             只暴露 cacheDir/updates/（见 res/xml/file_paths.xml）。 -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>

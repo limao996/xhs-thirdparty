@@ -104,60 +104,54 @@ class App : Application() {
      */
     val pendingUpdate = MutableStateFlow<UpdateChecker.Result.Newer?>(null)
 
-    /** The startup check runs once per process, not once per Activity. */
-    private val autoUpdateTried = AtomicBoolean(false)
-
-    /**
-     * Set when the startup check could not answer (offline, GitHub down, rate
-     * limited), so the next moment the device gets a network we try once more.
-     * Without it a launch in a tunnel would mean "no update check this session".
-     */
+    /** 同时只允许一个检查在飞（进前台可能连着触发，别叠请求）。 */
     @Volatile
-    private var autoUpdateWantsRetry = false
+    private var updateCheckInFlight = false
 
-    /** 上一次「真的发出请求」的时刻（含失败的重试），用来给失败重试退避。 */
+    /** 上一次「真的发出请求」的时刻：用来去重（同一秒内的多次进前台）与失败退避。 */
+    @Volatile
     private var lastUpdateAttemptAt = 0L
+
+    /** 上次检查是不是失败；失败才需要退避，成功不需要（下次进前台照查）。 */
+    @Volatile
+    private var lastUpdateFailed = false
 
     /**
      * Ask GitHub for the latest release and, if it is newer, surface it.
      *
-     * Called from [onCreate] (i.e. every cold start) and again from [bump] after a
-     * failed attempt. It uses the standalone client inside UpdateChecker — no
-     * account, no AES envelope — so it works before any guest identity exists.
+     * **每次进入应用（冷启动 + 每次回到前台）都查一次**：[onActivityStarted] 里在
+     * "从后台回到前台"的那一次调用它。之所以敢这么查，是因为 `UpdateChecker` 走的是
+     * `releases.atom`（网页 feed，**不占 REST API 那 60 次/小时/IP 的额度**，也不需要 token）；
+     * 只有 feed 失败时才回落到 api.github.com，那时才可能碰到 403。
      *
-     * At most once per [UPDATE_CHECK_INTERVAL_MS] (12h): the check is a courtesy, and
-     * GitHub's anonymous quota is 60 requests/hour/IP, so checking on every single
-     * launch both annoys the user and gets us rate-limited (HTTP 403) out of real
-     * checks. Only a check that actually reached GitHub counts as done — a failed one
-     * leaves the window open, so the retry in [bump] still works.
+     * 两道保护（都不是"节流"）：
+     * - **去重**：[UPDATE_CHECK_DEDUPE_MS] 内的重复触发只发一次请求（onStart/onResume 连着来、
+     *   快速切前后台），真正的判据始终是"是否进入前台"；
+     * - **失败退避**：失败（断网/限流）后 [UPDATE_RETRY_MIN_INTERVAL_MS] 内不再重试，
+     *   免得没网时每次切前台都白打一次；成功则不受限。
      */
-    fun checkUpdateOnLaunch(force: Boolean = false) {
-        if (!force && !autoUpdateTried.compareAndSet(false, true)) return
-        // force 只用来「回到前台补一次」，不是「每次回前台都补」：失败重试也要退避，
-        // 否则断网时每次切前台都会打一次 GitHub（匿名 60 次/小时/IP，实测会 403）。
+    fun checkUpdateOnLaunch() {
         val now = System.currentTimeMillis()
-        if (force && now - lastUpdateAttemptAt < UPDATE_RETRY_MIN_INTERVAL_MS) return
+        val gap = now - lastUpdateAttemptAt
+        if (updateCheckInFlight) return
+        if (lastUpdateAttemptAt != 0L && gap < UPDATE_CHECK_DEDUPE_MS) return
+        if (lastUpdateFailed && gap < UPDATE_RETRY_MIN_INTERVAL_MS) return
+        updateCheckInFlight = true
         lastUpdateAttemptAt = now
         appScope.launch {
-            if (!updateCheckDue()) return@launch
             val result = runCatchingCancellable { UpdateChecker.check() }.getOrNull()
-            autoUpdateWantsRetry = result == null || result is UpdateChecker.Result.Failed
-            if (result != null && result !is UpdateChecker.Result.Failed) {
-                markUpdateChecked()
-            }
+            lastUpdateFailed = result == null || result is UpdateChecker.Result.Failed
+            updateCheckInFlight = false
             if (result is UpdateChecker.Result.Newer && result.version != ignoredUpdateVersion()) {
                 pendingUpdate.value = result
             }
+            if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+                android.util.Log.i(
+                    "XhsUpdate",
+                    "check=" + (result?.javaClass?.simpleName ?: "null") + " failed=" + lastUpdateFailed
+                )
+            }
         }
-    }
-
-    /** True when the last completed update check is outside the 12h window. */
-    private fun updateCheckDue(): Boolean =
-        System.currentTimeMillis() - settingsPrefs().getLong(KEY_UPDATE_CHECKED_AT, 0L) >=
-            UPDATE_CHECK_INTERVAL_MS
-
-    private fun markUpdateChecked() {
-        settingsPrefs().edit { putLong(KEY_UPDATE_CHECKED_AT, System.currentTimeMillis()) }
     }
 
     /** User closed the update dialog for now (it will be offered again next launch). */
@@ -203,8 +197,11 @@ class App : Application() {
         INSTANCE = this
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: android.app.Activity) {
+                val wasBackground = startedActivities == 0
                 startedActivities++
                 appForeground.value = true
+                // 每次"从后台回到前台"都查一次更新（atom feed 不吃 API 额度，见 checkUpdateOnLaunch）
+                if (wasBackground) checkUpdateOnLaunch()
             }
 
             override fun onActivityStopped(activity: android.app.Activity) {
@@ -232,8 +229,7 @@ class App : Application() {
         repository = XhsRepository(this, httpClient)
         themeState.value = loadThemeMode()
         watchNetwork()
-        // 每次冷启动查一次有没有新版本：查不到就什么都不发生（见 checkUpdateOnLaunch）
-        checkUpdateOnLaunch()
+        // 冷启动那一次由 onActivityStarted（0→1）触发，这里不再单独查
     }
 
     /**
@@ -270,8 +266,8 @@ class App : Application() {
 
     private fun bump() {
         networkEpoch.value = networkEpoch.value + 1
-        // a startup update check that failed offline gets one more chance now
-        if (autoUpdateWantsRetry) checkUpdateOnLaunch(force = true)
+        // 网络刚恢复：上次检查失败过就补一次（退避判断在 checkUpdateOnLaunch 里）
+        if (lastUpdateFailed) checkUpdateOnLaunch()
     }
 
     private fun loadThemeMode(): ThemeMode {
@@ -314,9 +310,13 @@ class App : Application() {
         /** when the last COMPLETED update check happened (see checkUpdateOnLaunch) */
         private const val KEY_UPDATE_CHECKED_AT = "update_checked_at"
         /** startup update checks are throttled to this interval */
-        private const val UPDATE_CHECK_INTERVAL_MS = 12L * 60L * 60L * 1000L
+        /**
+     * 重复触发去重窗口：onStart/onResume 连着来、快速切前后台时只发一次请求。
+     * 这不是"节流" —— 决定要不要查的是"是否进入前台"（见 checkUpdateOnLaunch）。
+     */
+    private const val UPDATE_CHECK_DEDUPE_MS = 3_000L
 
-    /** 失败后允许再试的最小间隔（30 分钟）：失败不算「查过了」，但也不能立刻再试。 */
-    private const val UPDATE_RETRY_MIN_INTERVAL_MS = 30L * 60L * 1000L
+    /** 失败后允许再试的最小间隔（5 分钟）：失败不算「查过了」，但也不能立刻再试。 */
+    private const val UPDATE_RETRY_MIN_INTERVAL_MS = 5L * 60L * 1000L
     }
 }

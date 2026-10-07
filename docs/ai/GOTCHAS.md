@@ -228,6 +228,19 @@
   GitHub 的应答会被缓存住；而 GitHub 对没有 `User-Agent` 的请求直接 403。
 - 正确做法：`UpdateChecker` 自己建一个不带缓存的 client，并设 `User-Agent: xhs-thirdparty/<VERSION_NAME>`。
 
+**G6 · 检查更新的主路径是 `releases.atom`，不是 api.github.com**
+- 触发：用匿名 REST API（`api.github.com/repos/.../releases/latest`）做"进应用就查一次"。
+- 症状：用户"明明没怎么查过"却被限流（HTTP 403）—— 匿名额度是**每 IP 每小时 60 次**，而且和这台机器上
+  其它工具共享（CI、其它脚本都算在一起）。
+- 正确做法：先取 **`https://github.com/<owner>/<repo>/releases.atom`**（GitHub 发布页自己的 feed，
+  **不计 API 额度、不需要 token**），一次就带回 tag / 页面地址 / 更新说明；下载地址按仓库的资产命名约定
+  `xhs-thirdparty-<version>-release.apk` 拼出来（拼完仍要过 `isTrustedDownloadUrl`）。只有 feed 失败
+  才回落到 API，那时才可能 403。
+- 解析要点：`<link rel="alternate" href=".../releases/tag/vX.Y.Z">` 取 tag 最稳（`<title>` 是"小黄书 vX.Y.Z"
+  这种给人看的文案）；`<content>` 是 **HTML 转义**过的，要还原实体再去标签（`htmlToText`）。
+- 配套：既然不吃额度，就**每次进前台都查**（`App.onActivityStarted` 的 0→1）；只留两道保护 ——
+  重复触发去重 3s、失败退避 5min。测试时**别反复手点检查**（那才是真的瞎折腾 GitHub）。
+
 **G2 · JVM 单元测试里 Android 自带的 `org.json` 是空壳**
 - 触发：给解析 JSON 的代码写本地单元测试（`app/src/test`）。
 - 症状：`java.lang.RuntimeException: Method optString in org.json.JSONObject not mocked.`
@@ -452,6 +465,20 @@
   提升到 NavHost 之外，而不是让两块 surface 并存。
 - 取证要点：PiP 往返之后**必须看截图确认有画面**，并让控制栏显出来读进度（`1:33 / 3:01` 之类）；
   只量文本坐标（滚动位置）会漏掉这个回归 —— 这次就是只量了坐标才没发现。
+
+**H18 · 剪贴板口令"不响应"：别把"已问过"标记写在这两个地方**
+- 症状（用户报的）：复制了分享口令、回到应用，**没有任何反应**；或者偶尔"闪一下就没了"。
+- 两个真实根因（都在"什么时候写 `KEY_LAST_CLIP_PROMPTED`"上）：
+  1. **自己分享的那条也写了标记**：分享 → 面板里点「复制」→ 回到应用时按"这是我自己发的"静默跳过，
+     但顺手把"已问过"写了。`ShareText` 的自分享记录**只在内存**（进程重启即空），于是再次回来时
+     内容一样、标记又已存在 → 永远不再提示。修法：自分享的静默分支**不写**任何标记。
+  2. **弹窗被"点外部"瞬间关掉，而标记在弹出时就写了**：这一次误关就把这条口令**永久**变成"问过了"。
+     实机日志定位：第一次 `lastLen=-1 same=false`（确实弹了），6ms 后 `same=true`（标记已写），
+     界面上什么都没留下。修法：标记只在**用户真的作答（打开/取消）**时写；弹窗设
+     `dismissOnClickOutside = false`；聚焦后延迟 350ms 再读剪贴板，让开"切回前台那一下的触摸尾巴"。
+- 附带规矩：去重按**剪贴板内容**（不是 note id）；换一条口令（内容变了）应该重新问。
+- 取证：`logcat -s XhsClip` 会打印 `len/note/lastLen/same/self`；复现路径是
+  「详情页分享 → 分享面板 Copy → 强杀进程 → 再进应用」。
 
 ## I. 验证工具本身的坑
 

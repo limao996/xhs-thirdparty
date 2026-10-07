@@ -16,10 +16,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.rememberNavController
 import com.thirdparty.xhs.navigation.AppNavHost
 import com.thirdparty.xhs.ui.components.UpdateAvailableDialog
+import com.thirdparty.xhs.ui.components.UpdateDownloadState
 import com.thirdparty.xhs.ui.components.openUrl
 import com.thirdparty.xhs.ui.theme.XhsWindowBackground
 import com.thirdparty.xhs.ui.theme.XhsTheme
@@ -54,6 +57,9 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
      */
     private val clipboardNote = androidx.compose.runtime.mutableStateOf<Long?>(null)
 
+    /** 触发上面那个询问的原始剪贴板文本：用户作答后才用它写"已问过"标记。 */
+    private val clipboardText = androidx.compose.runtime.mutableStateOf<String?>(null)
+
     /** last link already offered, so the same clipboard does not prompt every resume */
     private val prefs by lazy { getSharedPreferences("xhs_guest", MODE_PRIVATE) }
 
@@ -68,19 +74,39 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
     private fun checkClipboardForShareLink() {
         val cm = getSystemService(CLIPBOARD_SERVICE) as? android.content.ClipboardManager
         val clip = cm?.primaryClip
-        if (clip == null || clip.itemCount == 0) return
+        if (clip == null || clip.itemCount == 0) {
+            if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+                android.util.Log.i("XhsClip", "剪贴板为空或读不到（系统可能拒绝：应用未聚焦）")
+            }
+            return
+        }
         val text = (0 until clip.itemCount)
             .mapNotNull { clip.getItemAt(it).coerceToText(this)?.toString() }
             .joinToString("\n")
-        val noteId = DeepLink.parseNoteId(text) ?: return
-        // 自己刚分享出去的那条：分享面板里的「复制」会把它放进剪贴板，用它去触发"打开这条笔记"
-        // 纯属绕圈。标记成已看过，之后也不会再提示。
-        if (com.thirdparty.xhs.data.ShareText.isSelfShared(noteId, text)) {
-            prefs.edit { putString(KEY_LAST_CLIP, noteId.toString()) }
-            return
+        val noteId = DeepLink.parseNoteId(text)
+        if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+            val last = prefs.getString(KEY_LAST_CLIP_PROMPTED, null)
+            android.util.Log.i(
+                "XhsClip",
+                "len=" + text.length + " note=" + noteId +
+                    " lastLen=" + (last?.length ?: -1) + " same=" + (last == text) +
+                    " self=" + (noteId != null &&
+                        com.thirdparty.xhs.data.ShareText.isSelfShared(noteId, text))
+            )
         }
-        if (prefs.getString(KEY_LAST_CLIP, null) == noteId.toString()) return
+        if (noteId == null) return
+        // 自己刚分享出去的那条：分享面板里的「复制」会把它放进剪贴板，用它去触发"打开这条笔记"
+        // 纯属绕圈 —— 自己分享的直接静默跳过。
+        if (com.thirdparty.xhs.data.ShareText.isSelfShared(noteId, text)) return
+        // 按**剪贴板内容**去重（原来记 note id，同一条口令被静默过一次就永久不响应）。
+        if (prefs.getString(KEY_LAST_CLIP_PROMPTED, null) == text) return
+        // ⚠️ 这里**不能**写"已问过"标记 —— 标记只在用户真的作答（打开/取消）时写。
+        // 原因（实机日志定位到的）：对话框可能被"点外部"或启动/切回那一下的触摸尾巴瞬间关掉，
+        // 若在弹出时就写了标记，这一次误关就把这条口令**永久**变成"问过了"，之后复制多少次
+        // 都不再响应 —— 这正是"剪贴板口令不响应"。日志：第一次 `lastLen=-1 same=false`（弹了），
+        // 6ms 后 `same=true`（标记已写），而界面上什么都没留下。
         clipboardNote.value = noteId
+        clipboardText.value = text
     }
 
     /**
@@ -94,7 +120,8 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
      */
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) checkClipboardForShareLink()
+        // 让开"刚回到前台那一下的触摸尾巴"（否则对话框可能被这一下点外部关掉）
+        if (hasFocus) window.decorView.postDelayed({ checkClipboardForShareLink() }, 350L)
     }
 
     /**
@@ -217,6 +244,12 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
 
     override fun onResume() {
         super.onResume()
+        // 回到前台后补查一次剪贴板（延迟 400ms）：有些路径不触发
+        // `onWindowFocusChanged(true)`（从通知/小窗回来、窗口一直"已聚焦"只是重新 resume），
+        // 而 Android 10+ 未聚焦时读剪贴板会被拒 —— 读不到就什么也不做，下次聚焦还会再查。
+        if (clipboardNote.value == null) {
+            window.decorView.postDelayed({ checkClipboardForShareLink() }, 400L)
+        }
         // 回来时如果系统说"还在小窗里"、而且我们手里确实有会话，就把导航内容重新藏起来：
         // 锁屏/内存回收可能导致 Activity 被重建，`inPip` 这个内存标记会丢，于是小窗窗口会显示
         // 整页详情 UI（用户反馈"小窗里是视频外面套着详情页"）。这条是幂等的兜底。
@@ -520,24 +553,37 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
                     // 复制口令回流：回到应用时发现剪贴板里有分享链接就询问是否跳转
                     clipboardNote.value?.takeIf { !pipActive }?.let { noteId ->
                         androidx.compose.material3.AlertDialog(
-                            onDismissRequest = { clipboardNote.value = null },
+                            // 不吃"点外部"：以前外部一碰就被关掉，用户根本没看见
+                            properties = androidx.compose.ui.window.DialogProperties(
+                                dismissOnClickOutside = false
+                            ),
+                            // 返回键关掉不算作答：不写标记，下次还会问
+                            onDismissRequest = {
+                                clipboardNote.value = null
+                                clipboardText.value = null
+                            },
                             title = { Text("检测到分享内容") },
                             text = { Text("剪贴板里有一个作品链接，是否打开这个作品？") },
                             confirmButton = {
                                 androidx.compose.material3.TextButton(onClick = {
                                     haptics.tick()
-                                    prefs.edit { putString(KEY_LAST_CLIP, noteId.toString()) }
+                                    // 真的作答了 → 记下来，同一条内容不再追问
+                                    clipboardText.value?.let { t ->
+                                        prefs.edit { putString(KEY_LAST_CLIP_PROMPTED, t) }
+                                    }
                                     clipboardNote.value = null
+                                    clipboardText.value = null
                                     pendingNote.value = noteId
                                 }) { Text("打开") }
                             },
                             dismissButton = {
                                 androidx.compose.material3.TextButton(onClick = {
                                     haptics.tick()
-                                    // remember the refusal too, else it re-asks on the
-                                    // next resume with the same clipboard
-                                    prefs.edit { putString(KEY_LAST_CLIP, noteId.toString()) }
+                                    clipboardText.value?.let { t ->
+                                        prefs.edit { putString(KEY_LAST_CLIP_PROMPTED, t) }
+                                    }
                                     clipboardNote.value = null
+                                    clipboardText.value = null
                                 }) { Text("取消") }
                             }
                         )
@@ -545,17 +591,88 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
                     // 启动时的自动检查更新：只有真的查到更新的版本才弹（见
                     // App.checkUpdateOnLaunch）。锁着的时候不弹，否则对话框会浮在
                     // 解锁页上面。
+                    //
+                    // 还有两个"刚弹出来就没了"的老问题，都在这里堵掉：
+                    // 1) 冷启动那一下的触摸有可能被系统补投给刚出现的对话框窗口（点击外部 = dismiss）→
+                    //    弹窗设成 `dismissOnClickOutside = false`（见 UpdateAvailableDialog），
+                    //    并且**等界面稳定 800ms 再弹**；
+                    // 2) 应用锁/小窗期间不弹，解锁/退出小窗后自然会跟上。
                     val pendingUpdate by App.INSTANCE.pendingUpdate.collectAsStateWithLifecycle()
-                    if (!locked && !pipActive) {
+                    // 应用内下载的状态：弹窗只画，状态与"下载好的文件"都留在这里，
+                    // 这样弹窗因为小窗/锁屏被暂时隐藏，进度也不会丢。
+                    var updateDownload by remember {
+                        mutableStateOf<com.thirdparty.xhs.ui.components.UpdateDownloadState>(
+                            com.thirdparty.xhs.ui.components.UpdateDownloadState.Idle
+                        )
+                    }
+                    val downloadedApk: java.io.File? =
+                        (updateDownload as? com.thirdparty.xhs.ui.components.UpdateDownloadState.Ready)
+                            ?.let { com.thirdparty.xhs.net.UpdateDownloader.targetFile(this, pendingUpdate?.version ?: "") }
+                            ?.takeIf { it.exists() }
+                    var updatePromptReady by remember { mutableStateOf(false) }
+                    androidx.compose.runtime.LaunchedEffect(Unit) {
+                        kotlinx.coroutines.delay(800)
+                        updatePromptReady = true
+                    }
+                    if (!locked && !pipActive && updatePromptReady) {
                         pendingUpdate?.let { info ->
                             UpdateAvailableDialog(
                                 info = info,
-                                onOpenPage = {
+                                download = updateDownload,
+                                onDownload = {
+                                    val url = info.apkUrl
+                                    if (url == null) {
+                                        openUrl(this@MainActivity, info.pageUrl)
+                                    } else {
+                                        updateDownload = UpdateDownloadState.Running(0L, -1L)
+                                        lifecycleScope.launch {
+                                            val outcome = com.thirdparty.xhs.net.UpdateDownloader.download(
+                                                context = this@MainActivity,
+                                                url = url,
+                                                version = info.version,
+                                                progress = { written, total ->
+                                                    updateDownload =
+                                                        UpdateDownloadState.Running(written, total)
+                                                }
+                                            )
+                                            updateDownload = when (outcome) {
+                                                is com.thirdparty.xhs.net.UpdateDownloader.Outcome.Ready ->
+                                                    UpdateDownloadState.Ready(outcome.versionName)
+
+                                                is com.thirdparty.xhs.net.UpdateDownloader.Outcome.Failed ->
+                                                    UpdateDownloadState.Failed(outcome.reason)
+                                            }
+                                        }
+                                    }
+                                },
+                                onInstall = {
+                                    val f = downloadedApk
+                                    if (f != null) {
+                                        runCatching {
+                                            startActivity(
+                                                com.thirdparty.xhs.net.UpdateDownloader
+                                                    .installIntent(this@MainActivity, f)
+                                            )
+                                        }.onFailure {
+                                            // 系统拒绝安装（多半是"未知来源"没打开）：把用户送去那个开关
+                                            runCatching {
+                                                startActivity(
+                                                    com.thirdparty.xhs.net.UpdateDownloader
+                                                        .unknownSourcesSettingsIntent(this@MainActivity)
+                                                )
+                                            }
+                                        }
+                                    }
+                                },
+                                onBrowser = {
                                     App.INSTANCE.dismissUpdate()
                                     openUrl(this@MainActivity, info.pageUrl)
                                 },
                                 onLater = { App.INSTANCE.dismissUpdate() },
-                                onSkipVersion = { App.INSTANCE.ignoreUpdateVersion(info.version) }
+                                onSkipVersion = {
+                                    App.INSTANCE.ignoreUpdateVersion(info.version)
+                                    updateDownload = UpdateDownloadState.Idle
+                                }
                             )
                         }
                     }
@@ -633,8 +750,15 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
     }
 
     private companion object {
-        /** last share link already offered, so the same clipboard does not re-prompt */
-        const val KEY_LAST_CLIP = "last_clipboard_note"
+        /**
+         * 上一次**真的问过用户**的剪贴板文本（不是 note id）。
+         *
+         * 两条规矩：
+         * 1. 按**内容**记（原来记 note id，同一条口令被静默过一次就永久不响应了）；
+         * 2. 只有**确实弹了对话框**才写 —— 自己刚分享的那次静默不能写，否则又变成"永久不响应"
+         *    （旧键 `last_clipboard_text` 就是被这么写坏的，所以换名，不继承脏状态）。
+         */
+        const val KEY_LAST_CLIP_PROMPTED = "last_clipboard_prompted"
 
         /** 退出小窗后等多久判断"展开还是关闭"（实测展开到 onResume 要 1.15s） */
         const val PIP_EXIT_GRACE_MS = 2_500L

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    FileProvider 能对外暴露的路径。只开「应用内更新下载」用的那一个子目录：
+    `cacheDir/updates/`（见 net/UpdateDownloader.targetFile）。
+    别的什么都不暴露 —— 这个 provider 的唯一用途是把下载好的 APK 交给系统安装器。
+-->
+<paths>
+    <cache-path name="updates" path="updates/" />
+</paths>

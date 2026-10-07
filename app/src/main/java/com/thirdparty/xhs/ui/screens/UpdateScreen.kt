@@ -34,7 +34,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -54,8 +56,8 @@ import com.thirdparty.xhs.ui.viewmodel.UpdateViewModel
 /**
  * 检查更新：独立页面，只做「查 GitHub Releases 上有没有新版本」这一件事。
  *
- * 这是本应用唯一不经 AES 加密包体的请求（见 net/UpdateChecker）：GET 一个公开 JSON，
- * 不带账号信息。它只给出发布页链接，不自己下载、不自己安装。
+ * 检查走 `releases.atom`（网页 feed，不吃 GitHub API 的 60 次/小时额度，见 net/UpdateChecker），
+ * 不带账号信息。发现新版后有两条路：**应用内下载并安装**（UpdateDownloader），或去浏览器打开发布页。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,6 +68,17 @@ fun UpdateScreen(
     val state by viewModel.ui.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showNotes by remember { mutableStateOf(false) }
+    // 应用内下载：状态与文件都留在这里（和启动弹窗里那套是同一个下载器）
+    var download by remember {
+        mutableStateOf<com.thirdparty.xhs.ui.components.UpdateDownloadState>(
+            com.thirdparty.xhs.ui.components.UpdateDownloadState.Idle
+        )
+    }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val downloadedFile: java.io.File? =
+        (download as? com.thirdparty.xhs.ui.components.UpdateDownloadState.Ready)
+            ?.let { com.thirdparty.xhs.net.UpdateDownloader.targetFile(context, state.result.let { r -> (r as? UpdateChecker.Result.Newer)?.version ?: "" }) }
+            ?.takeIf { it.exists() }
     // 检查更新页各组件的点击反馈（用户反馈「检查更新」按钮没有触感）
     val haptics = com.thirdparty.xhs.ui.components.rememberHaptics()
 
@@ -118,7 +131,57 @@ fun UpdateScreen(
                     Column(Modifier.padding(horizontal = Spacing.l, vertical = Spacing.s)) {
                         NewerBanner(
                             version = newer.version,
-                            onOpenPage = { openUrl(context, newer.apkUrl ?: newer.pageUrl) },
+                            download = download,
+                            onDownload = {
+                                val url = newer.apkUrl
+                                if (url == null) {
+                                    openUrl(context, newer.pageUrl)
+                                } else {
+                                    download =
+                                        com.thirdparty.xhs.ui.components.UpdateDownloadState
+                                            .Running(0L, -1L)
+                                    scope.launch {
+                                        val outcome =
+                                            com.thirdparty.xhs.net.UpdateDownloader.download(
+                                                context = context,
+                                                url = url,
+                                                version = newer.version,
+                                                progress = { w, t ->
+                                                    download =
+                                                        com.thirdparty.xhs.ui.components
+                                                            .UpdateDownloadState.Running(w, t)
+                                                }
+                                            )
+                                        download = when (outcome) {
+                                            is com.thirdparty.xhs.net.UpdateDownloader.Outcome.Ready ->
+                                                com.thirdparty.xhs.ui.components
+                                                    .UpdateDownloadState.Ready(outcome.versionName)
+
+                                            is com.thirdparty.xhs.net.UpdateDownloader.Outcome.Failed ->
+                                                com.thirdparty.xhs.ui.components
+                                                    .UpdateDownloadState.Failed(outcome.reason)
+                                        }
+                                    }
+                                }
+                            },
+                            onInstall = {
+                                downloadedFile?.let { f ->
+                                    runCatching {
+                                        context.startActivity(
+                                            com.thirdparty.xhs.net.UpdateDownloader
+                                                .installIntent(context, f)
+                                        )
+                                    }.onFailure {
+                                        runCatching {
+                                            context.startActivity(
+                                                com.thirdparty.xhs.net.UpdateDownloader
+                                                    .unknownSourcesSettingsIntent(context)
+                                            )
+                                        }
+                                    }
+                                }
+                            },
+                            onOpenPage = { openUrl(context, newer.pageUrl) },
                             onShowNotes = if (newer.notes.isNotEmpty()) ({ showNotes = true }) else null
                         )
                     }
@@ -137,8 +200,9 @@ fun UpdateScreen(
             }
 
             Text(
-                "只查询 GitHub 上的公开发布信息，不会自动下载或安装。有新版本时会给出下载页链接，" +
-                    "由你自己决定装不装。「没有正式版」「被限流」「断网」都会如实写在上面的状态里。",
+                "只查询 GitHub 上的公开发布信息（走 releases.atom，不占用 API 额度）。发现新版后可以直接在本" +
+                    "应用内下载安装，也可以去浏览器打开发布页 —— 装不装由你决定。「没有正式版」「限流」「断网」" +
+                    "都会如实写在上面的状态里。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = Spacing.l, vertical = Spacing.m)
@@ -166,8 +230,22 @@ fun UpdateScreen(
 }
 
 /** 有更新时才出现的行动区：一个下载按钮 + 可选的更新说明入口。 */
+/**
+ * 有更新时才出现的行动区。
+ *
+ * 主按钮是**应用内下载**（下完变成「安装」），旁边是「浏览器打开」与「更新说明」——
+ * 两条路都给，用户自己挑（有人习惯用浏览器看发布页，有人嫌来回切麻烦）。
+ */
 @Composable
-private fun NewerBanner(version: String, onOpenPage: () -> Unit, onShowNotes: (() -> Unit)?) {
+private fun NewerBanner(
+    version: String,
+    download: com.thirdparty.xhs.ui.components.UpdateDownloadState,
+    onDownload: () -> Unit,
+    onInstall: () -> Unit,
+    onOpenPage: () -> Unit,
+    onShowNotes: (() -> Unit)?
+) {
+    val haptics = rememberHaptics()
     Surface(
         shape = Corners.medium,
         color = MaterialTheme.colorScheme.primaryContainer,
@@ -176,15 +254,66 @@ private fun NewerBanner(version: String, onOpenPage: () -> Unit, onShowNotes: ((
         Column(Modifier.padding(Spacing.l)) {
             Text("发现新版本 v$version", style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(Spacing.s))
+            when (download) {
+                is com.thirdparty.xhs.ui.components.UpdateDownloadState.Running -> {
+                    Text(
+                        if (download.totalBytes > 0) {
+                            "正在下载 ${download.percent}%"
+                        } else {
+                            "正在下载…"
+                        },
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(Modifier.height(Spacing.xs))
+                    androidx.compose.material3.LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                is com.thirdparty.xhs.ui.components.UpdateDownloadState.Failed -> {
+                    Text(
+                        "下载失败：${download.reason}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    Spacer(Modifier.height(Spacing.xs))
+                }
+
+                is com.thirdparty.xhs.ui.components.UpdateDownloadState.Ready -> {
+                    Text(
+                        "安装包已下载完成，点「安装」交给系统安装器。",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(Modifier.height(Spacing.xs))
+                }
+
+                is com.thirdparty.xhs.ui.components.UpdateDownloadState.Idle -> Unit
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Button(onClick = rememberHaptics().click(onOpenPage)) {
+                Button(
+                    onClick = haptics.click(
+                        when (download) {
+                            is com.thirdparty.xhs.ui.components.UpdateDownloadState.Ready -> onInstall
+                            else -> onDownload
+                        }
+                    ),
+                    enabled = download !is com.thirdparty.xhs.ui.components.UpdateDownloadState.Running
+                ) {
                     Icon(Icons.Filled.Download, null, Modifier.size(18.dp))
                     Spacer(Modifier.size(Spacing.s))
-                    Text("打开下载页")
+                    Text(
+                        when (download) {
+                            is com.thirdparty.xhs.ui.components.UpdateDownloadState.Ready -> "安装"
+                            is com.thirdparty.xhs.ui.components.UpdateDownloadState.Failed -> "重试下载"
+                            is com.thirdparty.xhs.ui.components.UpdateDownloadState.Running -> "下载中…"
+                            is com.thirdparty.xhs.ui.components.UpdateDownloadState.Idle -> "应用内下载"
+                        }
+                    )
                 }
+                Spacer(Modifier.size(Spacing.s))
+                TextButton(onClick = haptics.click(onOpenPage)) { Text("浏览器打开") }
                 if (onShowNotes != null) {
-                    Spacer(Modifier.size(Spacing.s))
-                    TextButton(onClick = rememberHaptics().click(onShowNotes)) { Text("更新说明") }
+                    TextButton(onClick = haptics.click(onShowNotes)) { Text("更新说明") }
                 }
             }
         }

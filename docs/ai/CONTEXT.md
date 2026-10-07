@@ -130,7 +130,10 @@ app/src/main/java/com/thirdparty/xhs/
   进程内位图 LRU（`ui/components/XhsAsyncImage.kt` 的 `BitmapCache`，`maxMemory/8`）、`cache/` 下的其它临时文件。
   收藏 / 最近浏览 / 关注在 Room（`xhs_local.db`）里，是**数据不是缓存**，清理不会动它们；视频不落盘（边看边下，退出即释放）。
   入口：设置 → 数据 → 清除缓存（`ui/screens/CacheScreen.kt` + `ui/viewmodel/CacheViewModel.kt`）。
-- 检查更新：`net/UpdateChecker.kt` 查 GitHub `releases/latest`；启动时 `App.checkUpdateOnLaunch()` 自动查一次
-  （**12 小时节流**，且只有成功的检查才写时间戳 —— 硬约束 15；「跳过这个版本」记在 `settings.ignored_update_version`），
+- 检查更新：`net/UpdateChecker.kt` 先取 `releases.atom`（**不吃 API 额度**），失败才回落 api.github.com；
+  `App.checkUpdateOnLaunch()` **每次进前台查一次**（去重 3s / 失败退避 5min —— 硬约束 15；
+  「跳过这个版本」记在 `settings.ignored_update_version`），查到新版由 `ui/components/UpdateAvailableDialog.kt`
+  提供**应用内下载安装**（`net/UpdateDownloader.kt`：下到 `cacheDir/updates/`、校验包名、交给系统安装器）
+  或浏览器打开发布页，
   只有 `Newer` 且未被「跳过这个版本」（`settings.ignored_update_version`）时才弹 `UpdateAvailableDialog`。
   GitHub 匿名额度 60 次/小时/IP，超出是 HTTP 403（页面上显示「检查失败：GitHub 限流」），限流/断网不会弹窗。
