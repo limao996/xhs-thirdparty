@@ -273,10 +273,12 @@ fun MediaPlayer(
         // Reset affordance while zoomed, same one the image viewer shows. Only in
         // fullscreen: that is the only mode where zooming is possible.
         if (fullscreen && scale > 1.01f) {
-            // 控制栏高度是**实测**的（AutoHideController 里的 onGloballyPositioned 报上来）：
-            // 以前写死 96dp，控制栏一显示就把「恢复」按钮压在它下面（用户反馈"没避让控制栏"）。
-            // 控制栏隐藏时按 96dp 托底；显示时按实测高度 + 一点间距抬上去。
-            val bottomInset = if (controlsVisible) controlBarHeight + Spacing.m else FULLSCREEN_RESET_INSET
+            // 位置规则（用户要求）：**和图文查看器一样贴底**，只在控制栏出现时被它顶起来。
+            // - 控制栏隐藏：`Spacing.l`（= 图文那个 `padding(bottom = Spacing.l)`，两边一致）；
+            // - 控制栏显示：抬到控制栏之上（高度是**实测**的，见 AutoHideController 的
+            //   onGloballyPositioned → onControlBarHeight），间距 Spacing.s。
+            // 以前这里写死 96dp，结果控制栏没出来时它也在半空飘着，而且控制栏一显示就把它压住。
+            val bottomInset = if (controlsVisible) controlBarHeight + Spacing.s else Spacing.l
             Box(
                 Modifier.align(Alignment.BottomCenter)
                     .windowInsetsPadding(WindowInsets.navigationBars)
@@ -294,8 +296,6 @@ fun MediaPlayer(
 
 /** Highest magnification the fullscreen player allows. */
 private const val MAX_PLAYER_ZOOM = 4f
-/** Keeps the reset pill clear of the seek bar. */
-private val FULLSCREEN_RESET_INSET = 96.dp
 
 /**
  * Bounds panning to what the zoom reveals, in the same way the image viewer does.

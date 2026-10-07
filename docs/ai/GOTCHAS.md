@@ -495,6 +495,19 @@
 - 验证手法：`adb shell svc wifi disable` → 冷启动（看错误态多久出现）→ `svc wifi enable` → 看内容是否自动回来、
   以及 `logcat -s XhsUpdate` 里是否出现一次 `check=UpToDate`。VPN 起来与"Wi-Fi 恢复"走的是**同一条**回调。
 
+**H19 · 全屏「恢复」按钮的位置规则：图文与视频必须一致（贴底，被控制栏顶起来）**
+- 两处实现：`ui/components/FullscreenImageViewer.kt`（图文）与 `ui/components/MediaPlayer.kt`（视频全屏）。
+- 规则（用户定的）：
+  - **底距**：`windowInsetsPadding(WindowInsets.navigationBars)` + `padding(bottom = Spacing.l)` —— 就是"贴底"，
+    两边必须一样；
+  - **被控制栏顶起来**：视频那边控制栏可见时要抬到它上面。高度**实测**（`AutoHideController` 里控制栏根节点
+    的 `onGloballyPositioned` → `onControlBarHeight` 回调到外层，因为「恢复」按钮在外层那一层，
+    它看不见 `AutoHideController` 的内部状态；可见性同样靠 `onControlsVisibility` 报出来）。
+- 踩过的坑：①固定 96dp 底距 → 控制栏没出来时按钮飘在半空（"应该像图文一样贴底"）；
+  ②在 `AutoHideController` 里读外层状态 → 编译不过（作用域不对），所以状态必须**提到外层**、内部只上报。
+- 验证限制：这个按钮只在**缩放后**出现，而 `adb shell input` 注入不了双指捏合 —— 只能真机双指确认
+  （想临时看位置可以把条件改成 `if (fullscreen)`，看完**必须还原**）。
+
 ## I. 验证工具本身的坑
 
 **I1 · `uiautomator dump` 失败时会读到上一次的旧文件**
