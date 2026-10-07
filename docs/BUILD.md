@@ -68,7 +68,7 @@ Get-FileHash $apk -Algorithm MD5                          # 分发时贴这个�
 | --- | --- |
 | 大小 / md5 | `3,317,161 B` / `0bf90e90feb084d9f7010a490d4b43a5` |
 | sha256 | `2a77c42e9a2eca05ae4fa78e15561c27bf0471814aa23744d84bb16df59747f2` |
-| versionName / versionCode | **`1.3.0` / `469201`**（已发布：[v1.3.0](https://github.com/limao996/xhs-thirdparty/releases/tag/v1.3.0)） |
+| versionName / versionCode | **`1.3.1`**（已发布：[v1.3.1](https://github.com/limao996/xhs-thirdparty/releases/tag/v1.3.1)；上一版 `1.3.0` / `469201`） |
 | minSdk / targetSdk / compileSdk | `26` / `37` / `37` |
 | 签名 | v2 scheme（v1/v3 未启用），`CN=ThirdParty XHS Client`，RSA 2048 |
 | 权限（合并后） | `INTERNET`、`ACCESS_NETWORK_STATE`、`WAKE_LOCK`、`REQUEST_INSTALL_PACKAGES`（应用内更新用）+ `USE_BIOMETRIC`、`USE_FINGERPRINT`（biometric 库合入）+ `com.thirdparty.xhs.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`（androidx 合入） |
