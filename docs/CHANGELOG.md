@@ -631,6 +631,20 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 
 
+### 阶段三十九 · 发布 v1.3.1（正式包 + 推送 + Release）
+
+| 项 | 值 |
+| --- | --- |
+| 版本 | `1.3.1` / versionCode `568071`（时间戳推导） |
+| 构建 | `assembleRelease` BUILD SUCCESSFUL；签名证书 SHA-256 `6cb3580937ffa195ea5ee06df2aca5c56a818e7c39123bcf478e2a93acdb1439`（与历史一版一致，keystore 未动） |
+| 产物 | `3,334,005 B` / md5 `9bb147ebd31838af3a7066a8278ec7c0` / sha256 `235cf4f306e1dd1823e4bab8a44fdd11a4ed43545ca569c6a5321e2bfd48ffbd` |
+| 装机 | `adb install -r` Success；冷启动冒烟 **崩溃数 0**；`dumpsys package` → `versionName=1.3.1 versionCode=568071` |
+| 推送 | `git push origin main`：`9e03c80..adc6d8f` |
+| Release | [v1.3.1](https://github.com/limao996/xhs-thirdparty/releases/tag/v1.3.1)（Latest、非 draft、非 prerelease），资产 `xhs-thirdparty-1.3.1-release.apk` |
+| 更新链路核验 | 应用内更新拼出的地址 `…/releases/download/v1.3.1/xhs-thirdparty-1.3.1-release.apk` → **HTTP 200**、`Content-Length 3334005`（与本地产物字节数一致）；`releases.atom` 首个 tag = **v1.3.1**（即"进应用就查更新"能查到本版） |
+
+覆盖本轮之前的所有改动（阶段三十六~三十八）：剪贴板口令、更新弹窗 / 双下载 / atom 免限流、海外线路快速失败与自动重试、失败提示全面补齐、视频全屏「恢复」贴底。
+
 ### 阶段三十八 · 失败提示全面检查（发现页缺提示 + 同类问题）
 
 用户反馈「发现页缺少访问失败提示」，按要求做了全仓排查。

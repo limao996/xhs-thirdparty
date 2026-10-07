@@ -102,7 +102,7 @@ CI（`.github/workflows/android.yml`）在 push / PR 上跑 `assembleDebug` → 
 
 `versionName` 变了就更新 `docs/CHANGELOG.md` 的统计表与 `docs/ai/CONTEXT.md`。
 
-发布留档：`v1.3.0`（`3,317,161 B` / md5 `0bf90e90feb084d9f7010a490d4b43a5` / sha256 `2a77c42e9a2eca05ae4fa78e15561c27bf0471814aa23744d84bb16df59747f2` / versionCode `469201`，2026-10-06）；`v1.2.1`（`3,306,226 B` / md5 `6d799ca08d1fab281aef854961c70057` / versionCode `326862`）；`v1.2.0`（`3,289,838 B` / md5 `1ea558980a0f9d6085c232d0fc6b0462` / versionCode `321075`）。
+发布留档：`v1.3.1`（`3,334,005 B` / md5 `9bb147ebd31838af3a7066a8278ec7c0` / sha256 `235cf4f306e1dd1823e4bab8a44fdd11a4ed43545ca569c6a5321e2bfd48ffbd` / versionCode `568071`，2026-10-07；资产名 `xhs-thirdparty-1.3.1-release.apk`，[下载](https://github.com/limao996/xhs-thirdparty/releases/download/v1.3.1/xhs-thirdparty-1.3.1-release.apk)）；`v1.3.0`（`3,317,161 B` / md5 `0bf90e90feb084d9f7010a490d4b43a5` / sha256 `2a77c42e9a2eca05ae4fa78e15561c27bf0471814aa23744d84bb16df59747f2` / versionCode `469201`，2026-10-06）；`v1.2.1`（`3,306,226 B` / md5 `6d799ca08d1fab281aef854961c70057` / versionCode `326862`）；`v1.2.0`（`3,289,838 B` / md5 `1ea558980a0f9d6085c232d0fc6b0462` / versionCode `321075`）。
 
 ## 4. 签名
 

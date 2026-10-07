@@ -123,7 +123,7 @@ app/src/main/java/com/thirdparty/xhs/
 | 解压版 Gradle（快） | `%USERPROFILE%\.gradle\wrapper\dists\gradle-9.8.0-bin\*\gradle-9.8.0\bin\gradle.bat` |
 | 模拟器 AVD | `xhs_test`（API 34、1080×2400、420dpi），位于 `%USERPROFILE%\.android\avd`，**不在仓库里** |
 | 构建产物 | `app/build/outputs/apk/{debug,release}/`（不入库） |
-| 最近一次实测 | 2026-10-06：`assembleRelease` 成功（Gradle 9.8.0 / AGP 9.4.1 / JDK 17，3 分 1 秒），产物 `app-release.apk` **3,317,161 B**、md5 `0bf90e90feb084d9f7010a490d4b43a5`、sha256 `2a77c42e9a2eca05ae4fa78e15561c27bf0471814aa23744d84bb16df59747f2`，versionName **`1.3.0`** / versionCode `469201`，已发布 [v1.3.0](https://github.com/limao996/xhs-thirdparty/releases/tag/v1.3.0)；模拟器上装正式包（`com.thirdparty.xhs`）实测：`pm path` 取出的 `base.apk` md5 与本地一致、冷启动拿到 `游客ID：68965284`、推荐流正常、`crash: 0`（上一版 v1.2.1 的留档见 `docs/BUILD.md`） |
+| 最近一次实测 | 2026-10-07：`assembleRelease` 成功（Gradle 9.8.0 / AGP 9.4.1 / JDK 17），产物 `app-release.apk` **3,334,005 B**、md5 `9bb147ebd31838af3a7066a8278ec7c0`、sha256 `235cf4f306e1dd1823e4bab8a44fdd11a4ed43545ca569c6a5321e2bfd48ffbd`，versionName **`1.3.1`** / versionCode `568071`，已发布 [v1.3.1](https://github.com/limao996/xhs-thirdparty/releases/tag/v1.3.1)（资产 `xhs-thirdparty-1.3.1-release.apk`，应用内更新拼出的下载地址实测 **HTTP 200 / 3334005 B**）；模拟器（API 34 / 1080×2400）实装正式包（`com.thirdparty.xhs`）：`adb install -r` 成功、`dumpsys package` 显示 `versionName=1.3.1 versionCode=568071`、冷启动冒烟 `crash: 0`；本轮实机验证过的行为：断网冷启动发现页整块「分类加载失败 + 重试」、开回网络 10.1 秒自动恢复、切后台再回前台即重查更新（26 秒 3 次、0 次 api.github.com）、更新弹窗 5 秒后仍在、应用内下载 → 系统安装器（详见 `docs/CHANGELOG.md` 阶段三十六~三十九；历史版本留档见 `docs/BUILD.md`） |
 
 ## 7. 当前状态
 
