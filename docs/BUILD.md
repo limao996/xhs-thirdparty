@@ -62,12 +62,12 @@ Get-FileHash $apk -Algorithm MD5                          # 分发时贴这个�
 & "$bt\aapt2.exe" dump xmltree $apk --file AndroidManifest.xml | Select-String debuggable  # 应无输出
 ```
 
-`2026-10-06` 实测（`assembleRelease` **3 分 1 秒**，含 `lintVitalRelease` / `minifyReleaseWithR8` / `optimizeReleaseResources`）：
+`2026-10-07` 实测（`assembleRelease` **1 分 2 秒**（增量）/ **3 分 1 秒**（全量），含 `lintVitalRelease` / `minifyReleaseWithR8` / `optimizeReleaseResources`）：
 
 | 项 | 值 |
 | --- | --- |
-| 大小 / md5 | `3,317,161 B` / `0bf90e90feb084d9f7010a490d4b43a5` |
-| sha256 | `2a77c42e9a2eca05ae4fa78e15561c27bf0471814aa23744d84bb16df59747f2` |
+| 大小 / md5 | `3,334,005 B` / `9bb147ebd31838af3a7066a8278ec7c0` |
+| sha256 | `235cf4f306e1dd1823e4bab8a44fdd11a4ed43545ca569c6a5321e2bfd48ffbd` |
 | versionName / versionCode | **`1.3.1`**（已发布：[v1.3.1](https://github.com/limao996/xhs-thirdparty/releases/tag/v1.3.1)；上一版 `1.3.0` / `469201`） |
 | minSdk / targetSdk / compileSdk | `26` / `37` / `37` |
 | 签名 | v2 scheme（v1/v3 未启用），`CN=ThirdParty XHS Client`，RSA 2048 |
