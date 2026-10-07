@@ -323,7 +323,7 @@ private fun FeedCategoryPage(
         EmptyState(
             title = "内容加载失败",
             modifier = Modifier.fillMaxSize(),
-            description = "请检查网络后重试",
+            description = "接口在海外，需要能访问海外的线路；网络恢复后会自动重试",
             actionLabel = "重试",
             onAction = { viewModel.retry() }
         )
@@ -443,7 +443,7 @@ private fun FanGroupTab(
         EmptyState(
             title = "内容加载失败",
             modifier = Modifier.fillMaxSize(),
-            description = "请检查网络后重试",
+            description = "接口在海外，需要能访问海外的线路；网络恢复后会自动重试",
             actionLabel = "重试",
             onAction = onRetry
         )

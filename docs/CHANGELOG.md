@@ -631,6 +631,20 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 
 
+### 阶段三十七 · 海外线路：快速失败 + 网络恢复自动重试（含检查更新）
+
+用户反馈"大部分 API 在海外，没线路就一直加载；开了 VPN 也要及时响应（包括检测更新）"。
+
+| 项 | 做法 | 证据 |
+| --- | --- | --- |
+| 无网络**快速失败** | `App.hasValidatedNetwork()`（INTERNET + VALIDATED）为假时：`XhsApi` 抛 `NoUsableNetworkException`、`UpdateChecker.check()` 直接返回 `Failed`，不发请求 | 实机断网冷启动：错误态（含启动与 dump 开销）**5.3 秒**出现，文案「接口在海外，需要能访问海外的线路；网络恢复后会自动重试」；`XhsUpdate check=Failed` 在启动瞬间就打印 |
+| 超时收紧 | 主客户端 connect 10s / read 15s / write 15s / **callTimeout 20s**（原来 30s×2 次重试 ≈ 1 分钟）；更新检查 connect 6s / read 8s / callTimeout 12s | 编译 + 实机（上一条的耗时即含这条的效果） |
+| 网络恢复**自动重试** | `App.watchNetwork()` → `bump()` → `networkEpoch` +1；补上还没接的 4 个 ViewModel（`SearchViewModel`/`AuthorViewModel`/`UserListViewModel`/`ProfileViewModel`），只在"失败/没内容"时补载 | 实机：`svc wifi enable` 后内容**6.1 秒**自动回来（含 dump 开销），无需手动重试 |
+| 检查更新跟随网络恢复 | `bump()` 里**清掉失败退避**（`lastUpdateFailed=false; lastUpdateAttemptAt=0`）再查一次 | 实机日志：`…34.675 check=Failed`（刚恢复但还没校验完）→ `…36.193 check=UpToDate failed=false` —— 恢复后**自动**查并成功 |
+| 文案统一 | 推荐/发现/作者页的失败态与详情页失败文案都说明"接口在海外，需要能访问海外的线路；网络恢复后会自动重试" | dump 命中该文案；`docs/images/screenshots/offline-fast-fail.png`（未入库） |
+
+**仍未验证**：真实 VPN 起来的回调路径与"Wi-Fi 恢复"是同一个（`onAvailable` / `onCapabilitiesChanged(VALIDATED)`），本轮用 Wi-Fi 开关模拟；没有在真机上用 VPN 客户端复测。
+
 ### 阶段三十六 · 六条反馈：剪贴板口令 / 两处"恢复"避让 / 更新弹窗 / 双下载 / 限流
 
 | # | 反馈 | 处置 | 证据 |

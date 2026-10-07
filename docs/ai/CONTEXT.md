@@ -60,6 +60,11 @@ app/src/main/java/com/thirdparty/xhs/
 关键约定：**UI 层永远不直接调 `net/`**，只能经 `data/XhsRepository.kt`；`ui/viewmodel/` 用
 `RepoViewModelFactory` 拿到仓库。
 
+**网络与海外线路（重要）**：接口与 GitHub 都在海外。`App.hasValidatedNetwork()` 为假时请求**直接失败**
+（不等超时）；主 OkHttp 客户端 connect 10s / read 15s / callTimeout 20s，更新检查 6/8/12s。
+网络恢复（开 VPN 是**新的默认网络**）时 `App.bump()` 把 `networkEpoch` +1 —— 各 ViewModel 观察它
+自动补载，并**清掉更新检查的失败退避**立刻重查。
+
 ## 3. 数据流（三个方向都要记住）
 
 ```

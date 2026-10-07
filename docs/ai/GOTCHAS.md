@@ -480,6 +480,21 @@
 - 取证：`logcat -s XhsClip` 会打印 `len/note/lastLen/same/self`；复现路径是
   「详情页分享 → 分享面板 Copy → 强杀进程 → 再进应用」。
 
+**G7 · 海外线路：能"秒失败"就别等超时，网络一恢复就要自动重试**
+- 症状：没开线路时 App 一直转圈（原来 connect 30s × 2 次重试 ≈ 1 分钟才有结论）；开了线路回来还得手动点重试，
+  "检测更新"更是被失败退避挡住。
+- 做法：
+  1. `App.hasValidatedNetwork()`（`NET_CAPABILITY_INTERNET` + `VALIDATED`）为假 → `XhsApi` 直接抛
+     `NoUsableNetworkException`、更新检查直接返回 `Failed`，**一个字节都不发**；
+  2. 超时收紧 + `callTimeout`：主客户端 10/15/15s + callTimeout 20s；更新检查 6/8/12s（它还要 `callTimeout`，
+     否则 atom 那步卡住就没人管）；
+  3. 自动重试的**唯一触发点**是 `App.watchNetwork()` 的 `onAvailable` / `onCapabilitiesChanged(VALIDATED)`
+     → `bump()` → `networkEpoch` +1 → 各 ViewModel 的 `networkEpoch.drop(1).collect { … }` 补载；
+  4. `bump()` 里还要**清掉更新检查的失败退避**（`lastUpdateFailed=false; lastUpdateAttemptAt=0`）再查一次，
+     否则"进来时没网 → 失败 → 退避 5 分钟"会把开了线路之后的这次机会也吃掉。
+- 验证手法：`adb shell svc wifi disable` → 冷启动（看错误态多久出现）→ `svc wifi enable` → 看内容是否自动回来、
+  以及 `logcat -s XhsUpdate` 里是否出现一次 `check=UpToDate`。VPN 起来与"Wi-Fi 恢复"走的是**同一条**回调。
+
 ## I. 验证工具本身的坑
 
 **I1 · `uiautomator dump` 失败时会读到上一次的旧文件**

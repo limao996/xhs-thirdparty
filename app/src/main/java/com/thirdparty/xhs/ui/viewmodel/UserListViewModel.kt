@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import com.thirdparty.xhs.common.runCatchingCancellable
+import kotlinx.coroutines.flow.drop
 
 /** Which server-backed account list to show. */
 enum class UserListMode { FOLLOWING, FANS }
@@ -41,7 +42,16 @@ class UserListViewModel(
     private var loading = false
     private var emptyPages = 0
 
-    init { load(reset = true) }
+    init {
+            load(reset = true)
+        // 线路在国内、接口在海外：没开 VPN 时首屏必然失败。网络一恢复（开 VPN = 新的默认网络）
+        // `App.networkEpoch` 会 +1，这里自动补一次 —— 用户不用手动点重试。
+        viewModelScope.launch {
+            com.thirdparty.xhs.App.INSTANCE.networkEpoch.drop(1).collect { 
+                if (_ui.value.error && _ui.value.users.isEmpty()) load(reset = true) }
+        }
+
+        }
 
     fun load(reset: Boolean = false) {
         if (loading) return

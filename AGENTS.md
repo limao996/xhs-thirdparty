@@ -34,6 +34,7 @@
 | 22 | 分享一律走**系统分享面板**（`Intent.ACTION_SEND` + `text/plain` + `createChooser`），不要再自己写"剪贴板 + Toast"式的分享。同时：①**分享前**用 `ShareText.markSelfShared(noteId, text)` 登记，`MainActivity` 的剪贴板回流检测遇到与自己登记一致的内容要直接忽略（否则"复制自己刚分享的口令"会绕回同一个笔记）；②用 `Intent.EXTRA_EXCLUDE_COMPONENTS` 把自己从面板里排除；③`EXTRA_TITLE` 只在面板预览显示、不会发给目标，用固定的用户面向文案（「来自「小黄书」的分享」），不要放作品标题 | 用户点分享是要"发出去"；分享面板里同样能复制，而"复制→回应用"正是口令回流链路，必须区分"别人给我的"和"我自己刚发出去的" |
 | 23 | 拖动类控件（进度条 / 倍速条）的触感是**按下即触发**（`Modifier.pressHaptic(haptics)`：`PointerEventPass.Initial` 观察 Press，不消费事件），**不要**在拖动过程中按比例连发 | 用户要的是"按下去抖一下"，拖动中连发会显得吵；观察而非消费事件，所以不影响控件自身手势 |
 | 24 | 可点区域里**不要同时**挂单击与双击语义（`combinedClickable(onClick=…, onDoubleClick=…)`）：单击必须等双击判定窗口（~300ms）才触发，用户会感觉"点了半天才跳转"。信息条这类"点一下就走"的区域用普通 `clickable`，双击暂停留给视频画面那一层 | 这是系统手势判定的固有代价，不是性能问题；把两种语义分层放，点击才跟手 |
+| 25 | **接口在海外**（`app.xiaohuangbook.net` / GitHub 都要线路）：①没有**已验证**网络时**直接失败**（`App.hasValidatedNetwork()` 为假 → `XhsApi.NoUsableNetworkException` / 更新检查直接 `Failed`），不要等超时；②OkHttp 超时收紧（App 主客户端 connect 10s / read 15s / **callTimeout 20s**；更新检查 6/8/12s）；③**网络一恢复（开 VPN = 新的默认网络）要自动重试**：`App.watchNetwork()` → `bump()` → `networkEpoch` +1，各 ViewModel（Detail/Discover/VideoFeed/Guest/Search/Author/UserList/Profile）观察它并补载；同时 `bump()` 会**清掉更新检查的失败退避**并立刻重查 | 不这么做就是「没开 VPN 一直转圈（原来 30s×2 次重试 ≈ 1 分钟）、开了 VPN 又不及时恢复，连检查更新都被退避挡住」—— 用户实测反馈的原话 |
 
 ## 1. 项目一句话
 

@@ -62,8 +62,10 @@ object UpdateChecker {
 
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(15, TimeUnit.SECONDS)
+            // GitHub 也在海外：没线路时别让"进应用查更新"卡住十几秒
+            .connectTimeout(6, TimeUnit.SECONDS)
+            .readTimeout(8, TimeUnit.SECONDS)
+            .callTimeout(12, TimeUnit.SECONDS)
             .build()
     }
 
@@ -75,6 +77,11 @@ object UpdateChecker {
      */
     suspend fun check(currentVersion: String = BuildConfig.VERSION_NAME): Result =
         withContext(Dispatchers.IO) {
+            // 没有可用网络就别打请求了：立即返回失败（界面不阻塞），
+            // 等网络恢复（开 VPN）时 `App.bump()` 会清掉退避并立刻重查 —— 见 App.checkUpdateOnLaunch。
+            if (!com.thirdparty.xhs.App.INSTANCE.hasValidatedNetwork()) {
+                return@withContext Result.Failed("当前没有可用网络（需要能访问海外的线路）")
+            }
             val viaAtom = runCatching { fetchAtom() }.getOrNull()
             if (viaAtom != null) {
                 return@withContext when {

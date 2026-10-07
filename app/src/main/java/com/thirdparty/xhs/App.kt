@@ -222,9 +222,14 @@ class App : Application() {
         // encrypted API traffic is unaffected.)
         httpClient = OkHttpClient.Builder()
             .cache(okhttp3.Cache(java.io.File(cacheDir, "http_cache"), HTTP_CACHE_BYTES))
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
+            // 线路在国内、接口在海外：没有 VPN 时 SYN 会被丢，connect 会一直等到超时。
+            // 所以这里把 connect 收到 10s、read 收到 15s，并加 callTimeout —— 单次请求最多 20s
+            // 就有结论（原来是 30s×2 次重试 ≈ 一分钟的转圈）。配合 XhsApi 的"没有可用网络就直接失败"，
+            // 无网时几乎是立刻给出错误态而不是转圈。
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .writeTimeout(15, TimeUnit.SECONDS)
+            .callTimeout(20, TimeUnit.SECONDS)
             .build()
         repository = XhsRepository(this, httpClient)
         themeState.value = loadThemeMode()
@@ -264,10 +269,32 @@ class App : Application() {
         }
     }
 
+    /**
+     * 当前是否有"可用（已验证）的网络"。
+     *
+     * 用来做**快速失败**：国内线路直连海外接口时，没有 VPN 的请求会一直等到超时。既然
+     * 系统已经告诉我们"现在没有可用网络"，就不要去等那 10~20 秒 —— 直接返回失败，
+     * 让界面立刻显示错误态，等网络真的可用时（例如开了 VPN）再自动重试。
+     *
+     * 校验过（`NET_CAPABILITY_VALIDATED`）才算可用：只连着 Wi-Fi 但还没通外网、
+     * 或者被强制门户拦住的情况，都应当算"不可用"。
+     */
+    fun hasValidatedNetwork(): Boolean {
+        val cm = getSystemService(android.net.ConnectivityManager::class.java) ?: return true
+        val network = cm.activeNetwork ?: return false
+        val caps = cm.getNetworkCapabilities(network) ?: return false
+        return caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    }
+
     private fun bump() {
         networkEpoch.value = networkEpoch.value + 1
-        // 网络刚恢复：上次检查失败过就补一次（退避判断在 checkUpdateOnLaunch 里）
-        if (lastUpdateFailed) checkUpdateOnLaunch()
+        // 网络换了/刚恢复（典型：用户开了 VPN，这是一个新的默认网络）：**把更新检查的失败退避清掉**，
+        // 立刻再查一次。否则"进应用时没网 → 检查失败 → 退避 5 分钟"会把 VPN 起来后的这次机会也挡掉，
+        // 用户就会觉得"开了 VPN 也不查更新"。
+        lastUpdateFailed = false
+        lastUpdateAttemptAt = 0L
+        checkUpdateOnLaunch()
     }
 
     private fun loadThemeMode(): ThemeMode {

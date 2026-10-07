@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import com.thirdparty.xhs.common.runCatchingCancellable
+import kotlinx.coroutines.flow.drop
 
 enum class SearchResultMode { CONTENT, USER }
 
@@ -44,7 +45,16 @@ class SearchViewModel(private val repo: XhsRepository) : ViewModel() {
     /** short pages are normal upstream — see PagingGuard */
     private val paging = PagingGuard()
 
-    init { refreshHistory() }
+    init {
+            refreshHistory()
+        // 线路在国内、接口在海外：没开 VPN 时首屏必然失败。网络一恢复（开 VPN = 新的默认网络）
+        // `App.networkEpoch` 会 +1，这里自动补一次 —— 用户不用手动点重试。
+        viewModelScope.launch {
+            com.thirdparty.xhs.App.INSTANCE.networkEpoch.drop(1).collect { 
+                if (_ui.value.error && _ui.value.query.isNotBlank()) runSearch(_ui.value.query) }
+        }
+
+        }
 
     fun onQueryChange(q: String) { _ui.update { it.copy(query = q) } }
 

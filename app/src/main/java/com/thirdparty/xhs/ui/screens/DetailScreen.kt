@@ -447,7 +447,10 @@ fun DetailScreen(
                 LoadingIndicator()
             }
             state.missing && inherited == null -> Box(Modifier.fillMaxSize().padding(pad), contentAlignment = Alignment.Center) {
-                Text("内容加载失败（可能已下线或需付费）")
+                Text(
+                    // 接口在海外：没开 VPN 时就会看到这句；网络恢复后详情页会自动重试
+                    "内容加载失败（可能已下线、需要付费，或当前线路访问不了海外接口）"
+                )
             }
             else -> {
                 // NOTE: fullscreen is a LAYOUT of this same content, not a separate

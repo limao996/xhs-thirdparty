@@ -157,6 +157,13 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
     }
 
     private suspend fun doCall(path: String, params: Map<String, Any>): JSONObject {
+        // 没有可用（已验证）网络时**直接失败**，不要等超时：
+        // 国内线路直连海外接口，没 VPN 的话 connect 会一直卡到超时（10~20s），
+        // 界面就一直转圈。快速失败能让错误态秒出，而网络一恢复（开 VPN = 新的默认网络）
+        // `App.networkEpoch` 会 +1，ViewModels 会自动重试。
+        if (!com.thirdparty.xhs.App.INSTANCE.hasValidatedNetwork()) {
+            throw NoUsableNetworkException(path)
+        }
         // Transient network failures (DNS blips, dropped connections) are common
         // on mobile. Every endpoint used here is a read-only query (or a guest
         // login, which is safe to repeat), so one bounded retry is worthwhile.
@@ -183,6 +190,15 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
         }
         throw lastError ?: java.io.IOException("request failed: $path")
     }
+
+    /**
+     * 当前没有可用网络（典型：没开 VPN / 刚断网）。
+     *
+     * 单独一类而不是笼统的 `IOException`：界面可以据此显示"需要能访问海外的线路"，
+     * 而不是把"没网"和"服务器出错"混成一句话。
+     */
+    class NoUsableNetworkException(path: String) :
+        java.io.IOException("当前没有可用网络（$path）：需要能访问海外的线路")
 
     /** 非 2xx 响应；4xx 不重试，见 [doCall]。 */
     class HttpStatusException(val code: Int, path: String) :
