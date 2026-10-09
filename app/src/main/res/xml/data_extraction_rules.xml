@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  云备份与设备间迁移都排除全部内容。
+
+  为什么两个机制都有：`android:allowBackup="false"` 从 Android 12 起已废弃、未来可能被移除，
+  而 12+ 实际读的是这份规则；`allowBackup` 负责 11 及以下。两份都留着，行为才是版本无关的
+  （lint 的 DataExtractionRules 检查也是这个理由）。
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" path="." />
+    </device-transfer>
+</data-extraction-rules>

@@ -600,8 +600,12 @@
 **H25 · 清单与权限的两条小坑**
 - **XML 注释不能放在标签的属性之间**。想给 `<application>` 里的某个属性加说明，注释必须写在标签**外面**，
   否则 `processDebugMainManifest` 直接失败（2026-10-09 踩过：把注释塞在 `android:name` 与 `android:allowBackup` 之间）。
-- **`allowBackup="false"` 时不需要 `dataExtractionRules` / `fullBackupContent`**：那两个是「备份开着、只排除一部分」
-  才用的规则；`allowBackup=false` 已经把云备份与设备间迁移一起关掉了。留着只是死配置，还多一个 xml 文件。
+- **备份要两个机制一起留**：`android:allowBackup="false"` 从 Android 12 起**已废弃、未来可能被移除**，
+  12+ 实际读的是 `android:dataExtractionRules`（排除全部内容的规则文件）。
+  2026-10-10 我先按「allowBackup=false 已经够了，规则文件是死配置」把它删掉，lint 先报「缺 dataExtractionRules」
+  （allowBackup 已被废弃），补上之后又报「缺 fullBackupContent」（minSdk 26，规则只管 12+）—— **两轮才纠对**，
+  最终三条都留：`allowBackup=false` + `fullBackupContent=false` + `dataExtractionRules`。
+  **这条记着：删清单属性前先跑一次 lint，别只按语义推。**
 - 审查权限的正确姿势：先用 `aapt2 dump permissions <apk>` 看**合并后**的清单（库会带权限进来），
   再逐个对照代码里是否真的用到。本项目 2026-10-09 的结论是「没有多余权限」：
   `WAKE_LOCK` 看着没人用，其实是 `VideoPlayer` 的 `setWakeMode(C.WAKE_MODE_LOCAL)` 在用。

@@ -631,6 +631,29 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 
 
+### 阶段四十八 · 图标：一轮尝试与整体还原
+
+用户说「重新画个像样点的 icon」，于是走了一轮完整的设计迭代，**结论是全部还原成原来的图标**（用户最终说「还是换回以前的图标吧」）。
+
+过程（每一步都出图给用户看过，未被采纳）：
+
+| 尝试 | 结果 |
+| --- | --- |
+| 手绘「闭合金色精装书 + 珊瑚书签」 | 否 |
+| 手绘「金色书 + 封面火焰」（成人向调性） | 否 |
+| 文字标 `xhs`：10 种系统字体 | 否（"不好看"） |
+| 文字标 `xhs`：另 10 种（含 Poppins Black / Archivo Black / Anton / Bungee / Titan One / Lilita One） | 否 |
+| 中文 `小黄书`：一行/2+1/竖排/大「黄」锁定 × 字体 × 三种紫底，并确认"文字宽度 70% 在圆形遮罩下刚好不切字、78% 会切两头" | 否 |
+
+**最终处理**：`git checkout` 把 `app/src/main/res/mipmap-*`、`drawable/ic_launcher_bg.xml`、`mipmap-anydpi/ic_launcher.xml`、
+`tools/probes/gen_icon.py`、`tools/probes/icon_candidates.py` 全部还原（`mipmap-xxxhdpi` 三个 PNG 回到原来的
+1485 / 1758 / 1436 字节，即与提交内容逐字节一致）；本轮新增的探针脚本（`icon_mockup/icon_cjk/icon_final/icon_font_sheet`）
+与 `ic_launcher_mono.png`、`mipmap-anydpi/ic_launcher_round.xml` 已删除。实机复核：桌面「小黄书」与「小黄书.debug」都还是原来的图标
+（截图 `docs/images/screenshots/icon-check.png`）。
+
+**留下的资产**：`tools/probes/icon_candidates.py`（原仓库就有）与"文字图标可以在 108dp 画布上按 70% 宽放三字且圆形遮罩不切"这条量化的结论
+（写进本轮记录），以后再改图标不用重新试。
+
 ### 阶段四十七 · 权限审查 + 固定字符串复审
 
 **一、权限审查（结论：没有多余的系统权限）**
@@ -649,6 +672,15 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 真正多余的是**两个备份属性**：`android:dataExtractionRules` 与 `android:fullBackupContent`。
 `allowBackup="false"` 已经把云备份与设备间迁移一起关掉，那两个是「备份开着、只排除一部分」才用的规则文件。已删掉两个属性与 `res/xml/data_extraction_rules.xml`。
 （元数据里复核：`allowBackup=false` 仍在，`dataExtractionRules` / `fullBackupContent` 已消失。）
+
+**更正（2026-10-10）**：上面这两个备份属性我按「`allowBackup=false` 已经够了、规则文件是死配置」删掉了，lint 分两轮把这个判断否掉：
+
+1. 删掉之后报 `DataExtractionRules`：`android:allowBackup` **从 Android 12 起已废弃、未来可能被移除**，12+ 实际读的是 `dataExtractionRules`；
+2. 只补回 `dataExtractionRules` 后再报一次：本应用 `minSdk` 是 26，而 `dataExtractionRules` 只管 12+，**11 及以下还得靠 `fullBackupContent`**。
+
+最终三个机制都保留（`allowBackup=false` + `fullBackupContent=false` + `dataExtractionRules`），`res/xml/data_extraction_rules.xml` 重新入库，
+`lint` 总数回到 **9**（7 `GradleDependency` + 1 `UseKtx` + 1 「Gradle 9.8.1 可用」的版本提示，后者与依赖升级同属刻意锁版本那一类）。
+**权限审查的结论不受影响**：仍然没有多余的系统权限。**教训**：清单属性先别按语义推"死配置"，跑一次 lint 再决定。
 
 **二、固定字符串复审（全量 475 条，本轮改 9 处）**
 
