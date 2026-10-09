@@ -610,6 +610,18 @@
   再逐个对照代码里是否真的用到。本项目 2026-10-09 的结论是「没有多余权限」：
   `WAKE_LOCK` 看着没人用，其实是 `VideoPlayer` 的 `setWakeMode(C.WAKE_MODE_LOCAL)` 在用。
 
+**H26 · 图标：PNG 必须超采样，能矢量的就矢量（48px 下锯齿很显眼）**
+- 症状（用户 2026-10-10）："icon 的锯齿也太严重了吧"。
+- 根因：`tools/probes/gen_icon.py` 原来直接在**最终尺寸**上 `ImageDraw.polygon` /
+  `rounded_rectangle` / `ellipse`，斜边、圆角、圆形的边缘全是阶梯；48px 的桌面图标就是这个观感。
+- 现在：①所有 PNG 在 `SS = 4` 倍画布上画完再 LANCZOS 缩小；②自适应图标的**前景与单色层改成矢量**
+  （`drawable/ic_launcher_foreground.xml` / `ic_launcher_monochrome.xml`，几何来自 `polys()` 这一份
+  归一化坐标，PNG 与矢量共用），所以 API 26+ 的桌面图标在任何尺寸下都不会有锯齿。PNG 前景层
+  （`ic_launcher_fg.png`）已删除，它是锯齿的来源又没有存在必要。
+- 顺便记两条实测：**这台模拟器的 launcher 用圆形遮罩**（安全区就是直径 66dp 的圆，横排三字的中文
+  字标放在 70% 宽会被切两头 —— 这也是那次中文图标方案最终被否掉的原因之一）；矢量前景的
+  `android:width/height` 写 108dp、viewport 108，几何按 0..1 × 108 换算即可。
+
 ## I. 验证工具本身的坑
 
 **I1 · `uiautomator dump` 失败时会读到上一次的旧文件**

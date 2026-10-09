@@ -631,6 +631,27 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 
 
+### 阶段四十九 · 图标去锯齿（设计不变，只改产出方式）
+
+用户反馈「icon 的锯齿也太严重了吧」。查下来是**产出方式**的问题，跟设计无关：
+`tools/probes/gen_icon.py` 原来直接在最终尺寸上 `ImageDraw.polygon` / `rounded_rectangle` / `ellipse`，
+斜边、圆角、圆形的边缘全是阶梯 —— 48px 的桌面图标正好把这个问题放大。
+
+**改动（比例、配色、几何一个都没动）**
+
+| 项 | 做法 |
+| --- | --- |
+| PNG | 全部在 `SS = 4` 倍画布上绘制后 LANCZOS 缩小（`compose()` / `legacy_icon()` / `round_icon()` 都走这条路） |
+| 自适应前景 | 改成**矢量** `drawable/ic_launcher_foreground.xml`：这个 mark 本来就只有 4 个多边形，转 path 后任何尺寸/密度都没有锯齿 |
+| 单色层 | 同样改成矢量 `drawable/ic_launcher_monochrome.xml` |
+| 几何来源 | 新增 `polys(ratio)` 给出 0..1 归一化坐标，**PNG 与矢量共用同一份**，避免两边走样 |
+| 清理 | 删掉 PNG 前景层 `ic_launcher_fg.png`（锯齿来源，且改用矢量后不再被引用） |
+
+**验证**：对照图 `tools/out/icon-antialias.png`（旧方形/圆形/前景 PNG vs 新方形/圆形并排放大）；
+实机 `docs/images/screenshots/icon-antialias-device.png` 与放大裁图 `icon-zoom.png` —— 模拟器桌面上
+（这台 launcher 用**圆形**遮罩）图标边缘干净、无阶梯。`assembleDebug` + `lintDebug` 通过，**lint 保持 9 条**。
+档案：`GOTCHAS` 新增 H26。
+
 ### 阶段四十八 · 图标：一轮尝试与整体还原
 
 用户说「重新画个像样点的 icon」，于是走了一轮完整的设计迭代，**结论是全部还原成原来的图标**（用户最终说「还是换回以前的图标吧」）。

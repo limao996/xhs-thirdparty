@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  自适应图标前景：金色摊开的书（矢量，任意尺寸都平滑）。
+由 tools/probes/gen_icon.py 生成（矢量，无锯齿），改图标请改那个脚本再跑一次。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="#FFC73D" android:pathData="M55.512,38.635 L25.920,33.782 L25.920,74.218 L55.512,69.365 Z" />
+    <path android:fillColor="#D69C1E" android:pathData="M28.296,34.995 L25.920,33.782 L25.920,74.218 L28.296,73.005 Z" />
+    <path android:fillColor="#FFC73D" android:pathData="M52.488,38.635 L82.080,33.782 L82.080,74.218 L52.488,69.365 Z" />
+    <path android:fillColor="#D69C1E" android:pathData="M79.704,34.995 L82.080,33.782 L82.080,74.218 L79.704,73.005 Z" />
+</vector>
