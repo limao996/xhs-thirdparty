@@ -72,6 +72,8 @@ Get-FileHash $apk -Algorithm MD5                          # 分发时贴这个�
 | minSdk / targetSdk / compileSdk | `26` / `37` / `37` |
 | 签名 | v2 scheme（v1/v3 未启用），`CN=ThirdParty XHS Client`，RSA 2048 |
 | 权限（合并后） | `INTERNET`、`ACCESS_NETWORK_STATE`、`WAKE_LOCK`、`REQUEST_INSTALL_PACKAGES`（应用内更新用）+ `USE_BIOMETRIC`、`USE_FINGERPRINT`（biometric 库合入）+ `com.thirdparty.xhs.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`（androidx 合入） |
+| 权限逐条依据（2026-10-09 审查） | `INTERNET`：所有接口；`ACCESS_NETWORK_STATE`：`hasValidatedNetwork()` 与默认网络回调（快速失败与网络恢复重试）；`WAKE_LOCK`：**播放器在用** —— `VideoPlayer` 调 `setWakeMode(C.WAKE_MODE_LOCAL)`，media3 会拿 `ExoPlayer:WakeLockManager` 的部分唤醒锁；`REQUEST_INSTALL_PACKAGES`：应用内更新要交给系统安装器；`USE_BIOMETRIC` / `USE_FINGERPRINT`：biometric 库合入，指纹应用锁在用；`DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`：androidx.core 自带。**结论：没有多余的系统权限** |
+| 备份声明 | 只保留 `android:allowBackup="false"`。它已经关掉了云备份与设备间迁移，所以 `dataExtractionRules` / `fullBackupContent` 这套「备份开着、只排除一部分」的规则文件是多余的，2026-10-09 一并删掉（`res/xml/data_extraction_rules.xml` 已移除） |
 | 可调试 | 否（manifest 里没有 `debuggable`） |
 | 画中画 / 任务 | `supportsPictureInPicture="true"`、`launchMode="singleTask"`（深链复用同一实例，避免第二个界面/第二个小窗） |
 | 明文流量 | `usesCleartextTraffic="true"`：**只为局域网 http WebDAV 放行**；公网地址在应用内会被 `WebDavClient.validate()` 拦掉（Basic 认证会明文过网） |

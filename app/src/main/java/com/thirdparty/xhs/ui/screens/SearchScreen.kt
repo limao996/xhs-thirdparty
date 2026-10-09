@@ -197,7 +197,7 @@ fun SearchScreen(
                 state.error -> EmptyState(
                     title = "搜索失败",
                     modifier = Modifier.fillMaxSize(),
-                    description = "请检查网络后重试",
+                    description = "网络连接失败，网络恢复后将自动重试",
                     actionLabel = "重试",
                     onAction = { viewModel.retry() }
                 )

@@ -273,7 +273,7 @@ private fun FeedTab(
                 else -> EmptyState(
                     title = "没有可用的分类",
                     modifier = Modifier.fillMaxSize(),
-                    description = "稍后重试，或反馈给开发者",
+                    description = "请稍后重试",
                     actionLabel = "重试",
                     onAction = { viewModel.retryCategories() }
                 )
@@ -497,7 +497,7 @@ private fun FanGroupTab(
         EmptyState(
             title = "暂无推荐粉丝圈",
             modifier = Modifier.fillMaxSize(),
-            description = "在作品详情页可关注作者",
+            description = "可在作者主页或作品详情页关注",
             icon = Icons.Filled.Group
         )
         return

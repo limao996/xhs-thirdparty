@@ -609,7 +609,7 @@ private fun AutoHideController(
                                         .verticalScroll(rememberScrollState())
                                 ) {
                                     PlayerMenuRow(
-                                        label = if (fineStep) "微调：±1 秒 ✓" else "微调：±1 秒"
+                                        label = "微调：±1 秒" + if (fineStep) "（已开启）" else ""
                                     ) {
                                         fineStep = !fineStep
                                         menuOpen = false

@@ -631,6 +631,42 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 
 
+### 阶段四十七 · 权限审查 + 固定字符串复审
+
+**一、权限审查（结论：没有多余的系统权限）**
+
+用 `aapt2 dump permissions` 看的是**合并后**的清单（库会带权限进来），再逐个对照代码：
+
+| 权限 | 来源 | 是否在用 |
+| --- | --- | --- |
+| `INTERNET` | 本应用 | 所有接口请求 |
+| `ACCESS_NETWORK_STATE` | 本应用 | `App.hasValidatedNetwork()` 与 `registerDefaultNetworkCallback`（快速失败 + 网络恢复重试） |
+| `WAKE_LOCK` | 本应用 | **播放器**：`VideoPlayer` 的 `setWakeMode(C.WAKE_MODE_LOCAL)` → media3 拿 `ExoPlayer:WakeLockManager` 部分唤醒锁（日志里能看到） |
+| `REQUEST_INSTALL_PACKAGES` | 本应用 | 应用内更新，`UpdateDownloader.installIntent()` |
+| `USE_BIOMETRIC` / `USE_FINGERPRINT` | androidx.biometric 合入 | 指纹应用锁（`BiometricPrompt` + `BIOMETRIC_WEAK`） |
+| `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` | androidx.core 合入 | 库自带 |
+
+真正多余的是**两个备份属性**：`android:dataExtractionRules` 与 `android:fullBackupContent`。
+`allowBackup="false"` 已经把云备份与设备间迁移一起关掉，那两个是「备份开着、只排除一部分」才用的规则文件。已删掉两个属性与 `res/xml/data_extraction_rules.xml`。
+（元数据里复核：`allowBackup=false` 仍在，`dataExtractionRules` / `fullBackupContent` 已消失。）
+
+**二、固定字符串复审（全量 475 条，本轮改 9 处）**
+
+| 位置 | 改前 | 改后 |
+| --- | --- | --- |
+| WebDAV 下载失败 | 下载失败 HTTP 500 Internal Server Error（夹带英文 reason phrase，上一轮漏改一处） | 下载失败（HTTP 500） |
+| 备份恢复摘要 | 已恢复设置 搜索记录 ｜收藏 3｜浏览 12｜关注 1｜队列 0（拼接处带尾随空格，术语也不统一） | 已恢复：设置、搜索记录｜收藏 3｜最近浏览 12｜关注 1｜稍后观看 0 |
+| 稍后观看空态 | 队列是空的 / 在瀑布流或推荐页长按作品，选「稍后观看」加进来 | 队列是空的 / 在瀑布流或推荐页长按作品，选择「稍后观看」即可加入 |
+| 发现页无分类 | 稍后重试，或反馈给开发者 | 请稍后重试 |
+| 关注引导（两处措辞不一致） | 在作品详情页可关注作者 / 可在作者主页关注 | 统一为：可在作者主页或作品详情页关注 |
+| 收藏空态 | 在详情页点右上角的心形即可收藏 | 在详情页点击右上角的心形即可收藏 |
+| 搜索失败说明 | 请检查网络后重试（与其它页面的说法不一致，且本页其实会自动重试） | 网络连接失败，网络恢复后将自动重试 |
+| 播放器菜单 | 微调：±1 秒 ✓（用符号表达开关态） | 微调：±1 秒（已开启） |
+| 详情页取消收藏确认 | 按钮是「移除」，多选页同一动作是「取消收藏」 | 统一为「取消收藏」 |
+
+**验证**：`aapt2 dump permissions` / `dump xmltree` 复核权限与备份属性；`assembleDebug` + `testDebugUnitTest` + `lintDebug` 全绿；
+模拟器实机（API 34）冷启动进推荐、进设置页，文案与状态正常，`crash: 0`。
+
 ### 阶段四十六 · 修回「推荐页一直在 loading」
 
 上一轮把 `VideoFeedUiState.firstLoading` 的初值改成 `true`（为了不闪「暂无推荐内容」），但屏幕侧那个负责**发起首屏加载**的 effect 写的是：

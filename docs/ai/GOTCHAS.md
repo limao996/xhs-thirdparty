@@ -597,6 +597,15 @@
 - 验证：临时给分类请求加 4 秒延迟，进发现页截图 → 内容是 M3 的 loading 组件、文本 dump 里
   没有「没有可用的分类」；去掉延迟后连拍 5 次 dump，字符串一次都没出现，chip 正常出现。
 
+**H25 · 清单与权限的两条小坑**
+- **XML 注释不能放在标签的属性之间**。想给 `<application>` 里的某个属性加说明，注释必须写在标签**外面**，
+  否则 `processDebugMainManifest` 直接失败（2026-10-09 踩过：把注释塞在 `android:name` 与 `android:allowBackup` 之间）。
+- **`allowBackup="false"` 时不需要 `dataExtractionRules` / `fullBackupContent`**：那两个是「备份开着、只排除一部分」
+  才用的规则；`allowBackup=false` 已经把云备份与设备间迁移一起关掉了。留着只是死配置，还多一个 xml 文件。
+- 审查权限的正确姿势：先用 `aapt2 dump permissions <apk>` 看**合并后**的清单（库会带权限进来），
+  再逐个对照代码里是否真的用到。本项目 2026-10-09 的结论是「没有多余权限」：
+  `WAKE_LOCK` 看着没人用，其实是 `VideoPlayer` 的 `setWakeMode(C.WAKE_MODE_LOCAL)` 在用。
+
 ## I. 验证工具本身的坑
 
 **I1 · `uiautomator dump` 失败时会读到上一次的旧文件**

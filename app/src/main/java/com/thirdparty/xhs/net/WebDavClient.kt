@@ -108,7 +108,7 @@ class WebDavClient(
             val req = authed(Request.Builder().url(fileUrl(name)).get()).build()
             client.newCall(req).await().use { resp ->
                 if (resp.code == 404) throw IOException("云端还没有备份文件")
-                if (!resp.isSuccessful) throw IOException("下载失败 HTTP ${resp.code} ${resp.message}")
+                if (!resp.isSuccessful) throw IOException("下载失败（HTTP ${resp.code}）")
                 resp.body?.string() ?: throw IOException("云端返回了空内容")
             }
         }

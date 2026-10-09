@@ -12,12 +12,12 @@
     <!-- A personal WebDAV drive may be plain http:// on the LAN; Android
          denies cleartext by default from API 28, which would make those
          servers unreachable. API traffic itself stays HTTPS. -->
+    <!-- allowBackup="false" 已经关掉了云备份与设备间迁移，所以不需要 dataExtractionRules /
+         fullBackupContent 这套规则文件（那两者是"备份开着、只排除一部分"时才用的）。 -->
     <application
         android:usesCleartextTraffic="true"
         android:name=".App"
         android:allowBackup="false"
-        android:dataExtractionRules="@xml/data_extraction_rules"
-        android:fullBackupContent="false"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"

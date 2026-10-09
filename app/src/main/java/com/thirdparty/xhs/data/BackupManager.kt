@@ -222,12 +222,12 @@ object BackupManager {
                 store.biometricLock = s.optBoolean("biometricLock") &&
                     BiometricLockAvailable(context)
             }
-            counts.append("设置 ")
+            counts.append("设置、")
         }
 
         root.optJSONArray("searchHistory")?.let { arr ->
             restoreSearchHistory(context, arr)
-            counts.append("搜索记录 ")
+            counts.append("搜索记录、")
         }
 
         root.optJSONObject("webdav")?.let { w ->
@@ -241,7 +241,7 @@ object BackupManager {
                         password = w.optString("password")
                     )
                 )
-                counts.append("WebDAV ")
+                counts.append("WebDAV、")
             }
         }
 
@@ -352,7 +352,7 @@ object BackupManager {
         val tail = if (skipped > 0) "｜跳过无效 $skipped" else ""
         return@withContext Result(
             true,
-            "已恢复${counts}｜收藏 $saved｜浏览 $hist｜关注 $follows｜队列 $queued$tail"
+            "已恢复：${counts.toString().trimEnd('、')}｜收藏 $saved｜最近浏览 $hist｜关注 $follows｜稍后观看 $queued$tail"
         )
     }
 

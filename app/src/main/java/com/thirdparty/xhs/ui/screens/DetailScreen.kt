@@ -503,7 +503,7 @@ fun DetailScreen(
         ConfirmActionDialog(
             title = "取消收藏？",
             text = "这条内容会从「我的收藏」里移除。",
-            confirmText = "移除",
+            confirmText = "取消收藏",
             onConfirm = {
                 confirmUnsave = false
                 viewModel.toggleSave()

@@ -100,7 +100,7 @@ fun WatchLaterScreen(
             ) {
                 Text(
                     if (state.loading) "正在读取队列…"
-                    else "队列是空的\n在瀑布流或推荐页长按作品，选「稍后观看」加进来",
+                    else "队列是空的\n在瀑布流或推荐页长按作品，选择「稍后观看」即可加入",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
