@@ -563,7 +563,7 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
                                 clipboardText.value = null
                             },
                             title = { Text("检测到分享内容") },
-                            text = { Text("剪贴板里有一个作品链接，是否打开这个作品？") },
+                            text = { Text("剪贴板里有作品链接，打开看看？") },
                             confirmButton = {
                                 androidx.compose.material3.TextButton(onClick = {
                                     haptics.tick()

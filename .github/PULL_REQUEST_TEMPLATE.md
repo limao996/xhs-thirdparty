@@ -17,7 +17,7 @@
 
 ## 证据（必填）
 
-- [ ] `gradlew.bat assembleDebug` 通过 —— 贴输出末行：
+- [ ] `gradlew.bat assembleDebug` 通过：贴输出末行：
 
 ```
 BUILD SUCCESSFUL in ...

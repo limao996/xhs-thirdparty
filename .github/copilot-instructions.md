@@ -27,7 +27,7 @@
   尺寸用 `Tokens.kt` 的 `Spacing` / `Corners` / `AvatarSize` / `Thumb` / `BottomNavClearance`，不要硬编码。
 - 失败时**保留已有数据**并暴露错误态；不要把失败渲染成"空数据"。
 - 子 tab 内容与列表滚动位置：分支包在 `rememberSaveableStateHolder().SaveableStateProvider(key)` 里，列表的
-  `LaunchedEffect(resetKey)` 守卫要记住"位置属于哪个 key"（不要用"跳过第一次运行"的 flag）——见 `docs/ai/GOTCHAS.md` C2/C8。
+  `LaunchedEffect(resetKey)` 守卫要记住"位置属于哪个 key"（不要用"跳过第一次运行"的 flag），见 `docs/ai/GOTCHAS.md` C2/C8。
 - 注释只解释"为什么"（尤其要写出约束来源）。
 
 ## 不要做的事

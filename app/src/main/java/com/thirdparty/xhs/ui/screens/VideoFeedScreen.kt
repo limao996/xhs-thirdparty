@@ -139,7 +139,7 @@ fun VideoFeedScreen(
                     title = "推荐加载失败",
                     modifier = Modifier.fillMaxSize(),
                     // 接口在海外：没开 VPN 时就是这样，网络一恢复会自动重试（见 App.networkEpoch）
-                    description = "接口在海外，需要能访问海外的线路；网络恢复后会自动重试",
+                    description = "网络不通，或线路到不了海外服务器。网络恢复后会自动重试",
                     actionLabel = "重试",
                     onAction = { viewModel.refresh() }
                 )

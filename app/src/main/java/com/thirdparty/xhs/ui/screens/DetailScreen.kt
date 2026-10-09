@@ -450,7 +450,7 @@ fun DetailScreen(
             state.missing && inherited == null -> Box(Modifier.fillMaxSize().padding(pad), contentAlignment = Alignment.Center) {
                 Text(
                     // 接口在海外：没开 VPN 时就会看到这句；网络恢复后详情页会自动重试
-                    "内容加载失败（可能已下线、需要付费，或当前线路访问不了海外接口）"
+                    "打不开这条内容：可能已下线、需要付费，或者线路访问不了服务器"
                 )
             }
             else -> {
@@ -706,7 +706,7 @@ private fun DetailContent(
                 // than spin forever — the media plays on either way.
                 if (state.missing) {
                     Text(
-                        "内容加载失败（可能已下线或需付费）",
+                        "打不开这条内容：可能已下线，或者需要付费",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

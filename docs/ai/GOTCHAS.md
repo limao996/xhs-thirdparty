@@ -7,7 +7,7 @@
 
 **A1 · 改源码**
 - 触发：要修改任何 `.kt` / `.gradle` / `.py` / `.ps1` 文件。
-- 正确做法：用 `edit` / `write` 工具落盘。**不要**用 PowerShell 拼字符串（`Set-Content`、`-replace` 链）写源码——
+- 正确做法：用 `edit` / `write` 工具落盘。**不要**用 PowerShell 拼字符串（`Set-Content`、`-replace` 链）写源码
   会静默产生乱码或截断，且 `-notmatch` 之类的守卫可能失效。改完**回读文件**确认内容真的变了。
 
 **A2 · 声明"已修复"**
@@ -105,7 +105,7 @@
   2. 列表自己的滚动状态可保存，且**不要**再用 `LaunchedEffect(resetKey) { scrollToItem(0) }` 去重置它：
      "跳过第一次运行"的 flag 是错的（被重新激活时 flag 仍为 true，恢复好的位置会被这次运行推回顶部）。
 - 正确写法（2026-10-04 第二次修正后的最终形态，`ui/components/XhsWaterfall.kt`，`FanGroupTab` 同理）：
-  **把滚动状态按 `resetKey` 分组** —— 换 key 得到新状态（顶部），同 key 恢复（保留位置）：
+  **把滚动状态按 `resetKey` 分组**：换 key 得到新状态（顶部），同 key 恢复（保留位置）：
   ```kotlin
   val gridState = key(resetKey) { rememberLazyStaggeredGridState() }
   ```
@@ -114,7 +114,7 @@
   "推荐 → 最新 → 推荐"回到同一个分类 id 时，旧偏移会被恢复进刚重新拉取的列表 → 用户落在"从没看过顶部"的列表中间。
   **凡"同一个名字可能代表一份新列表"，身份位就必须单调递增**：本项目用 `DiscoverUiState.feedEpoch`
   （只在 `selectCategory` 里 +1），`resetKey = state.refreshTick to state.feedEpoch`。
-  另外不要复用 `refreshTick` 做分类切换 —— 它一变，粉丝圈列表的位置也会被重置。
+  另外不要复用 `refreshTick` 做分类切换：它一变，粉丝圈列表的位置也会被重置。
 - 症状对照：滚 → 切子 tab / 进详情返回 → 归零 = 缺"期望一"；滚 → 滑到别的分类再滑回来 → 落在列表中间 = 缺"期望二"。
 - 验证方式：滚动 → 切子 tab / 进详情或作者页 → 返回，比对**首项文本与 y 坐标**是否一致（`docs/VERIFY.md` §4）；
   分类切换看**首卡是否完整可见**（内容文本会随重新拉取而变，断言不可靠，用截图判定）。
@@ -155,7 +155,7 @@
 
 **D8 · 一个缓存一个勾选框：清磁盘不得顺手清内存**
 - 触发：改「清除缓存」页或 `AppCaches.clear()` / `XhsRepository.clearHttpCache()`。
-- 症状（实测过）：只勾「图片与封面缓存」（63.9 MB）并确认，清完「图片内存缓存」也跟着变成 0 B ——
+- 症状（实测过）：只勾「图片与封面缓存」（63.9 MB）并确认，清完「图片内存缓存」也跟着变成 0 B
   确认框写的是"清除选中的 2 项"，实际清了 3 项，界面与用户勾选不符。
 - 原因：`clearHttpCache()` 原实现是 `evictAll()` + `clearImageMemoryCache()` 两件事。
 - 正确做法：`XhsRepository.clearHttpCache()` 只 evict 磁盘；内存位图缓存只在勾了 `CacheKind.IMAGE_MEMORY` 时由
@@ -199,7 +199,7 @@
 
 **F3 · 身份长度是硬约束**
 - 触发：自己拼一个身份或改 `IdentityGuess`。
-- 正确做法：只用四种合法形式且长度精确 —— `<12hex>889X`、`<15digits>X`、`<16hex>I`、`<30hex>AI`；`AI` 形式 30 字符可建号、32 字符不行（官方先截断再拼后缀）。
+- 正确做法：只用四种合法形式且长度精确：`<12hex>889X`、`<15digits>X`、`<16hex>I`、`<30hex>AI`；`AI` 形式 30 字符可建号、32 字符不行（官方先截断再拼后缀）。
 
 **F4 · 一次只建一个新身份，且必须退避**
 - 触发：觉得"多试几个总能碰到有 VIP 的"，于是在一次检查里循环建号。
@@ -230,7 +230,7 @@
 
 **G6 · 检查更新的主路径是 `releases.atom`，不是 api.github.com**
 - 触发：用匿名 REST API（`api.github.com/repos/.../releases/latest`）做"进应用就查一次"。
-- 症状：用户"明明没怎么查过"却被限流（HTTP 403）—— 匿名额度是**每 IP 每小时 60 次**，而且和这台机器上
+- 症状：用户"明明没怎么查过"却被限流（HTTP 403），匿名额度是**每 IP 每小时 60 次**，而且和这台机器上
   其它工具共享（CI、其它脚本都算在一起）。
 - 正确做法：先取 **`https://github.com/<owner>/<repo>/releases.atom`**（GitHub 发布页自己的 feed，
   **不计 API 额度、不需要 token**），一次就带回 tag / 页面地址 / 更新说明；下载地址按仓库的资产命名约定
@@ -238,7 +238,7 @@
   才回落到 API，那时才可能 403。
 - 解析要点：`<link rel="alternate" href=".../releases/tag/vX.Y.Z">` 取 tag 最稳（`<title>` 是"小黄书 vX.Y.Z"
   这种给人看的文案）；`<content>` 是 **HTML 转义**过的，要还原实体再去标签（`htmlToText`）。
-- 配套：既然不吃额度，就**每次进前台都查**（`App.onActivityStarted` 的 0→1）；只留两道保护 ——
+- 配套：既然不吃额度，就**每次进前台都查**（`App.onActivityStarted` 的 0→1）；只留两道保护
   重复触发去重 3s、失败退避 5min。测试时**别反复手点检查**（那才是真的瞎折腾 GitHub）。
 
 **G2 · JVM 单元测试里 Android 自带的 `org.json` 是空壳**
@@ -254,8 +254,8 @@
 **G4 · 匿名 GitHub API 只有 60 次/小时/IP，超了是 403**
 - 触发：反复冷启动验证「自动检查更新」，或同一出口 IP 下多台机器在测。
 - 症状（实测过）：检查更新页显示「检查失败：GitHub 限流（HTTP 403），过一会儿再试」，
-  重启多少次都不弹更新弹窗 —— 因为根本没查成功，不是弹窗逻辑坏了。
-- 正确做法：先查配额再下结论 —— `Invoke-RestMethod https://api.github.com/rate_limit` 看
+  重启多少次都不弹更新弹窗：因为根本没查成功，不是弹窗逻辑坏了。
+- 正确做法：先查配额再下结论：`Invoke-RestMethod https://api.github.com/rate_limit` 看
   `resources.core.remaining` 与 `reset`（本地是匿名额度；`gh` 已登录走 5000 次/小时的另一个额度，不会替你省额度）。
   等 `reset` 过后再复测；应用侧则必须把 403 映射成 `Failed` 并静默降级（硬约束 14）。
 
@@ -275,7 +275,7 @@
   下拉面板以卡片为锚点，而瀑布流卡片只有半屏宽、菜单会被边缘裁掉；推荐页更是整屏视频，压根没有锚点。
 - 这是用户明确提过的要求（阶段十反馈），见硬约束 16。
 
-**H2 · 队列排序：三段折腾的结论是"别用拖动"**（⚠️ 本节描述的"序号 + 上移/下移按钮"实现**已删除**：硬约束 20 的最终结论是**不提供排序**、按加入时间排列；保留本节只为记录那三种交互为什么都被否掉）
+**H2 · 队列排序：三段折腾的结论是"别用拖动"**（本节描述的"序号 + 上移/下移按钮"实现**已删除**：硬约束 20 的最终结论是**不提供排序**、按加入时间排列；保留本节只为记录那三种交互为什么都被否掉）
 - 走过的三版：①"每过半行换位"（只能挪一格，原因见下）；②内容坐标 + translationY 让位（实机仍不稳）；
   ③再加边缘自动滚动与双指补偿（用户仍然反馈不灵）。
 - 根因（第①版）：换位会让这一行的**基准位置**立刻跳一行，而手势位移是在节点局部坐标里累加的，
@@ -307,7 +307,7 @@
 **H5 · 自动化验证的系统边界（本次踩到的两条）**
 - 画中画窗口的「关闭 / 展开」是系统覆盖层，**不吃 `adb shell input tap`**（注入触摸被忽略）。
   验证「展开」改用 `am start --activity-reorder-to-front`（等于把任务拉到前台），
-  「关闭」只能做代码路径确认，如实写进 `docs/CHANGELOG.md`。
+「关闭」只能做代码路径确认，直接写进 `docs/CHANGELOG.md`。
 - 全屏页面（图文查看器、视频真全屏）上 `uiautomator dump` 经常返回空串
   （`Failed to write while dumping service user: Broken pipe`）。此时改用截图 + 查库取证；
   要确保打开的是**图文**作品，先
@@ -326,16 +326,16 @@
 **H7 · 触感反馈用系统 API，验证靠 `dumpsys vibrator_manager`**
 - 触发：要给长按、切换、落位加振动。
 - 做法：`ui/components/Haptics.kt` 包一层 `LocalHapticFeedback`，四档语义别用错：
-  `LongPress`（长按/开始拖动）、**`ContextClick`（轻点，别用 `TextHandleMove` —— 那是文本光标移动的）**、
+  `LongPress`（长按/开始拖动）、**`ContextClick`（轻点，别用 `TextHandleMove`：那是文本光标移动的）**、
   `SegmentTick`（滑视频/翻图片这类换挡）、`Confirm` / `Reject`（收藏与移除）。
   **不要** `Vibrator`（系统 API 尊重用户的触感开关，也不需要 `VIBRATE` 权限）。
 - 验证：`adb shell dumpsys vibrator_manager | grep xhs` 能看到 `opPkg=com.thirdparty.xhs…`
-  的记录（长按是 `Prebaked{effect=HEAVY_CLICK}`，轻点是 `TICK`）。模拟器上 `scale: 0.00` 正常 ——
-  没有可用触感硬件/关掉了触感，调用本身已生效。
+  的记录（长按是 `Prebaked{effect=HEAVY_CLICK}`，轻点是 `TICK`）。模拟器上 `scale: 0.00` 是正常的，
+  因为没有可用触感硬件或用户关掉了触感，调用本身已生效。
 
 **H8 · 不要自绘对话框外壳**
 - 触发：用户反馈"对话框没有遮罩和动画"，我先做了一版自绘遮罩 + 自绘入场动画的统一外壳。
-- 结果：被明确否决 —— "不要自己绘制，用原生的 AlertDialog"。
+- 结果：被明确否决："不要自己绘制，用原生的 AlertDialog"。
 - 正确做法：一律 `material3.AlertDialog`。实测遮罩本来就在（长按对话框打开时背景亮度
   `239 → 96`，约 60% 压暗）；动画由系统负责，若设备的"动画时长比例"是 0 就瞬间完成，
   那是用户设置。**不要再接管对话框的窗口与遮罩**。
@@ -351,29 +351,29 @@
 - 症状：小窗在前面放着，后面的推荐流也在放 → 两条声音混在一起；于是"进小窗就让信息流
   `pause()`"，但**无差别 pause 会把小窗那一台一起按停**（实测：小窗里视频停住、
   `dumpsys audio` 里那一路 `state:paused`）。
-- 正确做法：一律用 `PipController.isHandedOver(player)` 判断归属再决定要不要动它 ——
+- 正确做法：一律用 `PipController.isHandedOver(player)` 判断归属再决定要不要动它
   详情页销毁时不 release 是这条规则，信息流在小窗期间暂停也是这条规则。
 - 判断"现在到底有没有在放"：`adb shell dumpsys audio | grep 'AudioPlaybackConfiguration piid:'`
   看本应用那几路的 `state:started / state:paused`。`logcat` 里的累计事件（`event:started` 计数）
   是历史量，不能判断当前状态。
 
-**H11 · 列表拖动排序要有边缘自动滚动，且位移只用一个坐标系**（⚠️ 队列的拖动排序**已删除**，见硬约束 20 / H2；本节只在其它页面将来真要做拖动排序时才参考）
+**H11 · 列表拖动排序要有边缘自动滚动，且位移只用一个坐标系**（队列的拖动排序**已删除**，见硬约束 20 / H2；本节只在其它页面将来真要做拖动排序时才参考）
 - 触发：队列排序需要"把第 1 行拖到屏幕外的第 N 行"。
 - 症状：只能拖到当前可见区域内的位置；第一版"手指位移累加 + 每过半行换位"更是只能挪一格（见 H2）。
 - 正确做法（现行）：
-  1. **只用一个坐标系**——内容坐标 = 视口坐标 + `scrollState.value`；手指位置反推为
+  1. **只用一个坐标系**，内容坐标 = 视口坐标 + `scrollState.value`；手指位置反推为
      `viewIndex * rowHeight + change.position.y − scrollState.value`，落点与行的位移都从内容坐标算。
      这样"列表被滚动"和"手指移动"只是同一个数在变，不需要到处补正。
   2. 边缘自动滚动：一个按帧跑的循环，在上下 110dp 内滚动，步长随接近程度衰减（上限 18dp/帧），
      并把滚动量补回拖动位移（`dragOffset += moved`）。**密度只能在组合里读**，要先把 dp 换算成 px 再进协程。
   3. 第二根手指的滑动天然可用：被拖行的手势只处理自己那个指针，`verticalScroll` 是它的父节点，
-     另一个指针的拖动归父节点 —— 前提是手势与 `clickable` 挂在同一个节点上（H2）。
+     另一个指针的拖动归父节点：前提是手势与 `clickable` 挂在同一个节点上（H2）。
 - 参考：本节只在"其它页面将来真要做拖动排序"时才用；队列页 `ui/screens/WatchLaterScreen.kt` 已无拖动实现（硬约束 20）。
 **H12 · 画中画"关闭"不保证销毁 Activity：收尾要挂在 `onStop`**
 - 触发：只在 `onDestroy()` 里 `PipController.closeAndRelease()`，以为"关掉小窗 = Activity 销毁"。
 - 症状：用户没在小窗里按暂停就关掉小窗，声音继续放（用户实测反馈）。
 - 原因：关闭小窗时系统**不保证**立刻销毁 Activity（实测只回调 `onStop`），播放器于是留了下来。
-- 正确做法：`onStop()` 里补一次收尾，判据三条一起看 ——
+- 正确做法：`onStop()` 里补一次收尾，判据三条一起看
   `!isChangingConfigurations && !isInPictureInPictureMode && !PipController.inPip.value && hasSession()`。
   展开回详情页走的是"同一 Activity 回到前台"，不会触发 `onStop`；进入小窗时 `PipController.start()`
   已经把 `inPip` 置 true，所以也不会误杀。
@@ -391,12 +391,12 @@
 - 进小窗：
   - Activity 会走一次 `ON_STOP`（实测日志 `PauseWhenNotStarted ON_STOP`），
     `PauseWhenNotStarted` 无条件 `pause()` → 小窗里停在暂停。
-    → 判据：`if (PipController.isHandedOver(player)) return` —— 交给小窗的播放器，生命周期事件不许动它。
+    → 判据：`if (PipController.isHandedOver(player)) return`：交给小窗的播放器，生命周期事件不许动它。
   - 交接后必须**显式接着** `playIntent`（`PipController.start(..., playIntent)`）。
 - **不要**在进小窗时 `onBack()` 退出详情页：那条导航记录一弹掉，用户关掉小窗后详情页也"没了"，
   展开时只能 `navigate` 一条新记录 → 新 ViewModel = **整页重新加载**。
   正确做法：小窗期间让导航内容**不参与组合**（`if (!pipActive) NavHost(...)`），记录与状态都留着。
-  （曾经为了保滚动位置改成「照常组合 + 不透明黑底盖住」，结果踩出 H17 —— 见下面那条。）
+（曾经为了保滚动位置改成「照常组合 + 不透明黑底盖住」，结果踩出 H17：见下面那条。）
 - 出小窗（展开 vs 关闭）：
   - **不要**用 `isInPictureInPictureMode` 当"还在小窗里"的判据：关闭时它可能仍是 true，
     于是 `onStop` 里的释放判据永远不成立 → 后台一直出声（用户报过两次）。
@@ -422,7 +422,7 @@
   判据：`!PowerManager.isInteractive || KeyguardManager.isKeyguardLocked` 时不动会话；
   另在 `onResume` 里做幂等兜底：`isInPictureInPictureMode && hasSession()` → `inPip = true`。
 - **播放器归属要分成两档，别用同一个判据**（踩过）：
-  - `PipController.isHandedOver(p)` = **只算小窗会话**（`_session.value?.player === p`）——用于
+  - `PipController.isHandedOver(p)` = **只算小窗会话**（`_session.value?.player === p`），用于
     "要不要暂停 / 要不要 release"。**不要**把 `PlaybackHandoff` 的持有并进来：那个标记是"曾经
     交给过别的屏幕"，信息流交给详情页的那台会**永远**留着它，一合并详情页切后台/锁屏就永远不暂停
     （用户反馈"详情页切后台还在放"），而且返回时也不会被释放（泄漏）。
@@ -433,7 +433,7 @@
   ②完全不动又会让视频在锁屏后继续出声（`PauseWhenNotStarted` 对已交接的播放器是跳过的，
   没人会去暂停它）。正确做法：`screenOff && hasSession()` → **只暂停、保留会话**
   （`PipController.pauseForScreenOff()`），解锁后不自动续播。
-- **关掉小窗要交出进度**：`closeAndRelease()` 会销毁那台播放器，详情页会重建一个新的 ——
+- **关掉小窗要交出进度**：`closeAndRelease()` 会销毁那台播放器，详情页会重建一个新的
   不 `PlaybackHandoff.stash(noteId, currentPosition, playWhenReady)` 的话，回到详情页就是 **0:00**
   （用户反馈）。这条与"信息流 → 详情页"用的是同一个单槽通道：feed 的 stash 在详情页 compose 时
   立刻被消费清空，所以小窗收尾再 stash 不会互相覆盖。
@@ -464,7 +464,7 @@
   真要两者都保住，得先做「surface 世代号」（PiP 退出时强制重建视频视图），或把 `SaveableStateHolder`
   提升到 NavHost 之外，而不是让两块 surface 并存。
 - 取证要点：PiP 往返之后**必须看截图确认有画面**，并让控制栏显出来读进度（`1:33 / 3:01` 之类）；
-  只量文本坐标（滚动位置）会漏掉这个回归 —— 这次就是只量了坐标才没发现。
+  只量文本坐标（滚动位置）会漏掉这个回归：这次就是只量了坐标才没发现。
 
 **H18 · 剪贴板口令"不响应"：别把"已问过"标记写在这两个地方**
 - 症状（用户报的）：复制了分享口令、回到应用，**没有任何反应**；或者偶尔"闪一下就没了"。
@@ -498,29 +498,46 @@
 **H19 · 全屏「恢复」按钮的位置规则：图文与视频必须一致（贴底，被控制栏顶起来）**
 - 两处实现：`ui/components/FullscreenImageViewer.kt`（图文）与 `ui/components/MediaPlayer.kt`（视频全屏）。
 - 规则（用户定的）：
-  - **底距**：`windowInsetsPadding(WindowInsets.navigationBars)` + `padding(bottom = Spacing.l)` —— 就是"贴底"，
+  - **底距**：`windowInsetsPadding(WindowInsets.navigationBars)` + `padding(bottom = Spacing.l)`：就是"贴底"，
     两边必须一样；
   - **被控制栏顶起来**：视频那边控制栏可见时要抬到它上面。高度**实测**（`AutoHideController` 里控制栏根节点
     的 `onGloballyPositioned` → `onControlBarHeight` 回调到外层，因为「恢复」按钮在外层那一层，
     它看不见 `AutoHideController` 的内部状态；可见性同样靠 `onControlsVisibility` 报出来）。
 - 踩过的坑：①固定 96dp 底距 → 控制栏没出来时按钮飘在半空（"应该像图文一样贴底"）；
   ②在 `AutoHideController` 里读外层状态 → 编译不过（作用域不对），所以状态必须**提到外层**、内部只上报。
-- 验证限制：这个按钮只在**缩放后**出现，而 `adb shell input` 注入不了双指捏合 —— 只能真机双指确认
+- 验证限制：这个按钮只在**缩放后**出现，而 `adb shell input` 注入不了双指捏合：只能真机双指确认
   （想临时看位置可以把条件改成 `if (fullscreen)`，看完**必须还原**）。
 
-**H20 · 「失败提示」漏在哪：按数据条数建页的容器 + 分页失败 + 兜底成空**
+**H20 ·「失败提示」漏在哪：按数据条数建页的容器 + 分页失败 + 兜底成空**
 - 三种漏法（都真实出现过）：
   1. **按数据条数建页的容器**：发现页的分类内容是 `HorizontalPager(pageCount = { categories.size })`，
      `categories` 为空时**一页都不画** → 内容区整块空白。修法是「数据为空就早退成整块失败/空态」。
   2. **分页失败静默**：底部只有 `if (loadingMore) LoadingIndicator(...)`，下一页失败时什么都不显示，
      用户以为内容就这些。修法是底部 `FooterRetry`（失败判断要优先于转圈判断）。
   3. **兜底成空**：`runCatching { … }.getOrDefault(emptyList())` 把失败变成「空列表」，
-     界面于是显示「还没有内容」 —— 把网络错误伪装成空数据（`UserListScreen` 的注释里记过同类问题）。
+     界面于是显示「还没有内容」：把网络错误伪装成空数据（`UserListScreen` 的注释里记过同类问题）。
 - 规矩见硬约束 26：网络列表的首屏失败与分页失败都要有提示 + 重试。
-- 另外别忘**自动重试的覆盖面**：`App.networkEpoch` 的补载列表要包含「这个页面的每一块网络数据」 ——
+- 另外别忘**自动重试的覆盖面**：`App.networkEpoch` 的补载列表要包含「这个页面的每一块网络数据」
   发现页当初只补了网格与粉丝圈、漏了分类，于是网络恢复后页面一直停在「分类加载失败」（实测 8 秒仍未恢复）。
 - 验证：断网冷启动进发现页 → 应看到整块「分类加载失败 + 重试」；开回网络 → 应**自动**恢复（实测 10.1 秒，
   含轮询与网络校验延迟），不需要手点。
+
+**H21 · AOSP 的「应用锁」是车机上的特权系统应用，不是第三方 App 能调用的 API**
+- 背景：用户看到 <https://source.android.com/docs/automotive/unbundled_apps/app-lock> 讲「应用锁」，
+  问能不能用。结论：**不能用**，别再去试。
+- 事实（读那页正文得到的，2026-10-09）：
+  - 组件是 `com.android.car.sensitiveapplock`，属于 **Android Automotive（AAOS）**，**Android 14 (API 34) 起**；
+  - `Android.bp` 里要求 `android_app_import { certificate: "platform", privileged: true }`，
+    也就是**平台签名 + 预装进系统镜像**，还要 `privapp-permissions`（`GET_ACCOUNTS_PRIVILEGED`、
+    `QUERY_USERS`、`MEDIA_CONTENT_CONTROL`、`android.car.permission.CAR_POWER`）；
+  - 要声明平台特性 `com.android.car.sensitive_app_lock`，并在 `preinstalled-packages.xml` 里只给
+    **次要用户**装（Guest / HSUM 不支持）；
+  - 它自己是个用 PIN 键盘锁**别的应用**的小应用，还有 RRO 换肤与恢复账号那套。
+- 所以普通手机第三方应用只有两条官方路：`BiometricPrompt` 的 `DEVICE_CREDENTIAL`
+  （弹系统锁屏凭据页，不弹指纹）或 `KeyguardManager.createConfirmDeviceCredentialIntent()`。
+  想要真正的"应用级锁定"还有 `DevicePolicyManager` + LockTask，但那需要设备管理员/MDM 托管。
+- 本项目的选择：**保持原有的指纹/面容 + 设备密码**（`ui/components/BiometricLock.kt`）。
+  2026-10-09 试过改成"只用系统锁屏凭据"，用户看到指纹没了就要求改回来，已完整回滚。
 
 ## I. 验证工具本身的坑
 
@@ -529,13 +546,13 @@
 - 症状（本次实测踩了十几分钟）：dump 失败会打印
   `ERROR: null root node returned by UiTestAutomationBridge` 或
   `Failed to write while dumping service user: Broken pipe`（屏幕转场中、全屏、画中画时更容易），
-  紧接着的 `cat` 把**上一次的文件**读出来 —— 界面明明已经切走了，dump 却一直返回同一份内容，
+  紧接着的 `cat` 把**上一次的文件**读出来：界面明明已经切走了，dump 却一直返回同一份内容，
   看起来像"点了完全没反应"。
 - 正确做法：`DumpUi` 先 `rm -f /sdcard/d.xml`，再 dump，再 `cat`（`tools/verify.ps1` 已改成这样）。
   界面"卡住不动"时先确认 dump 是不是旧文件，再去怀疑应用。
 - 相关：整机焦点丢失时（`mCurrentFocus` / `mResumedActivity` 都为空）`uiautomator` 会一直失败，
   按一次 `KEYCODE_WAKEUP` + `KEYCODE_HOME` 就能恢复，不必重启模拟器。
-- 反例：把"记录条数有没有变大"当判据 —— 见 I2。
+- 反例：把"记录条数有没有变大"当判据：见 I2。
 
 ---
 

@@ -144,7 +144,7 @@ Room 数据库 `xhs_local.db`，`@Database(version = 3)`，实体四张：
   收藏 / 最近浏览 / 关注只有本机一份，靠 `fallbackToDestructiveMigration()` 兜底等于升级时删用户数据；
   **刻意不再挂 `fallbackToDestructiveMigration()`**：漏写迁移时宁可启动就报错，也不能静默清空用户的收藏 / 浏览 / 关注 / 队列。跨版本一律写真迁移（现存 `MIGRATION_1_2`、`MIGRATION_2_3`）。
 - 队列顺序只由 `position` 表达：**不提供排序**（按加入时间），增删之后 `renumberWatchLater()`
-  压紧，不留空洞 —— 队列只有几十条，比维护链表/浮点 position 简单且不会积累误差。
+  压紧，不留空洞：队列只有几十条，比维护链表/浮点 position 简单且不会积累误差。
 - 备份内容：收藏、最近浏览、关注、**稍后观看队列**、设置项（主题 / 历史上限 / 应用锁 / 自动换号）、搜索记录、WebDAV 配置（**含 URL、用户名与密码**，JSON 明文；备份文件本身要放好）。**不包含账号凭据**（identity / token / user_hash / VIP 窗口都不导出），且**不恢复** `vipEnd`。
 - 备份落点：本地文件（用户选择）或 WebDAV 的 `xhs/` 子目录（固定，便于恢复时定位）。
 
@@ -164,12 +164,12 @@ Room 数据库 `xhs_local.db`，`@Database(version = 3)`，实体四张：
   `PROFILE("tab/profile","我的")`。
 - 深链 `xhstp://note/<id>`（`DeepLink.kt` + Manifest 的 `VIEW/DEFAULT/BROWSABLE` 过滤器）→ 直接进入详情。
 - 页面状态保留：跨页返回不重建上级界面（用导航的保存/恢复状态机制），"返回后关注状态要更新"这类需求通过共享仓库数据 + 重新读取实现。
-- **列表滚动位置（易错，2026-10-04 两次修正）**：规则是"**滚动状态按 `resetKey` 分组**"——
+- **列表滚动位置（易错，2026-10-04 两次修正）**：规则是"**滚动状态按 `resetKey` 分组**"
   `ui/components/XhsWaterfall.kt` 写作 `val gridState = key(resetKey) { rememberLazyStaggeredGridState() }`：
   同 key 恢复位置，换 key 从顶部开始。两侧都要照顾：
   - 要**保留**（子 tab 切走再回来、跳转详情/作者页返回）：分支内容包在
     `rememberSaveableStateHolder().SaveableStateProvider(key)` 里（`HomeScreen` 底部三 tab、`DiscoverTabScreen` 三个子 tab 都这么做），
-    `resetKey` 在这些路径上不得变化。**不要**用 `LaunchedEffect(resetKey) { scrollToItem(0) }` + "跳过第一次运行"的 flag——
+    `resetKey` 在这些路径上不得变化。**不要**用 `LaunchedEffect(resetKey) { scrollToItem(0) }` + "跳过第一次运行"的 flag
     被重新激活时 flag 仍为 true，恢复好的位置会被推回顶部。
   - 要**重置**（刷新、切分类）：`resetKey` 必须真的变，且要能被 key 区分出来。`HorizontalPager` 的每一页是独立 saveable 作用域
     （按页 key 存取状态），所以"推荐 → 最新 → 推荐"回到同一分类 id 时旧偏移会恢复进刚重新拉取的列表
@@ -215,11 +215,11 @@ Room 数据库 `xhs_local.db`，`@Database(version = 3)`，实体四张：
 | `org.json` 而非 gson/kotlinx-serialization | 包体形态简单且已在加密层处理字节；少一个反射依赖 |
 | 检查更新用**独立的 OkHttpClient**，且不套 AES | 共用客户端带 64 MB 磁盘缓存（为图片 CDN 的 `max-age` 服务），会把 GitHub 应答缓存成"永远同一个结果"；公网 JSON 不含账号信息，不需要也不应该走加密链路（见 GOTCHAS G1） |
 | 应用锁用 `biometric` + `fragment-ktx ≥ 1.8.9` | 低版本 fragment-ktx 会触发 requestCode 上限崩溃 |
-| 缓存按类型列出、可逐项勾选清理（`data/AppCaches.kt`） | 只有"清"一个按钮时用户不知道会清掉什么；按 `CacheKind` 拆成 磁盘图片 / 内存位图 / 其它临时文件 后，每项都能显示真实体积与代价。一项勾选只清一项 —— 清磁盘不再顺手清内存（见 GOTCHAS D8） |
+| 缓存按类型列出、可逐项勾选清理（`data/AppCaches.kt`） | 只有"清"一个按钮时用户不知道会清掉什么；按 `CacheKind` 拆成 磁盘图片 / 内存位图 / 其它临时文件 后，每项都能显示真实体积与代价。一项勾选只清一项：清磁盘不再顺手清内存（见 GOTCHAS D8） |
 | 启动时后台自动检查更新，**仅在有新版时弹窗** | 用户要求"进入软件自动检查更新"；但限流 / 断网 / 没有正式版 / 已是最新都不该打扰用户，因此只在 `Newer` 且未被「跳过这个版本」时弹（见 GOTCHAS G4/G5）。失败后由 `App.bump()` 在网络恢复时补查一次 |
 | 自动检查更新**12 小时一次**（`settings.update_checked_at`） | 每次冷启动都查会打扰用户，也会把 GitHub 匿名额度（60 次/小时/IP）烧光；只有**成功**的检查才写时间戳，失败保持窗口打开 |
 | 所有菜单 / 弹窗用**原生 `material3.AlertDialog`**，不用 `DropdownMenu`、也不自绘外壳 | 下拉面板没有半透明遮罩、没有入场动画，瀑布流卡片只有半屏宽会被裁掉，推荐页是整屏视频没有锚点；遮罩与动画交给系统对话框窗口（自绘遮罩的方案被用户明确否决，见 GOTCHAS H8）。作品长按菜单、播放器菜单、各页确认框全部走原生组件 |
-| 同一角落的浮动按钮一起排（`CornerFabStack`） | 发现页同时需要「刷新」和「稍后观看」两个入口；各画各的会互相盖住，现在竖排 —— 小号刷新在上、扩展稍后观看在下（GOTCHAS H9） |
+| 同一角落的浮动按钮一起排（`CornerFabStack`） | 发现页同时需要「刷新」和「稍后观看」两个入口；各画各的会互相盖住，现在竖排：小号刷新在上、扩展稍后观看在下（GOTCHAS H9） |
 | 触感反馈走系统 API（`Haptics` + `LocalHapticFeedback`） | 系统 API 尊重用户的触感开关与强度、不需要 `VIBRATE` 权限；自定义 `Vibrator` 会绕过这些设置。语义分四档：长按 / 轻点 / 确认 / 取消，见 GOTCHAS H7 |
 | 图文全屏的双击缩放**动画化**，捏合/拖动不动画 | 双击是"跳到"另一个倍率，瞬变很硬；捏合与拖动必须逐帧跟手。所以 `scale`/`offset` 仍是手势的真理源，渲染值在 `tween(240ms)` 与 `snap()` 两套 spec 之间切换（双击与「恢复」按钮打开动画）。注意模拟器把 `animator_duration_scale` 设成 0 时动画会瞬间完成（GOTCHAS H6） |
 | 队列**不提供排序**：按加入时间排列，没有序号、没有上移/下移按钮、也不做拖动 | 三种排序交互都被用户否掉了（见 AGENTS 硬约束 20 与 GOTCHAS H2）；队列顺序不是用户要的功能，而每种交互都带来一类新问题 |

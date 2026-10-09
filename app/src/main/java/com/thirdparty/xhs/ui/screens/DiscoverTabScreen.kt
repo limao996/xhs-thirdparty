@@ -259,7 +259,7 @@ private fun FeedTab(
             EmptyState(
                 title = if (state.categoriesError) "分类加载失败" else "没有可用的分类",
                 modifier = Modifier.fillMaxSize(),
-                description = "接口在海外，需要能访问海外的线路；网络恢复后会自动重试",
+                description = "网络不通，或线路到不了海外服务器。网络恢复后会自动重试",
                 actionLabel = "重试",
                 onAction = { viewModel.retryCategories() }
             )
@@ -347,7 +347,7 @@ private fun FeedCategoryPage(
         EmptyState(
             title = "内容加载失败",
             modifier = Modifier.fillMaxSize(),
-            description = "接口在海外，需要能访问海外的线路；网络恢复后会自动重试",
+            description = "网络不通，或线路到不了海外服务器。网络恢复后会自动重试",
             actionLabel = "重试",
             onAction = { viewModel.retry() }
         )
@@ -472,7 +472,7 @@ private fun FanGroupTab(
         EmptyState(
             title = "内容加载失败",
             modifier = Modifier.fillMaxSize(),
-            description = "接口在海外，需要能访问海外的线路；网络恢复后会自动重试",
+            description = "网络不通，或线路到不了海外服务器。网络恢复后会自动重试",
             actionLabel = "重试",
             onAction = onRetry
         )

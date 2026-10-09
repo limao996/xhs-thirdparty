@@ -5,7 +5,7 @@
 
 ## 1. 项目是什么
 
-`com.thirdparty.xhs` —— 小黄书（老司机软件）第三方 Android 客户端，桌面名「小黄书」（debug 变体为「小黄书.debug」，包名带 `.debug`）。一个人手写的、单模块、纯 Kotlin + Compose 工程，
+`com.thirdparty.xhs`：小黄书（老司机软件）第三方 Android 客户端，桌面名「小黄书」（debug 变体为「小黄书.debug」，包名带 `.debug`）。一个人手写的、单模块、纯 Kotlin + Compose 工程，
 目标是"可维护的现代 Android 样板"：单一数据源、全链路加密、可离线、可备份、可复现构建。
 
 **这个 App 的核心机制是"游客账号轮换"**：服务端给每个**新注册**的设备身份发一段 VIP 体验窗口，客户端在窗口
@@ -62,7 +62,7 @@ app/src/main/java/com/thirdparty/xhs/
 
 **网络与海外线路（重要）**：接口与 GitHub 都在海外。`App.hasValidatedNetwork()` 为假时请求**直接失败**
 （不等超时）；主 OkHttp 客户端 connect 10s / read 15s / callTimeout 20s，更新检查 6/8/12s。
-网络恢复（开 VPN 是**新的默认网络**）时 `App.bump()` 把 `networkEpoch` +1 —— 各 ViewModel 观察它
+网络恢复（开 VPN 是**新的默认网络**）时 `App.bump()` 把 `networkEpoch` +1：各 ViewModel 观察它
 自动补载，并**清掉更新检查的失败退避**立刻重查。
 
 ## 3. 数据流（三个方向都要记住）
@@ -75,7 +75,7 @@ app/src/main/java/com/thirdparty/xhs/
 ```
 
 - 断网/失败语义：**已缓存内容不清空**，只叠加错误态（见 `GOTCHAS.md` 的失败态规则）。
-- 账号门（VIP 续期）：所有"需要账号"的请求都会在 `XhsApi.call()` 里先走 `XhsRepository.ensureAccountForRequest()`——
+- 账号门（VIP 续期）：所有"需要账号"的请求都会在 `XhsApi.call()` 里先走 `XhsRepository.ensureAccountForRequest()`
   缓存的 VIP 剩余不足 `VIP_MIN_REMAINING_S = 60L` 秒就注册新游客身份（`v2/app/init` → `login-with-guest` → 校验 `isVip`），
   换号成功会 `bump accountEpoch` 让 UI 刷新。**没有定时轮询**：门只挂在真实请求上，界面空闲时不会发任何建号请求
   （代价是"长时间挂着不动、窗口过期后再点开某个页面"会先触发一次换号）。三个前置短路：`autoSwitchOnVipExpiry == false`、
@@ -105,10 +105,10 @@ app/src/main/java/com/thirdparty/xhs/
 | `WatchLaterEntity` | 稍后观看队列 | `position` 定义顺序；不提供排序，只按加入时间 |
 
 迁移策略：**必须写真迁移**（范例 `MIGRATION_2_3`），数据库**刻意不挂**
-`fallbackToDestructiveMigration()` —— 那会在漏写迁移时静默清空用户数据。
+`fallbackToDestructiveMigration()`：那会在漏写迁移时静默清空用户数据。
 备份内容：收藏 / 最近浏览 / 关注 / **稍后观看队列** / 设置（主题、自动换号开关、历史上限、应用锁）/
 搜索记录 / WebDAV 配置（**含 URL、用户名与密码**，JSON 里是明文，注意备份文件本身的存放位置）；
-**不含账号凭据**（identity / token / hash / VIP 窗口都不导出——旧窗口恢复回来也没有意义，
+**不含账号凭据**（identity / token / hash / VIP 窗口都不导出，旧窗口恢复回来也没有意义，
 其中 `vipEnd` 也**不再从备份恢复**，否则外部文件能决定"VIP 是否还有效"）。
 
 ## 6. 环境事实（本机，构建用）
@@ -131,12 +131,12 @@ app/src/main/java/com/thirdparty/xhs/
 - 已知边界：不做发评论；付费内容靠**换新游客号**领取新体验窗口获得访问（不是破解校验，见 §1 与 [../ARCHITECTURE.md](../ARCHITECTURE.md) §3.1）；
   `app.xiaohuangbook.net` 在部分网络环境会被 DNS 污染。
 - 仓库维护面：AI 档案、CI、Issue/PR 模板、文档随代码同步更新（约定见 [CONVENTIONS.md](CONVENTIONS.md)）。
-- 缓存与数据的边界（改"清除缓存"前必读）：可清理的只有三种 —— `cache/http_cache`（OkHttp 磁盘图片与封面，上限 64 MB）、
+- 缓存与数据的边界（改"清除缓存"前必读）：可清理的只有三种：`cache/http_cache`（OkHttp 磁盘图片与封面，上限 64 MB）、
   进程内位图 LRU（`ui/components/XhsAsyncImage.kt` 的 `BitmapCache`，`maxMemory/8`）、`cache/` 下的其它临时文件。
   收藏 / 最近浏览 / 关注在 Room（`xhs_local.db`）里，是**数据不是缓存**，清理不会动它们；视频不落盘（边看边下，退出即释放）。
   入口：设置 → 数据 → 清除缓存（`ui/screens/CacheScreen.kt` + `ui/viewmodel/CacheViewModel.kt`）。
 - 检查更新：`net/UpdateChecker.kt` 先取 `releases.atom`（**不吃 API 额度**），失败才回落 api.github.com；
-  `App.checkUpdateOnLaunch()` **每次进前台查一次**（去重 3s / 失败退避 5min —— 硬约束 15；
+  `App.checkUpdateOnLaunch()` **每次进前台查一次**（去重 3s / 失败退避 5min：硬约束 15；
   「跳过这个版本」记在 `settings.ignored_update_version`），查到新版由 `ui/components/UpdateAvailableDialog.kt`
   提供**应用内下载安装**（`net/UpdateDownloader.kt`：下到 `cacheDir/updates/`、校验包名、交给系统安装器）
   或浏览器打开发布页，

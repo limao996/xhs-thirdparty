@@ -27,23 +27,23 @@
 | P0-9 | 恢复不校验 `rawJson`，而 `JSONObject("")` 在 ViewModel 里未捕获 → **启动崩溃** | `BackupManager.kt:231`→`ProfileViewModel.kt:43-45`、`LocalListViewModel.kt:43-48` | 专项A（已复核） |
 | P0-10 | 取消系统文件选择器后 `systemPickerActive` 不复位 → **应用锁此后永久失效**（直到进程重启） | `ui/screens/BackupScreen.kt:100,115`（判据 `MainActivity.kt:276-282`） | B/C（已复核） |
 | P0-11 | `enterPictureInPictureMode` 返回值被忽略、随后无条件 `onBack()` → 系统拒绝进小窗时留下**后台出声的孤儿播放器** | `ui/screens/DetailScreen.kt:198-211` + `PipController.kt:65-69` | 专项B |
-| P0-12 | 「关于」页写着「**不破解付费校验**」——与实现相反的声明，正是硬约束 12 明令禁止的措辞 | `ui/screens/AboutScreen.kt:132`（入口 `ProfileScreen.kt:271`） | 专项B（已复核） |
+| P0-12 | 「关于」页写着「**不破解付费校验**」，与实现相反的声明，正是硬约束 12 明令禁止的措辞 | `ui/screens/AboutScreen.kt:132`（入口 `ProfileScreen.kt:271`） | 专项B（已复核） |
 | P0-13 | 仓库里提交了**真实 `user_token` + 设备身份 + 账号历史**（4 个 fixture） | `tools/fixtures/prefs_{backup,nopick,novip,stalevip}.xml:3,5,6,8` | 专项C（已复核） |
 | P0-14 | 「覆盖」恢复**不是原子的**：先清三张表再逐条写，无 `withTransaction` → 中途失败 = 用户数据已清空 | `data/BackupManager.kt:214-276` | 专项C |
 | P0-15 | Manifest **没有 `launchMode`**：深链会新建第二个 `MainActivity`，`onNewIntent` 永不触发（代码注释却断言会） | `AndroidManifest.xml:22-27` vs `MainActivity.kt:104-106` | 专项C（已复核） |
 | P0-16 | `versionName` 仍是 `1.2.1`，而 v1.2.1 之后已落地十几批功能 → 关于页与"检查更新"报"已是最新"是错的 | `app/build.gradle:25` | 专项C |
-| P0-17 | 交互规范（本项目自己的硬约束）被执行得**前后不一致**：作者页第 5 份自绘关注按钮（违反 21）。⚠️ 原文还写"返回/关闭错误地加了触感"，**该结论已作废**：用户后来明确要求屏幕上的返回/关闭/取消**都要**有触感，硬约束 19 已按此改写 | `AuthorScreen.kt:119-140`、`DetailScreen.kt:361`、`MediaPlayer.kt:632`、`ConfirmActionDialog.kt:39` 等 | 专项B（已复核 ①⑤） |
+| P0-17 | 交互规范（本项目自己的硬约束）被执行得**前后不一致**：作者页第 5 份自绘关注按钮（违反 21）。原文还写"返回/关闭错误地加了触感"，**该结论已作废**：用户后来明确要求屏幕上的返回/关闭/取消**都要**有触感，硬约束 19 已按此改写 | `AuthorScreen.kt:119-140`、`DetailScreen.kt:361`、`MediaPlayer.kt:632`、`ConfirmActionDialog.kt:39` 等 | 专项B（已复核 ①⑤） |
 
 >
 > 另有 3 条"低版本可能静默失效"的疑点值得单独提：`Haptics` 用的 `SegmentTick`/`Confirm`/`Reject`
-> 是 API 30/34 才有的常量，而 `minSdk 24` —— **低版本上这三档触感可能根本没有效果**，
+> 是 API 30/34 才有的常量，而 `minSdk 24`：**低版本上这三档触感可能根本没有效果**，
 > 这或许正是用户反复反馈"触感不对/没有"的一部分原因（专项B-P2-30 / 专项C-P2-30，标注"待确认"）。
 
 ## 一、P0（当前就会坏）
 
 ### 1. `RepoViewModelFactory` 用了 API 26 的方法，而 minSdk 是 24
 - 证据：`app/src/main/java/com/thirdparty/xhs/common/RepoViewModelFactory.kt:17`
-  `it.parameterCount == 1` —— `java.lang.reflect.Constructor#getParameterCount` 在 Android 上
+  `it.parameterCount == 1`：`java.lang.reflect.Constructor#getParameterCount` 在 Android 上
   **需要 API 26**（lint：`NewApi`）。同一处 `.parameterCount` 被 lint 单独点名。
 - 影响：`README.md:47` 写明「要求 Android 7.0（API 24）及以上」，`docs/BUILD.md:72`、
   `docs/ai/CONTEXT.md:19` 也都写 minSdk 24。但在 API 24/25（Android 7.0/7.1）上，任何走这个工厂
@@ -130,18 +130,18 @@
 
 1. **播放器所有权**这一块是本仓库最扎实的设计：`PipController.isHandedOver` +
    `PlaybackHandoff` 把"谁该 release"讲清楚，连踩过的两个坑都写进了 `GOTCHAS H10/H12`。
-2. **`proguard-rules.pro` 的注释记录了"跑过混淆构建才发现"的 ViewModel keep 规则** ——
+2. **`proguard-rules.pro` 的注释记录了"跑过混淆构建才发现"的 ViewModel keep 规则**
    大多数项目的 proguard 文件是抄来的模板，这份是实证出来的。
 3. 全仓库 **0 处 `!!`、0 处 `runBlocking`、0 处 `GlobalScope`**；`Log.*` 全部用 `BuildConfig.DEBUG` 门控
    （`MediaPlayer.kt:375,407,419`）。
-4. 文档体系（`AGENTS.md` 硬约束（当时 24 条，现 26 条）+ `CHANGELOG` 22 个阶段 + `GOTCHAS` 选题极细）——
+4. 文档体系（`AGENTS.md` 硬约束（当时 24 条，现 26 条）+ `CHANGELOG` 22 个阶段 + `GOTCHAS` 选题极细）
    连"验证工具自己会骗人"（假 dump、vibrator 只留 50 条）都记了。
 5. 缓存清理**逐项对应勾选**（硬约束 13）且 `isClearableTemp` 明确排除 `http_cache` 与 SQLite 锁文件
    （`data/AppCaches.kt:90`），这类"顺手多删一个"的坑被提前挡住了。
 
 ## 五、建议的修复顺序
 
-1. **P0-13**（先处理仓库里的真实 `user_token`：换掉 fixture 里的凭证、必要时轮换该游客身份）——
+1. **P0-13**（先处理仓库里的真实 `user_token`：换掉 fixture 里的凭证、必要时轮换该游客身份）
    这一条是"已经泄露在版本库里的东西"，越早越好。
 2. **P0-1**（一行改动，直接决定 Android 7.x 能不能用）。
 3. **P0-10 / P0-12**（两处都是"用户会立刻感觉到不对"的：应用锁失效、关于页写着被明令禁止的措辞）。
@@ -156,7 +156,7 @@
 
 ## 六、本轮未覆盖 / 需实机确认
 
-- 真机（非模拟器）行为：小窗关闭后的音频收尾（`onStop` 兜底）**未实机取证** —— 系统小窗的
+- 真机（非模拟器）行为：小窗关闭后的音频收尾（`onStop` 兜底）**未实机取证**：系统小窗的
   「关闭」是覆盖层，不吃注入点击（`GOTCHAS H5`）。
 - `Haptics` 的 `SegmentTick`/`Confirm`/`Reject` 在 API 24–33 上是否真的有效（待真机确认；
   很可能无效，见摘要末注）。
@@ -280,7 +280,7 @@
 - **漏触感**：`CacheScreen.kt:159-162`（Checkbox 自身无触感、同行有）、`ProfileScreen.kt:194-202,295`、
   `UserListScreen.kt:115-116`、`VideoPlayer.kt:615`（重试）、`AppNavHost.kt:143-190,209-217`（三个确认框与多选栏全无）。
 - **死代码**：`Haptics.kt:60` `hapticClickable`（无人调用）、`VideoPlayer.kt:301,628`
-  （`rememberExoPlayer`、基于 `media3.ui.PlayerView` 的实现 —— 与 `VideoSurface.kt:20-41`
+（`rememberExoPlayer`、基于 `media3.ui.PlayerView` 的实现：与 `VideoSurface.kt:20-41`
   "禁用 SurfaceView 系 PlayerView"的结论**矛盾**，容易被再次误用）、`CacheViewModel.kt:58` `setAll`、
   `GuestViewModel.kt:131,142,174`、`Tokens.kt:121`、`DetailScreen.kt:996`；另有多文件重复 import。
 - **注释与代码不符**：`XhsWaterfall.kt:155-156`（说 Box 是给 DropdownMenu 定位，实际是原生对话框）、
@@ -350,7 +350,7 @@
 - `CONTEXT.md:47` 说 WebDAV 用 PROPFIND，代码里没有 PROPFIND。
 - `README.md:29` / `BackupScreen.kt:219` 说备份只含四类，实际还含搜索记录与 WebDAV 明文密码。
 - `AGENTS.md:62` / `VERIFY.md:99-101` 说锁文件在 `cache/`，`VERIFY.md:108` 自己把库写在 `databases/`。
-- （本条已修，留档）`docs/README.md` 曾把硬约束写成 12 条、GOTCHAS 索引只到 G；现在索引已写到 H/I，条数写法改为"编号 1–24、另有 5b/17b"。
+-（本条已修，留档）`docs/README.md` 曾把硬约束写成 12 条、GOTCHAS 索引只到 G；现在索引已写到 H/I，条数写法改为"编号 1–24、另有 5b/17b"。
 - `docs/README.md:39` / `CONVENTIONS.md:39` 要求"文档不含机器专属绝对路径"，而 `BUILD.md:7-9`、`CONTEXT.md:106-108` 写了 `D:\Scoop\...`。
 - `BUILD.md:71,94,110-125` 把 md5/体积/versionCode 当"当前值"留档，但仓库**没有任何 git tag**，无法核对。
 - `CHANGELOG.md:425` 与 `:439` 关于 RemoteAction 的记载前后相反（历史记录，建议加"已在阶段末修正"标注）。

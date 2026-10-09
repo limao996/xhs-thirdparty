@@ -208,7 +208,7 @@ fun ProfileScreen(
                 AlertDialog(
                     onDismissRequest = { confirmRotate = false },
                     title = { Text("切换游客账号？") },
-                    text = { Text("将创建一个全新的随机账号，当前账号将无法找回。") },
+                    text = { Text("会换成一个全新的随机账号，现在的账号就找不回来了。") },
                     confirmButton = {
                         TextButton(onClick = haptics.rejectClick {
                             confirmRotate = false

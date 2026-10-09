@@ -74,15 +74,15 @@
 
 ### 账号与身份（本项目最曲折的一段）
 
-- 移除「粉丝圈」费用标签 —— 经核实该判定是编造的，从未生效（`0fc6058`）
-- 停止声称"已切换游客账号" —— 实测该账号根本无法更换（`3271c5c`）
-- 修正「粉丝圈」费用标签 —— 真实信号是 note 的 `group_id`（上轮结论有误）（`a8cf5da`）
+- 移除「粉丝圈」费用标签：经核实该判定是编造的，从未生效（`0fc6058`）
+- 停止声称"已切换游客账号"：实测该账号根本无法更换（`3271c5c`）
+- 修正「粉丝圈」费用标签：真实信号是 note 的 `group_id`（上轮结论有误）（`a8cf5da`）
 - 游客账号轮换（从"不可创建"改为在已验证的账号池内轮换）（`cd3f4ba`）
 - 改为手动随机切换游客账号 + VIP 状态显示 + VIP 账号扫描（`4201c73`）
 - 账号池改为"发现式" + 随机挑选；扫描到 VIP 即停止并登录（`d0693c4`）
 - 切换与扫描改为"随机 ID 优先"（不再只依赖固定账号池）（`dac046f`）
 - 账号池扩到上万（19,199 个猜测身份）；移除扫描以免消耗 VIP 额度（`75f3f9e`）
-- **重大修正 —— 账号是可以创建的**：漏掉了 `v2/app/init`（`1f8db12`）
+- **重大修正：账号是可以创建的**：漏掉了 `v2/app/init`（`1f8db12`）
 - 记住当前登录账号 + 支持切换历史账号（`d5f9161`）
 - 首次进入自动随机账号 + VIP 到期自动切换开关（`1b459a3`）；该开关默认开启（`41fb386`）
 - 评论区"查看更多"判定改用真实总数（`eec70bb`）
@@ -150,7 +150,7 @@
 - 播放器优化（弱网/超长/跳转）+ 去掉锁定按钮 + 我的页 UI 收尾（`3f4def7`）
 - 缓冲提示覆盖全部播放器并显示缓冲进度 + 缓冲策略分流（`7d08be6`）
 - 进度条现在真的显示缓冲进度（`a5faa94`）
-- 长视频跳转后一直缓冲 —— 实测定位 + 自愈 + 明确失败（`88afebc`）
+- 长视频跳转后一直缓冲：实测定位 + 自愈 + 明确失败（`88afebc`）
 - 进度条改用官方 M3E 组件 + 修复缓冲条亮度反了（`9433f39`）
 - 缓冲浮层的进度不再是播放进度（`522871c`）
 - 进度条改为直接搬官方源码 + 插入缓冲子轨道（`6e50efa`）；随后回归官方样式只给缓冲区间加亮度（`a7643f9`）
@@ -163,8 +163,8 @@
 
 ### 界面与正确性
 
-- 作品标签在列表页全被判成「图文」—— 用错了字段（`f661bf7`）
-- 作者主页标签错误 —— `note_type` 还有 3 和 4，都是视频（`07b2de8`）
+- 作品标签在列表页全被判成「图文」，用错了字段（`f661bf7`）
+- 作者主页标签错误：`note_type` 还有 3 和 4，都是视频（`07b2de8`）
 - 视频画面不再残留到上级界面 + 发现页 loading 居中（`39757e4`）
 - 进入闪烁 / VIP 轮询 5 秒 / 分类居中 / 搜索清除 / 播放交接（`6a22ea4`）
 - 推荐页单击同时隐藏标题栏与底栏；详情播放器恢复真实比例；启动不再闪（`c39d4d5`）
@@ -230,7 +230,7 @@
 - 发现页子 tab（发现/粉丝圈/关注）切换后保留各自的滚动进度；从粉丝圈进作者页再返回不再回到顶部
   （`ui/screens/DiscoverTabScreen.kt` 的子 tab 状态持有器 + `ui/components/XhsWaterfall.kt` 的 `resetKey`）
 - 发现页左右滑动切换分类时列表回到顶部；此前滑回已访问过的分类会落回旧偏移，即落在"从没看过顶部的新列表"中间
-  ——滚动状态改为按 `resetKey` 分组（`key(resetKey) { rememberLazyStaggeredGridState() }`），
+，滚动状态改为按 `resetKey` 分组（`key(resetKey) { rememberLazyStaggeredGridState() }`），
   并新增单调递增的 `DiscoverUiState.feedEpoch` 作为列表身份
 
 ---
@@ -244,7 +244,7 @@
 - 设置页新增「关于」组：「关于小黄书」（版本 / 包名 / 客户端协议）与「检查更新」（`c24836a`）
 - 新增 `ui/screens/AboutScreen.kt` + `ui/viewmodel/AboutViewModel.kt` + `net/UpdateChecker.kt`：
   从 `api.github.com/repos/limao996/xhs-thirdparty/releases/latest` 读最新 tag，与本地版本分段比较（`1.10.0 > 1.9.2` 这类必须正确）；
-  有新版给出「打开下载页」与「更新说明」；**没有正式版 / 被限流（403）/ 断网都会如实显示原因**，不假装"已是最新"
+  有新版给出「打开下载页」与「更新说明」；**没有正式版 / 被限流（403）/ 断网都会直接显示原因**，不假装"已是最新"
 - 这一条是全应用**唯一**不经 AES 的请求：明文 JSON、无 `User-Agent` 会被 GitHub 403，
   且必须用独立的 OkHttpClient，否则应答会被图片 CDN 用的 64 MB 磁盘缓存住（GOTCHAS G1）
 - `versionName` 1.1.0 → 1.2.0（`CLIENT_VERSION` 2.6.0 / `CLIENT_CHANNEL` 1333 保持不变，它们是协议版本）
@@ -267,7 +267,7 @@
 
 ### 修复
 
-- 「关于小黄书」和「检查更新」以前是同一个页面（点哪个都进 `AboutScreen`，区别只是进页面后要不要自动查一次），
+-「关于小黄书」和「检查更新」以前是同一个页面（点哪个都进 `AboutScreen`，区别只是进页面后要不要自动查一次），
   现在拆成两个独立页面：`about`（版本 / 包名 / 客户端协议 / 仓库 / 许可 / 免责声明）与
   `update`（当前版本、进页面自动查一次、重新检查、有新版时的下载页与更新说明）
 - 两个入口从「设置 → 关于」组移到「我的 → 其他」；设置页只留偏好项（外观 / 安全 / 内容 / 数据）
@@ -286,7 +286,7 @@
 - **进入软件自动检查更新**：`App.checkUpdateOnLaunch()` 在 `onCreate()` 里后台查一次 GitHub Releases，
   只有真的查到新版本才写 `App.pendingUpdate`；`MainActivity` 收到后弹 `ui/components/UpdateAvailableDialog.kt`
   （标题「发现新版本 vX」，正文是更新说明，按钮「打开下载页」/「以后再说」/「跳过这个版本」）。
-  其余情况（已是最新 / 没有正式版 / 限流 / 断网）一律静默，只在「我的 → 检查更新」页如实显示；
+  其余情况（已是最新 / 没有正式版 / 限流 / 断网）一律静默，只在「我的 → 检查更新」页直接显示；
   「以后再说」下次启动仍会提醒，「跳过这个版本」持久化到 `settings`（`ignored_update_version`）后不再提醒；
   网络恢复时（`App.bump()`）补查一次。锁屏状态下不弹窗（避免盖在解锁页上）。
 - **缓存清理改为按类型多选，并移到设置页**：新增 `data/AppCaches.kt`（`CacheKind`：图片与封面缓存 /
@@ -306,10 +306,10 @@
 
 **启动自动检查更新**（临时发一个 `v9.9.9` 正式 release 做验证，测完立刻 `gh release delete --cleanup-tag`，避免污染真实的 latest）：
 
-- 冷启动 dump 到弹窗：`发现新版本 v9.9.9 | 当前版本 v1.2.0-debug | <更新说明> | 只会打开 GitHub 发布页，不会自动下载或安装。 | 打开下载页 | 跳过这个版本 | 以后再说`
+- 冷启动 dump 到弹窗：`发现新版本 v9.9.9 | 当前版本 v1.2.0-debug | <更新说明> | 只会打开 GitHub 发布页，不会自动下载或安装。| 打开下载页 | 跳过这个版本 | 以后再说`
 - 点「打开下载页」跳出应用（浏览器起来），对话框关闭；下次冷启动仍会弹
 - 点「以后再说」对话框关闭，重新冷启动仍会弹（不记住）
-- 「我的 → 检查更新」页同版本状态为 `有新版 v9.9.9，当前是 v1.2.0-debug`
+-「我的 → 检查更新」页同版本状态为 `有新版 v9.9.9，当前是 v1.2.0-debug`
 - 点「跳过这个版本」后 `shared_prefs/settings.xml` 写入 `ignored_update_version=9.9.9`，再冷启动不再弹（直接回到首页）
 - 删掉临时 release 后，同一页面变回 `已是最新版本（v1.2.0-debug）`
 - 跳转浏览器单独验证过一次：「关于 → GitHub 仓库」打开 `github.com/limao996/xhs-thirdparty`（同一个 `openUrl`）
@@ -321,7 +321,7 @@
 - 缓存页各项实测（数值随浏览变化，例：2.8 MB / 7.3 MB / 0 B，合计 10.1 MB）；勾 1 项按钮变
   「清除选中（1 项 · 376 KB）」、勾 2 项变「（2 项 · 63.9 MB）」，确认框列出所选项与合计，清完各项归 0 B
 - 只勾磁盘缓存后复测：磁盘归 0 B、内存位图缓存仍为 6.9 MB（硬约束 13 生效）
-- 「其它临时文件」排除了 `cache/http_cache/` 与 SQLite 锁文件 `xhs_local.db.lck`（设备上它就在 `cache/` 里，0 B）
+-「其它临时文件」排除了 `cache/http_cache/` 与 SQLite 锁文件 `xhs_local.db.lck`（设备上它就在 `cache/` 里，0 B）
 - 全程 `crash: 0`
 
 ---
@@ -349,14 +349,14 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 ### 设备验证（模拟器 emulator-5554，API 34，正式包 `com.thirdparty.xhs`，R8 压缩产物）
 
 - 首页 `小黄书 | 游客ID：68994930`，「我的」页 `会员有效期至 10-04 11:50 | VIP用户`
-  —— R8 压缩后仍能注册游客身份并拿到体验权限
+：R8 压缩后仍能注册游客身份并拿到体验权限
 - 设置页 `数据 | 备份与恢复 | 清除缓存 | 图片 / 临时文件，共 13.3 MB；可逐项勾选`；
   缓存页三项 `4.8 MB` / `7.9 MB` / `612 KB`（合计 `13.3 MB`），说明文案与「清除选中」都在
-- 关于页 `v1.2.1（build 326862） | 包名 com.thirdparty.xhs | 客户端协议 Client-Version 2.6.0 · Client-Channel 1333`
+- 关于页 `v1.2.1（build 326862）| 包名 com.thirdparty.xhs | 客户端协议 Client-Version 2.6.0 · Client-Channel 1333`
 - 全程 `crash: 0`
 
 > 检查更新页在这次验证时正好撞上 GitHub 匿名额度用尽（60 次/小时/IP），显示
-> `检查失败：GitHub 限流（HTTP 403），过一会儿再试` —— 顺带覆盖了「限流静默降级、不崩、不卡」这条路径。
+> `检查失败：GitHub 限流（HTTP 403），过一会儿再试`：顺带覆盖了「限流静默降级、不崩、不卡」这条路径。
 
 ---
 
@@ -365,7 +365,7 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 ### 新功能
 
 - **稍后观看队列**：Room v3 新增 `watch_later` 表（`position` 定序，`2 → 3` 写了真迁移、不清库）；
-  队列页支持**长按拖动排序**、移出、点进详情；队列非空且没有小窗时显示入口 —— 推荐页用视频信息栏
+  队列页支持**长按拖动排序**、移出、点进详情；队列非空且没有小窗时显示入口：推荐页用视频信息栏
   上方的一条**信息条**，发现 / 我的 / 搜索 / 作者页 / 收藏 / 最近浏览 / 详情页用**浮动按钮**
 - **长按作品菜单**（所有瀑布流 + 推荐页短视频）：弹出**对话框**，内容是「作品标题 +
   收藏/取消收藏 + 稍后观看/移出稍后观看」，收藏 / 最近浏览另给「多选」入口
@@ -396,8 +396,8 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 - 更新节流：`settings.xml` 的 `update_checked_at` 在一次成功检查后被写入，12 小时内的两次冷启动都没改动它
 - 全程 `crash: 0`
 
-> **未设备验证的两条**（如实记）：①系统画中画窗口的「关闭 X / 展开」不吃 `adb shell input tap`
-> （系统覆盖层忽略注入触摸），所以「点 X 销毁播放器」只做了代码路径确认，展开路径改用
+> **未设备验证的两条**（照实记）：①系统画中画窗口的「关闭 X / 展开」不吃 `adb shell input tap`
+>（系统覆盖层忽略注入触摸），所以「点 X 销毁播放器」只做了代码路径确认，展开路径改用
 > `am start --activity-reorder-to-front` 触发并通过；②「12 小时到期后重新检查并刷新时间戳」这一条，
 > 当晚 GitHub 匿名额度已用尽（403），只观察到「失败不写时间戳、窗口保持打开」这半边。
 
@@ -415,7 +415,7 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 第 5 项的取证方式（值得记一笔）：模拟器上抓不到动画中间帧（`screencap` 单次耗时接近秒级），
 于是临时把 `ZOOM_ANIM_MS` 调到 12000 并在渲染值上挂一行 `Log.d`，`logcat` 收到 **528** 个中间值
 （`1.0 → 1.0000061 → … → 2.5`）证明它是真的插值；随后**移除探针、把时长还原成 240ms**。
-第一次测量时只看到 `1.0 → 2.5` 两个值 —— 原因是模拟器 `animator_duration_scale = 0`
+第一次测量时只看到 `1.0 → 2.5` 两个值：原因是模拟器 `animator_duration_scale = 0`
 （系统动画被关掉，Compose 的动画会瞬间完成），把该设置改成 1 后才量到中间值，测完已还原为 0。
 
 ### 阶段十一 · 小窗回归系统画中画、补系统触感、修队列拖动（同日第二轮反馈）
@@ -427,7 +427,7 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 | 3 | 「队列长按拖动没法从 1 到 3，只能到 0 或 2」 | 拖动期间**不再边拖边换位**：只记 `dragFrom`（拖谁）/ `dragOffset`（手指移了多少）/ `dragTarget`（会落在第几行），其余行用 `translationY` 让位，松手才整段写回 | 把第 1 行拖到第 4 行：拖动前首行是 `【新娘】刚结婚的新娘这身材这叫声真刺激`，拖动后首行变成 `抖音风 抖音18+ (125)`，那一行显示 `4. @绅士仓库`；DB 位置重排为 `0 1 2 3` |
 
 第 3 项的根因（值得记一笔）：旧实现"手指每越过半行就和相邻行换位"，换位会让这一行的**基准位置**
-立刻跳一行，而手势位移是在节点的局部坐标里累加的 —— 基准一跳，累加量正好被抵消，于是拖多远都卡在
+立刻跳一行，而手势位移是在节点的局部坐标里累加的：基准一跳，累加量正好被抵消，于是拖多远都卡在
 相邻一格。现在拖动中不动布局，位移就不会被抵消，一次能拖到任意位置。
 
 ### 阶段十二 · 对话框回归原生、两个浮动按钮共存、小窗补前进后退（同日第三轮反馈）
@@ -435,8 +435,8 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 | # | 反馈 | 改动 | 证据 |
 | --- | --- | --- | --- |
 | 1 | 「很多对话框依然没有遮罩和动画」→ 追加「不要自己绘制，用原生的 AlertDialog」 | 先按"自绘遮罩 + 自绘入场动画"做了一版统一外壳，被用户否决；最终做法是**全应用统一用 `material3.AlertDialog`**，不自定义任何对话框外壳（25 处对话框调用全部是原生组件）。顺带实测了遮罩：长按对话框打开时背景亮度 `239 → 96`（约 60% 压暗），遮罩本来就在；观感问题主要是入场动画受系统"动画时长比例"影响 | 亮度实测 `dim-1-nodialog.png` / `dim-2-dialog.png`；`DumpUi`：对话框内容 `表妹约的炮友去打野炮… \| 收藏 \| 稍后观看 \| 关闭` |
-| 2 | 「稍后观看浮动按钮替代了刷新浮动按钮，它俩要共存」 | 新增 `ui/components/CornerFabStack.kt`：右下角竖排 —— 上面是**小号刷新按钮**（次要色），下面是**扩展的稍后观看按钮**（带件数），间距 `Spacing.m`；队列为空时只剩刷新，画中画时整组隐藏。发现页改用这个组合（关注子 tab 不给刷新按钮），外壳不再为发现页重复画一个稍后观看按钮 | 截图 `fab-1-discover.png`：两个按钮同屏、上下排列不重叠；`DumpUi` 同时有 `content-desc="刷新"` 与 `text="稍后观看 4"` |
-| 3 | 「画中画要有进度前进/后退、播放/暂停」 | 小窗控制栏补回三个标准 `RemoteAction`：**后退 10 秒 / 播放暂停 / 前进 10 秒**（画中画最多显示 3 个，正好放满）；新增 `res/drawable/ic_pip_{rewind,pause,play,forward}.xml`（Material 标准图形），`MainActivity` 重新注册接收者，动作后刷新图标 | `logcat`（WindowManagerShell）：`PictureInPictureParams( aspectRatio=60/107 … hasSetActions=true …)` —— actions 已随窗口生效；截图 `fab-3-pip.png` 小窗里视频正常播放 |
+| 2 | 「稍后观看浮动按钮替代了刷新浮动按钮，它俩要共存」 | 新增 `ui/components/CornerFabStack.kt`：右下角竖排：上面是**小号刷新按钮**（次要色），下面是**扩展的稍后观看按钮**（带件数），间距 `Spacing.m`；队列为空时只剩刷新，画中画时整组隐藏。发现页改用这个组合（关注子 tab 不给刷新按钮），外壳不再为发现页重复画一个稍后观看按钮 | 截图 `fab-1-discover.png`：两个按钮同屏、上下排列不重叠；`DumpUi` 同时有 `content-desc="刷新"` 与 `text="稍后观看 4"` |
+| 3 | 「画中画要有进度前进/后退、播放/暂停」 | 小窗控制栏补回三个标准 `RemoteAction`：**后退 10 秒 / 播放暂停 / 前进 10 秒**（画中画最多显示 3 个，正好放满）；新增 `res/drawable/ic_pip_{rewind,pause,play,forward}.xml`（Material 标准图形），`MainActivity` 重新注册接收者，动作后刷新图标 | `logcat`（WindowManagerShell）：`PictureInPictureParams( aspectRatio=60/107 … hasSetActions=true …)`：actions 已随窗口生效；截图 `fab-3-pip.png` 小窗里视频正常播放 |
 
 > 说明：系统小窗上那三个按钮的**触摸**在模拟器里时好时坏（系统覆盖层会忽略注入触摸），
 > 所以第 3 项验证到"actions 已注册 + 接收者代码路径"为止；此前一版构建里曾观测到按钮点击
@@ -449,7 +449,7 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 | 1 | 小窗没继承播放状态；播完按钮不更新、点了也不重播 | `PipController.start(..., playIntent)`：交出去那一刻"在播/暂停"显式接着；控制栏图标改为按**真实状态**三选一（`STATE_ENDED` → 重播、`playWhenReady` → 暂停、其余 → 播放）；接收者里播完再点走 `seekTo(0) + play()`；挂 `Player.Listener` 在播放状态变化时刷新按钮 | `dumpsys audio`：小窗会话期间本应用 `AudioTrack(USAGE_MEDIA/CONTENT_TYPE_MOVIE)` 有 `event:started`（在播）；图标/重播属代码路径 + 上面这条状态来源 |
 | 2 | 队列项作者名前的序号去掉 | `QueueRow` 去掉 `"$position. "`，作者名只留 `@昵称`（序号不再显示，顺序由拖动本身表达） | `DumpUi`：`… \| VIP \| @老司机 \| 调教 \| 免费 \| @欲临君 \| …`；断言 `\d+\. @` 为 **False** |
 | 3 | 播放器菜单对话框列表要能滚动 | `MediaPlayer` 菜单正文包 `verticalScroll` + `heightIn(max = 360.dp)`，倍速/微调/小窗播放共 8 行在小屏上也能滚 | 截图 `v3-3-player-menu.png`；`DumpUi`：`微调：±1 秒 \| 0.5 x … 2.0 x \| 小窗播放 \| 关闭` |
-| 4 | 粉丝圈的作品也要长按菜单 | `FanGroupNoteCard` 由 `Surface(onClick)` 改为 `combinedClickable`，`FanGroupTab` 里接 `rememberNoteFlags/rememberNoteActions` 并渲染 `NoteActionDialog` | 长按作品缩略图：`想看我露出吗 深田咏美【娱乐篇】 \| 收藏 \| 稍后观看 \| 关闭` |
+| 4 | 粉丝圈的作品也要长按菜单 | `FanGroupNoteCard` 由 `Surface(onClick)` 改为 `combinedClickable`，`FanGroupTab` 里接 `rememberNoteFlags/rememberNoteActions` 并渲染 `NoteActionDialog` | 长按作品缩略图：`想看我露出吗 深田咏美【娱乐篇】\| 收藏 \| 稍后观看 \| 关闭` |
 | 5 | 触感很多该用的没用、有的不合理 | `Haptics.tick()` 从 `TextHandleMove`（文本光标用的）改成 **`ContextClick`**，新增 `segment()`（`SegmentTick`，滑视频/翻图片）；补上：详情页 分享/收藏/全屏、推荐页换视频、图片查看器翻页、我的页每个入口、作品对话框动作、队列行点击、清空队列 | `dumpsys vibrator_manager`：紧随点击出现 `opPkg=com.thirdparty.xhs.debug … -> TICK`（长时间对比前后两次采样） |
 | 6 | 我的界面不要稍后观看浮动按钮 | 外壳（`HomeScreen`）不再渲染稍后观看 FAB；入口归属：推荐页 = 信息条、发现页 = `CornerFabStack`，我的页 = 无 | `DumpUi`（我的页）：整页无 `稍后观看` 文本 |
 | 7 | 队列拖动松手后会闪 | 落库后先按**刚写回的顺序**渲染（`committed` 本地顺序），等 Room 读回的顺序对上再撤掉；否则会先按旧顺序画一帧、再跳成新顺序 | 代码路径 + 说明；顺序正确性在阶段十一已实测（1 → 4 格） |
@@ -465,13 +465,13 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 | --- | --- | --- | --- |
 | 1 | 队列拖到屏幕外的行时没有自动滚动 | 记录手指在**列表视口**里的纵坐标，靠一个按帧跑的循环在上下 96dp 边缘区内滚动（步长随接近程度衰减，最大 16dp/帧）；滚动量补回 `dragOffset`，否则落点不跟手指走 | 代码 + 机制；一次拖到任意位置的能力在阶段十一已实测 |
 | 2 | 播放器倍速改为拖动条 0.25x~3x | 删掉 6 个固定档位，改 `Slider(valueRange = 0.25f..3f, steps = 10)`（步进 0.25），标题行显示当前倍速、点一下回到 1x；底栏倍速角标跟着走 | 菜单 dump：`微调：±1 秒 \| 倍速 1x \| 小窗播放 \| 关闭`（原来的 `0.5 x / 0.75 x / …` 列表已消失） |
-| 3 | 切换小窗后视频停住，后台还在出声 | 推荐流的播放器在小窗期间要停 —— 但**必须放过小窗那一台**（从推荐页进详情再进小窗的是同一个播放器实例，无差别 `pause()` 会把小窗一起按停）。判断归属用 `PipController.isHandedOver` | 实测到的症状正是"小窗那一路 `state:paused` 而信息流那一路 `state:started`"（`dumpsys audio`）；本次改动后重新进小窗的复测落在图文作品上，未取到小窗态的新数据（见下） |
+| 3 | 切换小窗后视频停住，后台还在出声 | 推荐流的播放器在小窗期间要停：但**必须放过小窗那一台**（从推荐页进详情再进小窗的是同一个播放器实例，无差别 `pause()` 会把小窗一起按停）。判断归属用 `PipController.isHandedOver` | 实测到的症状正是"小窗那一路 `state:paused` 而信息流那一路 `state:started`"（`dumpsys audio`）；本次改动后重新进小窗的复测落在图文作品上，未取到小窗态的新数据（见下） |
 | 4 | 粉丝圈作者卡片的「去看看」改成关注按钮；点卡片进作者主页 | 「去看看」→ **`+ 关注` / `已关注`**（本地关注表 + `followVersion` 驱动），整行 `clickable` 进作者主页 | 粉丝圈 dump：`美少女精选 \| 共 642 个作品 \| + 关注 \| …`，且 `去看看` 已消失 |
 | 5 | 还有很多交互遗漏触感 | 补：作品卡片点击（瀑布流，覆盖发现/搜索/作者/收藏/最近浏览）、设置页各行（外观 / 历史上限 / 备份 / 清除缓存）、关于页各行、缓存页勾选与「清除选中」、作者页关注按钮、粉丝圈关注按钮、队列行与清空 | 代码 + `dumpsys vibrator_manager` 的 `TICK` 记录（阶段十三已建立该验证手段） |
 | 6 | 该有波纹的交互要有波纹 | 推荐页**信息条**恢复波纹（整屏视频那层仍不铺，避免点一下闪整屏）；粉丝圈**作者卡片**（整行 `clickable`，默认波纹）与**作品卡片**（去掉 `indication = null`） | 代码 + 截图 |
 
-> 阶段十五的复测说明（如实记）：第 3 项重新进小窗的复测脚本这次点进的是**图文**作品
-> （`从零开始的异世界-蕾姆篇 1`），图文没有播放器菜单，所以没取到"小窗里在播"的新数据；
+> 阶段十五的复测说明（照实记）：第 3 项重新进小窗的复测脚本这次点进的是**图文**作品
+>（`从零开始的异世界-蕾姆篇 1`），图文没有播放器菜单，所以没取到"小窗里在播"的新数据；
 > 改动本身是播放器归属判断（`isHandedOver`），与详情页销毁时不 release 用的是同一条规则。
 
 ---
@@ -480,13 +480,13 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 | # | 反馈 | 改动 | 证据 |
 | --- | --- | --- | --- |
-| 1 | 推荐页信息条的波纹不明显 | 信息条改用系统的 M3 ripple 并**显式给浅色**：`combinedClickable(interactionSource = remember { MutableInteractionSource() }, indication = ripple(color = Scrim.onMedia), …)` —— 默认波纹取 `onSurface`，压在暗色信息栏上几乎看不见 | 代码 + 截图（波纹只在按压瞬间可见，静态截图取不到中间帧） |
+| 1 | 推荐页信息条的波纹不明显 | 信息条改用系统的 M3 ripple 并**显式给浅色**：`combinedClickable(interactionSource = remember { MutableInteractionSource() }, indication = ripple(color = Scrim.onMedia), …)`：默认波纹取 `onSurface`，压在暗色信息栏上几乎看不见 | 代码 + 截图（波纹只在按压瞬间可见，静态截图取不到中间帧） |
 | 2 | 队列还是没有自动滚动 → 否则改成"一根手指拖、一根手指滑" | 拖动**只用一个坐标系**（内容坐标 = 视口坐标 + 滚动量），手指位置按 `viewIndex*rowH + 行内偏移 − scrollState.value` 反推：①边缘自动滚动照旧（步长随接近程度衰减）；②列表被任何方式滚动时，落点与位移都自动跟着变，不再需要"补正"。另外被拖行的手势只认自己那个指针，`verticalScroll` 是它的父节点，所以**第二根手指的滑动天然就能滚列表** | 代码 + 标题文案改为「长按拖动排序 · 拖到边缘会自动滚动」 |
 | 3 | 还有很多交互没有触感（逐条点名） | 补上：详情页**关注**按钮（已关注→reject / 关注→confirm）、详情页**内嵌图集**点开、推荐页**信息条**与整屏点击、发现页**粉丝圈作品卡片**、**标题栏搜索按钮**、**搜索页**全部组件（返回/清除/换类型/历史项/清空历史/用户行/提交搜索）、**我的页切换游客账号**、**稍后观看清空**按钮、播放器**快退/快进/重播/播放暂停/全屏/菜单** | `dumpsys vibrator_manager` 的 `TICK` 计数逐次递增：搜索页切类型 `29→30`、粉丝圈关注 `32→33`、粉丝圈作品卡片 `33→34`（按钮同时变成「已关注」） |
 
 > 阶段十六的说明：波纹只在按压瞬间存在，静态截图抓不到，所以第 1 项只能给代码路径；
 > 触感用"记录条数递增"取证（`dumpsys vibrator_manager` 里 `opPkg=com.thirdparty.xhs.debug`
-> 的 `effect=CLICK/TICK` 记录），这是目前唯一可靠的旁证 —— 模拟器没有触感硬件，`scale` 恒为 0。
+> 的 `effect=CLICK/TICK` 记录），这是目前唯一可靠的旁证：模拟器没有触感硬件，`scale` 恒为 0。
 
 ---
 
@@ -495,12 +495,12 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 | # | 反馈 | 改动 | 证据 |
 | --- | --- | --- | --- |
 | 1 | 队列排序依然不对 → 去掉拖动，改成竖直排列的小号上下按钮 | **删除整套拖动排序**（手势、边缘自动滚动、双指滚动补偿、`committed` 之外的拖动状态），改为每行左侧序号 + 右侧**竖直排列的小号上移/下移按钮**（两端自动禁用），点一次与相邻行交换并立刻写库 | 队列页 dump：`用右侧上下按钮调整顺序 \| 1 \| 骚妈妈 \| 免费 \| @玉凤妈妈 \| 2 \| 抖音风 抖音18+ (125) \| …`；点第 1 行「下移」后变为 `1 \| 抖音风… \| 2 \| 骚妈妈`，`TICK` 计数 `34 → 36`（按钮触感） |
-| 2 | 播放器进度条与倍速拖动条缺触感 | `BufferedSlider` 增加可选 `haptics` 参数：拖动时按 5% 一档节流给 `segment()`（不做节流会一次拖动连发几十下）；倍速 `Slider` 同样加触感 | 代码；`TICK` 计数只匹配 `effect=CLICK/TICK`，而 `SegmentTick` 是另一种 effect 名，所以这一项没能用计数旁证（如实记） |
+| 2 | 播放器进度条与倍速拖动条缺触感 | `BufferedSlider` 增加可选 `haptics` 参数：拖动时按 5% 一档节流给 `segment()`（不做节流会一次拖动连发几十下）；倍速 `Slider` 同样加触感 | 代码；`TICK` 计数只匹配 `effect=CLICK/TICK`，而 `SegmentTick` 是另一种 effect 名，所以这一项没能用计数旁证（照实记） |
 | 3 | 详情页作者卡片缺触感 | 作者整行（`ListItem` 的 `clickable`）→ `haptics.tick()`（关注按钮上一轮已补） | 代码 |
 | 4 | 详情页二级评论缺触感 | `CommentRow` 内部的 `rememberHaptics()`：评论预览块与「共 N 条回复，点击查看」都补 `tick()`；评论行打开回复、评论加载失败「重试」也补上 | 代码 |
 | 5 | 全面审查，所有交互都要有触感 | ①新增 `Haptics.click{} / confirmClick{} / rejectClick{}`（**成员函数**，调用方只要有 `haptics` 就无需 import）与 `Modifier.hapticClickable`；②**在共享组件里一次性覆盖多处的**：`ConfirmActionDialog`（7 个页面的确认框）、`UpdateAvailableDialog`、`CommentRepliesDialog`、`NoteActionDialog`（动作行 + 关闭）、`EmptyState`（重试）、`FollowedAuthorRow`（整行 + 已关注）、`BiometricLock`（解锁）、`ResetZoomButton`、`MediaPlayer`（播放器菜单每行、关闭、快退/快进/重播、进度条）；③各页面的**返回**按钮与其余可点元素逐处补齐 | 代码 + `dumpsys vibrator_manager` 计数（每次补的对象都有记录） |
 
-> 阶段十七如实说明：第 2 项（拖动条触感）在模拟器上只做了代码确认 ——
+> 阶段十七说明：第 2 项（拖动条触感）在模拟器上只做了代码确认
 > `TICks` 计数器匹配的是 `effect=CLICK/TICK`，`SegmentTick` 是另一种 effect 名，计数看不到它；
 > 想验证得改计数器或换真机。另外这一轮之后仍有个别页面级对话框按钮（备份 / 更新 / 我的的确认框）
 > 是**通过共享组件的调用方**间接覆盖的，若后续新增对话框请直接用 `haptics.click {}` 包装。
@@ -511,7 +511,7 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 | # | 反馈 | 改动 | 证据 |
 | --- | --- | --- | --- |
-| 1 | 粉丝圈的关注按钮取消关注缺弹窗确认 | 粉丝圈作者卡片：点「已关注」先弹 `ConfirmActionDialog`（「取消关注？」/「将不再关注「作者」。」），确认后才真取消；关注仍然直接生效 | 实机 dump：`取消关注？ \| 将不再关注「成人漫画」。 \| 取消关注 \| 取消`（`HAS_CONFIRM: True`），截图 `v7-1-unfollow-confirm` |
+| 1 | 粉丝圈的关注按钮取消关注缺弹窗确认 | 粉丝圈作者卡片：点「已关注」先弹 `ConfirmActionDialog`（「取消关注？」/「将不再关注「作者」。」），确认后才真取消；关注仍然直接生效 | 实机 dump：`取消关注？\| 将不再关注「成人漫画」。\| 取消关注 \| 取消`（`HAS_CONFIRM: True`），截图 `v7-1-unfollow-confirm` |
 | 2 | 详情页分享改为系统 API 分享文本 | `shareNote()` 从"写剪贴板 + Toast"改为 `Intent.ACTION_SEND` + `text/plain` + `createChooser(…, "分享到")`（带 `FLAG_ACTIVITY_NEW_TASK`；无目标时 Toast「没有可用的分享目标」）。分享文本仍是 `ShareText` 的完整文案，口令仍在其中（对方粘贴回应用照样能被识别） | 实机：点详情页「分享」后 `mCurrentFocus=com.android.intentresolver/.ChooserActivity`（系统分享面板），`crash: 0` |
 | 3 | 详情页 / 关注页 / 关注 tab 的关注按钮太大 | 新增全局组件 `ui/components/FollowPill.kt`（对齐粉丝圈那个的尺寸与配色：`labelLarge` + `Spacing.m/s` 内边距 + `shapes.small`），详情页作者行、`FollowedAuthorRow`（关注页与关注 tab）、粉丝圈作者卡片四处统一改用同一实现 | 粉丝圈关注按钮实测 `110x53`；四处同组件，尺寸随之统一 |
 | 4 | 详情页图文全屏返回不该有触感 | 去掉 `FullscreenImageViewer` 关闭按钮的触感（返回类操作系统本身有反馈），其余"动作类"按钮的触感保留 | 代码 |
@@ -523,9 +523,9 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 | # | 反馈 | 改动 | 证据 |
 | --- | --- | --- | --- |
 | 1 | 队列去掉序号与上下按钮，不提供排序 | 队列页彻底去掉排序：删掉序号、上移/下移按钮、`committed` 本地顺序与本轮残留的拖动相关导入；列表按加入时间渲染，标题改为「按加入时间排列 · 在瀑布流或推荐页长按作品可加入」 | 实机队列 dump：`按加入时间排列 · 在瀑布流或推荐页长按作品可加入 \| 抖音风 抖音18+ (125) \| VIP \| @老司机 \| 骚妈妈 \| …`；`HAS_MOVE_BUTTONS: False`、`HAS_INDEX_DIGITS: False`，截图 `v8-1-queue-final` |
-| 2 | 进度条触感改为按下触发 | `BufferedSlider` 去掉"拖动中每 5% 一档 segment"，改用新增的 `Modifier.pressHaptic(haptics)`（在 `PointerEventPass.Initial` 观察 `Press` 触发一次 `tick()`，不消费事件，因此不影响控件自身手势） | 代码 + 机制；模拟器上"按下瞬间"的计数未单独取证（如实记） |
+| 2 | 进度条触感改为按下触发 | `BufferedSlider` 去掉"拖动中每 5% 一档 segment"，改用新增的 `Modifier.pressHaptic(haptics)`（在 `PointerEventPass.Initial` 观察 `Press` 触发一次 `tick()`，不消费事件，因此不影响控件自身手势） | 代码 + 机制；模拟器上"按下瞬间"的计数未单独取证（照实记） |
 | 3 | 倍速拖动条缺少触感 | 倍速 `Slider` 同样接上 `pressHaptic(haptics)` | 代码 + 机制 |
-| 4 | 信息栏单击要等波纹/判定结束才跳转 | 信息条改为**普通 `clickable`**（保留 M3 ripple 与 `Scrim.onMedia` 配色），把 `onDoubleClick` 从信息条上移除 —— `combinedClickable` 带双击时单击必须等双击判定窗口（约 300ms）才触发，这就是"点了半天才跳"的来源；双击暂停仍由上面那层视频画面负责 | 实机：点信息条后 **0.9 秒**再次 dump 已在详情页（`明星淫梦：技师王鸥 \| VIP \| 490 \| 221 \| 4`） |
+| 4 | 信息栏单击要等波纹/判定结束才跳转 | 信息条改为**普通 `clickable`**（保留 M3 ripple 与 `Scrim.onMedia` 配色），把 `onDoubleClick` 从信息条上移除：`combinedClickable` 带双击时单击必须等双击判定窗口（约 300ms）才触发，这就是"点了半天才跳"的来源；双击暂停仍由上面那层视频画面负责 | 实机：点信息条后 **0.9 秒**再次 dump 已在详情页（`明星淫梦：技师王鸥 \| VIP \| 490 \| 221 \| 4`） |
 | 5 | 推荐页标题栏搜索按钮缺触感 | 推荐页的标题栏是**另写**的（不是 `HomeHeader`，所以上一轮补漏了），给它补上 `haptics.tick()` | 代码；该按钮在 `HomeScreen` 推荐页分支内（`immersive && feedInfoVisible` 那一段） |
 | 6 | 设置页缺触感 | 补齐：指纹解锁开关行与 `Switch`、VIP 自动切换行与 `Switch`、外观主题对话框的 `RadioButton` 与每一行、历史上限对话框的 `RadioButton` 与每一行、两个对话框的「关闭」；禁用的开关不给触感（与"不能兑现就别反馈"一致） | 实机：设置页点「最近浏览上限」TICK `40 → 41` |
 
@@ -536,7 +536,7 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 | # | 反馈 | 改动 | 证据 |
 | --- | --- | --- | --- |
 | 1 | 分享不要触发自己刚分享出去的剪贴板口令 | `ShareText` 增加 `markSelfShared(noteId, text)` / `isSelfShared(noteId, clipboard)`（进程内记录一对）；`shareNote()` 在拉起分享面板**之前**登记；`MainActivity.checkClipboardForShareLink()` 读到与登记一致的 (id, 文案) 时直接标记成「已看过」并返回，不再弹"打开这条笔记"。另外用 `Intent.EXTRA_EXCLUDE_COMPONENTS` 把**自己**从分享面板里排除 | 实机：在系统分享面板点「Copy to clipboard」后再回到应用，**没有**出现打开笔记的提示（`HAS_PROMPT: False`）；面板目标列表里不再出现 `小黄书.debug`（`TARGETS_APP_DEBUG_PRESENT: False`），截图 `v9-2-after-copy-return` |
-| 2 | 分享标题应起一个合适的、给用户看的 | `EXTRA_TITLE` 从"作品标题"改为固定文案 **「来自「小黄书」的分享」** —— 该字段只在系统分享面板的预览里显示、**不会发给目标应用**，放作品标题（常常不体面）没有意义；真正分享出去的文本仍是 `ShareText` 的完整文案（含口令） | 实机分享面板 dump：`Sharing text \| 来自「小黄书」的分享 \| 【图文】【图文CG】… \| No recommended people to share with`，截图 `v9-1-chooser` |
+| 2 | 分享标题应起一个合适的、给用户看的 | `EXTRA_TITLE` 从"作品标题"改为固定文案 **「来自「小黄书」的分享」**：该字段只在系统分享面板的预览里显示、**不会发给目标应用**，放作品标题（常常不体面）没有意义；真正分享出去的文本仍是 `ShareText` 的完整文案（含口令） | 实机分享面板 dump：`Sharing text \| 来自「小黄书」的分享 \|【图文】【图文CG】… \| No recommended people to share with`，截图 `v9-1-chooser` |
 
 ---
 
@@ -546,7 +546,7 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 | --- | --- | --- | --- |
 | 1 | 备份与恢复界面缺少触感 | 该页全部按钮接上触感：本地「备份到文件 / 从文件恢复」、WebDAV「保存配置 / 测试连接 / 上传备份 / 从云端恢复」、恢复方式切换按钮，以及两个确认框的「上传 / 恢复 / 取消」（确认用 `confirmClick`、取消用 `click`）；返回按钮按规则不给触感 | 实机时间戳取证：`10-05 16:25:02 / 16:25:06 / 16:25:11 / 16:25:15 / 16:25:19` 各有一条本应用 `TICK` 记录，与备份页那几次点击对齐（计数法不可用，见 GOTCHAS I2） |
 | 2 | 清缓存页全选/全不选改为反选（并补触感） | `CacheViewModel` 新增 `invertSelection()`（已勾的取消、未勾的勾上）；页面把两个按钮换成一个「反选」，并带 `tick()` | 实机：页面文本里只有 `反选`、没有 `全不选`（`HAS_INVERT: True` / `HAS_SELECTALL: False`）；点一下 `已选 0 项 → 已选 3 项`，且触感记录时间戳落在该次点击 |
-| 3 | 详情页图文的触感并没有改善 | 触感挪到 **`ImageGallery` 组件内部**（任何用到它的地方都一致）：①点某张图 → `tick()`；②横向翻页 → `segment()`（首帧是恢复现场，不算翻页，不触发）；同时删掉 `DetailScreen` 里重复的那一次 `tick()`，避免一次点击响两下 | 实机：详情页点图后本应用多出一条 `TICK`（计数 `42 → 43`，全屏查看器随之打开）；翻页的 `SegmentTick` 未单独取到时间戳（如实记） |
+| 3 | 详情页图文的触感并没有改善 | 触感挪到 **`ImageGallery` 组件内部**（任何用到它的地方都一致）：①点某张图 → `tick()`；②横向翻页 → `segment()`（首帧是恢复现场，不算翻页，不触发）；同时删掉 `DetailScreen` 里重复的那一次 `tick()`，避免一次点击响两下 | 实机：详情页点图后本应用多出一条 `TICK`（计数 `42 → 43`，全屏查看器随之打开）；翻页的 `SegmentTick` 未单独取到时间戳（照实记） |
 
 ---
 
@@ -556,7 +556,7 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 | --- | --- | --- | --- |
 | 1 | 检查更新界面的「检查更新」按钮缺少触感 | `UpdateScreen` 接上触感：底部检查按钮（`检查更新` / `重新检查`）、`NewerBanner` 的「打开下载页 / 更新说明」、更新说明对话框的「打开下载页 / 关闭」 | 实机：点「重新检查」→ 触感记录 `16:44:19.273 TICK`（点击时刻 16:44:19，同一秒） |
 | 2 | 详情页视频播放器双击暂停缺少触感 | `MediaPlayer` 视频画面的 `onDoubleTap` 分支补 `haptics.tick()`（原来只切播放状态） | 实机（视频作品 2010）：进详情 `dumpsys audio` 为 `started=1 paused=0`，双击后变 `started=0 paused=1`，同时新增触感记录 `16:41:30.117 TICK` |
-| 3 | 小窗没有暂停时，关闭后仍在后台播放 | 之前只在 `onDestroy` 收尾，但**关闭小窗时系统不保证销毁 Activity**（实测只走 `onStop`），看不见的 ExoPlayer 于是继续出声。现在 `onStop` 也收一次尾：`!isChangingConfigurations && !isInPictureInPictureMode && !PipController.inPip.value && hasSession()` → 清掉「待打开的详情」并 `closeAndRelease()`；展开回详情页不走 `onStop`，不会误杀 | 代码路径 + 三条守卫；「关闭小窗」是系统覆盖层、不吃注入点击（GOTCHAS H5），**未做实机取证**（如实记） |
+| 3 | 小窗没有暂停时，关闭后仍在后台播放 | 之前只在 `onDestroy` 收尾，但**关闭小窗时系统不保证销毁 Activity**（实测只走 `onStop`），看不见的 ExoPlayer 于是继续出声。现在 `onStop` 也收一次尾：`!isChangingConfigurations && !isInPictureInPictureMode && !PipController.inPip.value && hasSession()` → 清掉「待打开的详情」并 `closeAndRelease()`；展开回详情页不走 `onStop`，不会误杀 | 代码路径 + 三条守卫；「关闭小窗」是系统覆盖层、不吃注入点击（GOTCHAS H5），**未做实机取证**（照实记） |
 
 ---
 
@@ -586,7 +586,7 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 | # | 类别 | 改动 | 证据 |
 | --- | --- | --- | --- |
-| 1 | 用户可见 bug | ①关注/粉丝列表**失败态**不再伪装成"还没有关注任何人"，带「重试」（`UserListScreen` + `load(reset=true)`）；②搜索结果处理的**早退分支不再吞掉 `loading`**（改 `try/finally`）——原来会让该次搜索之后再也加载不出下一页；③双击缩放 **Y 轴**也用动画值（原来只有 X 轴平滑） | 编译通过；`docs/REVIEW.md` 附录B-P1-7/8/9 |
+| 1 | 用户可见 bug | ①关注/粉丝列表**失败态**不再伪装成"还没有关注任何人"，带「重试」（`UserListScreen` + `load(reset=true)`）；②搜索结果处理的**早退分支不再吞掉 `loading`**（改 `try/finally`），原来会让该次搜索之后再也加载不出下一页；③双击缩放 **Y 轴**也用动画值（原来只有 X 轴平滑） | 编译通过；`docs/REVIEW.md` 附录B-P1-7/8/9 |
 | 2 | 生命周期与死代码 | `currentThemeMode()` 改 `collectAsStateWithLifecycle`；删掉 `WatchLaterViewModel.setOrder` + `XhsRepository.setWatchLaterOrder` + 队列页 KDoc 里仍在讲拖动的段落；删掉 `GuestViewModel` 的 `checkVipExpiry/rotate/currentDeviceMac`（无人调用）；删掉未被引用的 `Modifier.hapticClickable`；`composable("followed")` 改回 `Routes.FOLLOWED` | 编译通过 |
 | 3 | 网络硬化 | ①**4xx 不再重试**（新增 `HttpStatusException`：4xx 直接抛，5xx/网络中断才重试）；②`UpdateChecker` 改用可取消的 `Call.await()`（原来阻塞 `execute()`，取消不生效）；③更新页只接受 **GitHub 域名的 https 下载地址**（`isTrustedDownloadUrl`），否则回落发布页 | 编译通过；附录A-P1-12/17/18 |
 | 4 | 凭据一致性 | `CredentialStore` 新增 `clearSession()` / `clearCredentials()`（token+hash+VIP 缓存**一次提交**清掉）；`loginAsDevice` / 换号路径改用它，消除"新身份 + 旧 token"中间态；`deviceId` 的"读-生成-写"加 `synchronized` | 编译通过；附录A-P1-9/19 |
@@ -596,7 +596,7 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 | 8 | 文档一致性 | ①`CONTEXT` 数据库改 v3 + 四张表、迁移策略改为"必须真迁移"、去掉不存在的 PROPFIND、备份清单补队列与"不再恢复 vipEnd"；②`CONVENTIONS` 的 DB 变更行改为"必须写真迁移"；③`README` 备份内容补队列与 WebDAV 凭据；④`docs/README` 的 GOTCHAS 索引补 H/I 两节；⑤`BUILD` 的 `.gitignore` 说法按实际（规则在 `.gitattributes`）改写 | 逐条对照附录C「文档与代码不一致清单」 |
 | 9 | CI / 构建 | CI 增加 `assembleRelease`（R8 + 资源压缩才是真会崩的那条）；`gradle.properties` 里过时的 AGP 注释改写 | 工作流文本 |
 
-**仍未修（如实列出，等你决定优先级）**：
+**仍未修（直接列出，等你决定优先级）**：
 - 审查 P0-1：`tools/fixtures/prefs_*.xml` 里的真实 `user_token` / 设备身份（你说"不用管"）。
 - 附录B-P1-11 评论区改 `LazyColumn`（动布局，风险高于收益，未动）。
 - 附录B-P1-12 图片按用途尺寸解码（要在 `XhsAsyncImage` 加尺寸参数并改所有调用点）。
@@ -631,6 +631,19 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 
 
+### 阶段四十 · 文案与文档去机器味
+
+用户要求：应用内文案和项目文档深度润色，去掉"AI 味"。
+
+| 项 | 做法 |
+| --- | --- |
+| 应用内文案 | 把写得像技术文档的句子改回人话。错误提示从「接口在海外，需要能访问海外的线路；网络恢复后会自动重试」改成「网络不通，或线路到不了海外服务器。网络恢复后会自动重试」（4 处）；详情页失败文案改成「打不开这条内容：可能已下线、需要付费，或者线路访问不了服务器」；剪贴板询问改成「剪贴板里有作品链接，打开看看？」；清空/取消收藏/退出多选的确认文案改成「删掉就找不回来了，一共 N 条。」这类口语；更新相关从「打开下载页」「到 GitHub Releases 看有没有新版本」改成「打开发布页」「去 GitHub 发布页看看有没有新版本」；设置里的指纹解锁说明改成「每次打开或切回都要验指纹（或设备密码）」，VIP 自动切换说明改成「当前账号的 VIP 用完时，自动换成有 VIP 的新账号」 |
+| 项目文档 | 去掉 6 处 ⚠️ 标记；97 处破折号「——」按语境改成冒号或逗号，只留 `ARCHITECTURE.md` 里 ASCII 图内那 1 处；「如实说明/如实记录」这类反复出现的 AI 腔改成「说明、写明、写清楚」；表格竖线与中文标点两侧的空格归一；README 里原本半页长的逗号长句拆成分条 |
+| 顺带记录 | 调研结论写进 `GOTCHAS.md` H21：AOSP 的「应用锁」是车机平台签名的特权系统应用，第三方手机应用用不了；本次试改的"只用系统锁屏凭据"版本按用户要求已完整回滚，应用锁仍是**指纹/面容 + 设备密码** |
+
+**验证**：`assembleDebug` + `testDebugUnitTest` + `lintDebug` 通过；模拟器（API 34）实机查看设置页，确认新文案已生效、`crash: 0`。
+纯文案与文档改动，未动任何逻辑；应用锁代码与 `v1.3.1` 发布状态一致（`git status` 干净后再提交本轮的文案改动）。
+
 ### 阶段三十九 · 发布 v1.3.1（正式包 + 推送 + Release）
 
 | 项 | 值 |
@@ -658,7 +671,7 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 | **作者页 / 搜索结果** | 同上（作者页有 `notesError` 但列表非空时不显示；搜索页分页失败连 `error` 都没立） | 两者都接上 `FooterRetry`；`SearchViewModel` 分页失败补 `error = true` |
 | **关注 / 粉丝列表** | 分页失败时 `error = users.isEmpty()` → 非空列表静默 | VM 改为分页失败也 `error = true`（整页态仍是 `users.isEmpty()` 时），底部加 `FooterRetry` |
 | **详情页评论区** | 下一批评论失败静默（只有 `commentsLoading` 转圈） | 非空时底部「评论加载失败，点这里重试」 |
-| 推荐信息流（下一页） | 失败也不提示，但它是**自动预载**、没有「翻到底」的语义，不会误导用户 | **本轮未改**（如实记录） |
+| 推荐信息流（下一页） | 失败也不提示，但它是**自动预载**、没有「翻到底」的语义，不会误导用户 | **本轮未改**（写明） |
 | 我的（作者信息）/ 搜索首屏 / 作者首屏 / 用户列表首屏 / 更新页 / 备份恢复 | 本来就有失败文案与重试 | 未改 |
 
 **证据**：
@@ -676,7 +689,7 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 | 无网络**快速失败** | `App.hasValidatedNetwork()`（INTERNET + VALIDATED）为假时：`XhsApi` 抛 `NoUsableNetworkException`、`UpdateChecker.check()` 直接返回 `Failed`，不发请求 | 实机断网冷启动：错误态（含启动与 dump 开销）**5.3 秒**出现，文案「接口在海外，需要能访问海外的线路；网络恢复后会自动重试」；`XhsUpdate check=Failed` 在启动瞬间就打印 |
 | 超时收紧 | 主客户端 connect 10s / read 15s / write 15s / **callTimeout 20s**（原来 30s×2 次重试 ≈ 1 分钟）；更新检查 connect 6s / read 8s / callTimeout 12s | 编译 + 实机（上一条的耗时即含这条的效果） |
 | 网络恢复**自动重试** | `App.watchNetwork()` → `bump()` → `networkEpoch` +1；补上还没接的 4 个 ViewModel（`SearchViewModel`/`AuthorViewModel`/`UserListViewModel`/`ProfileViewModel`），只在"失败/没内容"时补载 | 实机：`svc wifi enable` 后内容**6.1 秒**自动回来（含 dump 开销），无需手动重试 |
-| 检查更新跟随网络恢复 | `bump()` 里**清掉失败退避**（`lastUpdateFailed=false; lastUpdateAttemptAt=0`）再查一次 | 实机日志：`…34.675 check=Failed`（刚恢复但还没校验完）→ `…36.193 check=UpToDate failed=false` —— 恢复后**自动**查并成功 |
+| 检查更新跟随网络恢复 | `bump()` 里**清掉失败退避**（`lastUpdateFailed=false; lastUpdateAttemptAt=0`）再查一次 | 实机日志：`…34.675 check=Failed`（刚恢复但还没校验完）→ `…36.193 check=UpToDate failed=false`：恢复后**自动**查并成功 |
 | 文案统一 | 推荐/发现/作者页的失败态与详情页失败文案都说明"接口在海外，需要能访问海外的线路；网络恢复后会自动重试" | dump 命中该文案；`docs/images/screenshots/offline-fast-fail.png`（未入库） |
 
 **仍未验证**：真实 VPN 起来的回调路径与"Wi-Fi 恢复"是同一个（`onAvailable` / `onCapabilitiesChanged(VALIDATED)`），本轮用 Wi-Fi 开关模拟；没有在真机上用 VPN 客户端复测。
@@ -692,7 +705,7 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 | 5 | 要支持浏览器下载 + 应用内下载 | 新增 `net/UpdateDownloader.kt`（独立 OkHttpClient 流式下载到 `cacheDir/updates/`、进度回调、**先校验包名与本应用一致**再放行）+ FileProvider（`REQUEST_INSTALL_PACKAGES` + `res/xml/file_paths.xml`）；启动弹窗与"检查更新"页都提供**应用内下载/安装**与**浏览器打开**两条路 | 实机 debug 版：下载完成→**正确地拒绝**跨包名安装包并删除（安全校验生效）；实机 release 版（临时 1.2.0）：**下载完成（v1.3.0）→ 按钮变「安装」→ 弹出系统安装器**（截图 `update-installer.png`，随后是系统"未知来源"授权页） |
 | 6 | 检查更新"没怎么查过"却被限流 | 根因是匿名 **API** 额度按 IP 共享（60 次/小时）。改为**先取 `releases.atom`**（不计 API 额度、不需 token），API 只作兜底；既然不吃额度，就**每次进前台都查**（去掉 12 小时节流），只保留去重 3s 与失败退避 5min | 实机：26 秒内三次进前台 → **三次检查**（`XhsUpdate check=UpToDate`×3），**0 次调用 api.github.com**；单测新增 atom 解析/转义/资产命名 6 个用例，共 **11 个用例全过** |
 
-**仍未验证（如实说明）**：
+**仍未验证（说明）**：
 - 第 2、3 条的**视觉**结果：模拟器无法用 adb 注入双指捏合，所以"恢复"按钮与导航栏/控制栏的间距只能在
   真机上双指缩放确认（代码层面是标准的 Compose inset 与实测高度，不是估算值）。
 - 第 5 条的**真实升级**链路：端到端跑到了"系统安装器 + 未知来源授权"，但没有真的完成覆盖安装
@@ -718,13 +731,13 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 | 步骤 | 内容 |
 | --- | --- |
-| 复现 | 进小窗 → 关掉小窗 → 把应用调回前台：截图 `docs/images/screenshots/bug-pip-back-2-detail.png`（未入库）里**画面在、但进度是 `0:00 / 3:01` 且显示「缓冲中」** —— 说明播放器被重建/被释放，不只是"黑屏"。 |
+| 复现 | 进小窗 → 关掉小窗 → 把应用调回前台：截图 `docs/images/screenshots/bug-pip-back-2-detail.png`（未入库）里**画面在、但进度是 `0:00 / 3:01` 且显示「缓冲中」**：说明播放器被重建/被释放，不只是"黑屏"。 |
 | 根因 | 阶段三十二为修 F6（滚动位置丢失）把 `if (!pipActive) AppNavHost(...)` 改成「照常组合 + 不透明黑底 + 小窗视频」。于是**同一个 `ExoPlayer` 被两块 `VideoSurface` 绑定**：绑定是「一个播放器一份」，小窗那块后绑定、把画面抢走；关掉小窗时小窗那块被 dispose，而播放器实例没变，详情页那块**不会重新绑定** → 没画面。进度那半是另一条：页面一直挂着，就不会再走「重新 compose → `PlaybackHandoff.take()` → 应用续播进度」那条路。 |
 | 修复 | **回退**成「小窗期间摘掉导航内容」（`if (!pipActive)`），即阶段三十之前已验证的形态；小窗那块仍是唯一的 surface。滚动位置会重回收起来的那点损失，但**画面与进度不能丢**。 |
 | 验证 | 进小窗（日志 `pipModeChanged=true`）→ `am start … --activity-reorder-to-front` 把小窗任务调回前台（等价于「展开」，日志 `returnFromPipToDetail 入口 session=true`、`route=detail/2010 note=2010`）→ 截图 `fix-pip-back-detail.png` **有画面**、控制栏读出 **`1:33 / 3:01`**（不是 0:00）、音频 `started=1`（单条）、`崩溃 0`。 |
 | 档案 | `AGENTS` 硬约束 17 与 `GOTCHAS` H14 改回「不参与组合」，并写明**不要**再用「照常组合 + 黑底」的理由；新增 **GOTCHAS H17**（两块 surface 抢播放器 + 正确做法 + 若要保滚动位置该怎么做）；`VERIFY §7` 补「PiP 往返之后必须看画面 + 读进度，只量坐标会漏」；阶段三十二那条 F6 记录标注"已回退"。 |
 
-**仍未做**：F6 想保的「滚动位置 / 全屏状态」没有拿回来 —— 要做得先实现 surface 世代号（PiP 退出时强制重建视频视图）或把 `SaveableStateHolder` 提到 NavHost 之外，属结构改动，单独排期。
+**仍未做**：F6 想保的「滚动位置 / 全屏状态」没有拿回来：要做得先实现 surface 世代号（PiP 退出时强制重建视频视图）或把 `SaveableStateHolder` 提到 NavHost 之外，属结构改动，单独排期。
 
 ### 阶段三十三 · 继续收尾：协程取消 / 状态竞态 / lint 61→8
 
@@ -746,7 +759,7 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 **lint 总数：61 → 8**（剩余 8 = `GradleDependency` 7 + `UseKtx` 1）。
 
 **刻意不动、并写清理由**：
-- **7 条 androidx 版本提示**（core-ktx 1.19.1 / activity 1.13.0 / lifecycle 2.11.0 / navigation 2.10.2 / fragment-ktx 1.9.1）：它们与 Compose BOM 耦合（硬约束 3 把 material3 钉在 `1.5.0-alpha29`），单独升有版本错配风险，要升得连 BOM 一起评估 —— 属于需要用户拍板的决定。
+- **7 条 androidx 版本提示**（core-ktx 1.19.1 / activity 1.13.0 / lifecycle 2.11.0 / navigation 2.10.2 / fragment-ktx 1.9.1）：它们与 Compose BOM 耦合（硬约束 3 把 material3 钉在 `1.5.0-alpha29`），单独升有版本错配风险，要升得连 BOM 一起评估：属于需要用户拍板的决定。
 - **1 条 `UseKtx`**（`MainActivity` 的窗口背景色）：lint 建议 `Int.toDrawable`，但该扩展在当前 core-ktx 上**编译不过**，代码里留注释说明并保留 `ColorDrawable`。
 - 审查 P0-13（`tools/fixtures/` 里的真实凭据）：用户明确"不用管"。
 
@@ -756,7 +769,7 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 | # | 上一轮的未修项 | 这一轮怎么修 | 证据 |
 | --- | --- | --- | --- |
-| 1 | **F6**：小窗期间导航内容不参与组合 → 展开回来滚动位置/全屏状态/图片页码回顶部（⚠️ **本行做法已在阶段三十四回退**：它会让小窗与详情页各画一块 surface、抢同一个播放器，回来没画面） | 改成 **`AppNavHost` 照常组合**，小窗时在上面盖一层不透明黑底 + 视频把整页 UI 挡住（`MainActivity`）；不再用 `if (!pipActive)` 摘掉整棵导航树 | 实机：详情页滚到「明星淫梦」y=**1111** → 进小窗 → 关掉小窗 → 同一实例回前台，首项仍在 **y=1111**（未回顶部）；小窗截图只看到视频、4:3 信箱、无详情页 UI（`docs/images/screenshots/pip-after-fix.png`，未入库） |
+| 1 | **F6**：小窗期间导航内容不参与组合 → 展开回来滚动位置/全屏状态/图片页码回顶部（**本行做法已在阶段三十四回退**：它会让小窗与详情页各画一块 surface、抢同一个播放器，回来没画面） | 改成 **`AppNavHost` 照常组合**，小窗时在上面盖一层不透明黑底 + 视频把整页 UI 挡住（`MainActivity`）；不再用 `if (!pipActive)` 摘掉整棵导航树 | 实机：详情页滚到「明星淫梦」y=**1111** → 进小窗 → 关掉小窗 → 同一实例回前台，首项仍在 **y=1111**（未回顶部）；小窗截图只看到视频、4:3 信箱、无详情页 UI（`docs/images/screenshots/pip-after-fix.png`，未入库） |
 | 2 | **F7**：`PlaybackHandoff` 单槽残留（`onDestroy` 写的进度没人消费） | 加 **60s TTL**（过期槽按不存在处理并清掉）+ `clearPending()`，`MainActivity.onDestroy` 主动清 | 代码 + 编译；关小窗那一路实测日志 `closeAndRelease stash note=2010 pos=181257 playing=false` |
 | 3 | **F9**：比例判据两套（PiP 用旋转修正值，详情页/信息流用原始 `w/h`） | 统一到 `PipController.videoAspectOf()`（含旋转修正 + **`pixelWidthHeightRatio`**），详情页/信息流/小窗三处全部改用它 | 编译 + 实机播放正常（`started=1`）；小窗 frame=533×400 与视频 720×540 同比例 |
 | 4 | **F11**：进程被回收后重建，小窗里会画整页详情 UI | `onResume` 增加"在小窗里但没有会话"的分支：至少不把整页 UI 画进小窗（保持黑底），展开时走无会话分支放回界面 | 代码 + 编译（进程回收本身没法在模拟器上稳定复现，标**未验证**） |
@@ -771,7 +784,7 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 | 13 | **单元测试本来是红的**（`UpdateCheckerTest` 用了 `example.invalid`，而 `isTrustedDownloadUrl` 只放行 GitHub） | 把 fixture 换成 GitHub 域名，断言同步；注释写清为什么 | `gradlew testDebugUnitTest` → **BUILD SUCCESSFUL**（修前 6 个用例 1 个失败） |
 
 **这一轮仍未修（原因写在括号里）**：
-- `runCatching` 吞 `CancellationException`（92 处）：需要逐处判断"这里取消该不该继续走错误分支"，批量替换会把错误处理改坏 —— 留待专项（不是不能修，是不该盲改）。
+- `runCatching` 吞 `CancellationException`（92 处）：需要逐处判断"这里取消该不该继续走错误分支"，批量替换会把错误处理改坏：留待专项（不是不能修，是不该盲改）。
 - `_ui.value = _ui.value.copy(...)` 的读改写竞态：同上，逐处判断哪几个 ViewModel 真有并发写者。
 - `LocalListScreen` 的重复回调（`onRequestSelectAll`/`onRequestDelete` 与 selection 参数重叠）：要改多选页的接口形状，属于设计调整。
 - `Tokens.XhsColors.avatarBackground()` / `placeholderError()`、`XhsApi.gateFailure`、`App.appForeground`：都是**刻意的公开诊断/预留 API**（后者还在 `@Suppress("unused")` 里），保留。
@@ -800,10 +813,10 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 | 14 | P2 | 小窗控制栏 receiver 挂在 `onStart/onStop` → "窗口可见但 Activity 已 stop"的机型上按钮失灵 | 改到 `onCreate/onDestroy` 注册 | 代码（插入时我曾把 `super.onCreate` 写重复导致启动崩溃，同一轮内定位并修好，见下） |
 | 15 | 文档 | 20 条「文档说 X、代码是 Y」全部核对修正：`ARCHITECTURE`（库版本 v2→v3、WebDAV 去掉不存在的 PROPFIND/DELETE、手动换号走 `switchGuestTo`、destructive 已刻意去掉、队列不排序、`Routes.PROFILE` 未注册、`MIGRATION_1_2`）、`BUILD`/`PROTOCOL`/`CONTEXT`/`CHANGELOG` 的 `1.2.1`→`1.3.0`、`README` 徽章 7.0→8.0、`docs/README` 标注 `REVIEW.md` 证据已失效、`XhsDao`「100 条」→ 默认 2000 可配、`WatchLaterScreen` KDoc 去掉拖动、`App.autoVipSetter` 去掉 5s 轮询、`XhsApi` 去掉不存在的 account scanner、GOTCHAS H2/H11 标注实现已删除 | 23 处文本替换 | `git diff` + `assembleDebug` 通过 |
 
-**本轮未修（如实列出，等你决定优先级）**：
+**本轮未修（直接列出，等你决定优先级）**：
 - **F6**：小窗期间导航内容不参与组合 → 展开回来**滚动位置 / 全屏状态 / 图片页码会回顶部**（ViewModel 状态在，`rememberSaveable` 的丢失）。真修要把 `SaveableStateHolder` 提到 `MainActivity`，或小窗期间用 `alpha=0` 保留组合。
 - **F7**：`PlaybackHandoff.stash/take` 是全局单槽，且 `onDestroy` 路径写入的进度没有消费者（可能跨会话残留）。
-- **F9**：比例判据两套 —— 小窗用旋转修正后的比例，详情页 / 信息流仍用原始 `w/h`（手机横拍片会出现高度/方向不对）。
+- **F9**：比例判据两套：小窗用旋转修正后的比例，详情页 / 信息流仍用原始 `w/h`（手机横拍片会出现高度/方向不对）。
 - **F11**：进程被回收后重建时小窗里会画整页详情 UI（兜底是单向的）。
 - **F13**：小窗里没有卡死看门狗 / 缓冲提示。
 - 其余 P2：约 90 处未使用 import 与 5 处重复 import、一批死代码（`Routes.PROFILE`、`isInWatchLater`、`CacheViewModel.setAll`、`WebDavClient` 的 String 版 upload、`WatchLaterScreen.QueueRowHeight`、`HomeScreen` 三个未用局部…）、`ProfileScreen` 7 个未用参数、`SectionLabel`/`parseRatio` 两套实现、约 20 处按钮缺触感、检查更新失败后的 `autoUpdateWantsRetry` 无退避、`runCatching` 吞 `CancellationException`、若干 `_ui.value = _ui.value.copy` 竞态。
@@ -813,19 +826,19 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 | # | 现象 | 根因 | 改动 | 证据 |
 | --- | --- | --- | --- | --- |
-| 1 | 从推荐页进入详情后切后台或锁屏，视频**不暂停**（继续出声） | 早前为修"展开小窗瞬间被暂停"，把 `PipController.isHandedOver` 放宽成"小窗会话 **或** `PlaybackHandoff` 持有"。而信息流交给详情页的那台播放器**永远**留在 `PlaybackHandoff` 里（那个标记是防误 release 用的），于是详情页的生命周期暂停判据永远为 false —— 谁都不去暂停它。同一个放宽还顺带让"从信息流进详情的那台播放器返回时不被释放"（泄漏） | 把两种归属**拆开**：①`PipController.isHandedOver` 收窄回"**只算小窗会话**"（暂停/释放判据用它）；②新增 `PipController.isReturningToDetail` + `PlaybackHandoff.isHeldForHandBack`，只覆盖"展开小窗刚交回详情页那一瞬间"（防那次 `ON_STOP` 误暂停）。`PauseWhenNotStarted` 的 `ON_STOP` 用两者取或，`onDispose` 只用前者 | 实机 A 组（推荐页 → 详情，无小窗）：进详情 `started=1` → 锁屏 `started=0 paused=1` → 解锁 `started=1`（沿用既有习惯：回前台续播）→ HOME `started=0 paused=1`。实机 B 组（小窗）：小窗在播 `started=1` → 锁屏 `started=0 paused=1`（`pauseForScreenOff playing=true`，会话保留）→ 解锁保持暂停 → 展开回详情 `started=1`、`route=detail/2010` 未导航 |
+| 1 | 从推荐页进入详情后切后台或锁屏，视频**不暂停**（继续出声） | 早前为修"展开小窗瞬间被暂停"，把 `PipController.isHandedOver` 放宽成"小窗会话 **或** `PlaybackHandoff` 持有"。而信息流交给详情页的那台播放器**永远**留在 `PlaybackHandoff` 里（那个标记是防误 release 用的），于是详情页的生命周期暂停判据永远为 false：谁都不去暂停它。同一个放宽还顺带让"从信息流进详情的那台播放器返回时不被释放"（泄漏） | 把两种归属**拆开**：①`PipController.isHandedOver` 收窄回"**只算小窗会话**"（暂停/释放判据用它）；②新增 `PipController.isReturningToDetail` + `PlaybackHandoff.isHeldForHandBack`，只覆盖"展开小窗刚交回详情页那一瞬间"（防那次 `ON_STOP` 误暂停）。`PauseWhenNotStarted` 的 `ON_STOP` 用两者取或，`onDispose` 只用前者 | 实机 A 组（推荐页 → 详情，无小窗）：进详情 `started=1` → 锁屏 `started=0 paused=1` → 解锁 `started=1`（沿用既有习惯：回前台续播）→ HOME `started=0 paused=1`。实机 B 组（小窗）：小窗在播 `started=1` → 锁屏 `started=0 paused=1`（`pauseForScreenOff playing=true`，会话保留）→ 解锁保持暂停 → 展开回详情 `started=1`、`route=detail/2010` 未导航 |
 
 
 
 | # | 现象 | 根因 | 改动 | 证据 |
 | --- | --- | --- | --- | --- |
-| 1 | 小窗播放中锁屏，视频/音频还在放 | 上一阶段为保住小窗内容，锁屏时刻意**不动会话**；但也没停播，而 `PauseWhenNotStarted` 对"已交给小窗的播放器"是主动跳过的（怕按停小窗），于是谁都不去暂停它 | 锁屏/息屏单独处理：`onStop` 里 `screenOff && hasSession()` → `PipController.pauseForScreenOff()`（**只暂停、保留会话**，小窗窗口与进度都留着）。解锁后**不自动续播** —— 用户锁屏往往就是要它停下来；要接着看点小窗播放按钮或展开回详情页 | 实机：进小窗 `started=1` → 锁屏 `started=0 paused=1`（日志 `pauseForScreenOff playing=true`）→ 解锁仍 `started=0 paused=1`（不自动续播）；截图 `docs/images/screenshots/pip-lock-paused.png` 显示小窗内容仍是视频、无详情页 UI |
+| 1 | 小窗播放中锁屏，视频/音频还在放 | 上一阶段为保住小窗内容，锁屏时刻意**不动会话**；但也没停播，而 `PauseWhenNotStarted` 对"已交给小窗的播放器"是主动跳过的（怕按停小窗），于是谁都不去暂停它 | 锁屏/息屏单独处理：`onStop` 里 `screenOff && hasSession()` → `PipController.pauseForScreenOff()`（**只暂停、保留会话**，小窗窗口与进度都留着）。解锁后**不自动续播**：用户锁屏往往就是要它停下来；要接着看点小窗播放按钮或展开回详情页 | 实机：进小窗 `started=1` → 锁屏 `started=0 paused=1`（日志 `pauseForScreenOff playing=true`）→ 解锁仍 `started=0 paused=1`（不自动续播）；截图 `docs/images/screenshots/pip-lock-paused.png` 显示小窗内容仍是视频、无详情页 UI |
 
 ### 阶段二十八 · 小窗模式下锁屏再回来，小窗里变成"视频外面套着详情页"
 
 | # | 现象 | 根因 | 改动 | 证据 |
 | --- | --- | --- | --- | --- |
-| 1 | 小窗播放中锁屏再解锁，小窗窗口里显示的是**详情页 UI**（视频只是其中一块） | 锁屏/息屏时 Activity 同样走 `onStop`，而我的收尾规则是"有会话 + 走到 `onStop` = 小窗没了"——于是把小窗的会话收掉（`closeAndRelease`），`inPip` 被置 false；解锁后那个**仍然活着**的小窗窗口就按导航内容重新组合，显示出整页详情 UI。日志实测：`onStop pip=true session=true … screenOff=true` | ①`onStop` 增加判据：`PowerManager.isInteractive == false` 或 `KeyguardManager.isKeyguardLocked` 时**不当作关闭**（锁屏不是关小窗）；②`onResume` 兜底：系统说还在小窗里且手里有会话，就把 `inPip` 重新置 true（防 Activity 被重建导致内存标记丢失） | 实机（小窗播放 → 息屏 6 秒 → 解锁）：音频全程 `started=1`；解锁后截图 `docs/images/screenshots/pip-after-unlock.png` 显示小窗里**只有视频**、无详情页 UI；日志 `onStop … screenOff=true`（跳过收尾）+ `onResume pending=false session=true`（会话还在） |
+| 1 | 小窗播放中锁屏再解锁，小窗窗口里显示的是**详情页 UI**（视频只是其中一块） | 锁屏/息屏时 Activity 同样走 `onStop`，而我的收尾规则是"有会话 + 走到 `onStop` = 小窗没了"，于是把小窗的会话收掉（`closeAndRelease`），`inPip` 被置 false；解锁后那个**仍然活着**的小窗窗口就按导航内容重新组合，显示出整页详情 UI。日志实测：`onStop pip=true session=true … screenOff=true` | ①`onStop` 增加判据：`PowerManager.isInteractive == false` 或 `KeyguardManager.isKeyguardLocked` 时**不当作关闭**（锁屏不是关小窗）；②`onResume` 兜底：系统说还在小窗里且手里有会话，就把 `inPip` 重新置 true（防 Activity 被重建导致内存标记丢失） | 实机（小窗播放 → 息屏 6 秒 → 解锁）：音频全程 `started=1`；解锁后截图 `docs/images/screenshots/pip-after-unlock.png` 显示小窗里**只有视频**、无详情页 UI；日志 `onStop … screenOff=true`（跳过收尾）+ `onResume pending=false session=true`（会话还在） |
 
 
 

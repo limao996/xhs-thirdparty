@@ -140,7 +140,7 @@ fun AuthorScreen(
                 EmptyState(
                     title = "加载失败",
                     modifier = Modifier.fillMaxSize(),
-                    description = "接口在海外，需要能访问海外的线路；网络恢复后会自动重试",
+                    description = "网络不通，或线路到不了海外服务器。网络恢复后会自动重试",
                     actionLabel = "重试",
                     onAction = { viewModel.retry() }
                 )

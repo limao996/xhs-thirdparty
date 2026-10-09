@@ -139,7 +139,7 @@ private fun LocalListNav(
         AlertDialog(
             onDismissRequest = { confirmClear = false },
             title = { Text("清空$title？") },
-            text = { Text("此操作不可撤销，将删除全部 ${state.all.size} 条本地记录。") },
+            text = { Text("删掉就找不回来了，一共 ${state.all.size} 条。") },
             confirmButton = {
                 TextButton(onClick = haptics.rejectClick {
                     viewModel.clear()
@@ -157,7 +157,7 @@ private fun LocalListNav(
         AlertDialog(
             onDismissRequest = { confirmRemove = false },
             title = { Text("取消收藏？") },
-            text = { Text("将从收藏中移除已选的 ${selected.size} 项，此操作不可撤销。") },
+            text = { Text("取消收藏后，这 ${selected.size} 项会从列表里消失。") },
             confirmButton = {
                 TextButton(onClick = haptics.rejectClick {
                     viewModel.removeSaved(selected)
@@ -178,7 +178,7 @@ private fun LocalListNav(
         AlertDialog(
             onDismissRequest = { confirmExit = false },
             title = { Text("退出多选？") },
-            text = { Text("已选的 ${selected.size} 项会被取消勾选。") },
+            text = { Text("已选的 ${selected.size} 项会取消勾选。") },
             confirmButton = {
                 TextButton(onClick = haptics.click {
                     selected = emptySet()
