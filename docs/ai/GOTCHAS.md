@@ -554,6 +554,23 @@
 - **别只改自己碰过的那几处**：第一次返工时只改了手边几个字符串，用户当场指出「检查更新页呢」，一全量扫才发现还有一批。做法是先把 `ui/`、`data/`、`net/` 里所有中文字面量拉一遍（含参数化文案），再决定改哪些。
 - **错误原因也是界面文案**：`UpdateDownloader` 的失败原因、`UpdateChecker` 的 `Failed(reason)`、`BackupScreen` 的异常提示都会原样显示给用户，所以里面不能出现 API 路径、`tag_name` 这类字段名、`javaClass.simpleName` 这类内部标识。
 
+**H23 · 网络恢复补载的判据是「失败过」，不是「空」；网络回调只在换网 / 验证翻转时 bump**
+- 症状（用户 2026-10-09）：详情页有时候会频繁重建，返回上一页再进来又恢复了。
+- 根因一：`DetailViewModel` 的补载条件是 `item == null || comments.isEmpty()`。
+  **没有评论的作品永远满足 `comments.isEmpty()`**，于是每一次网络状态变化都会整页重取。
+  同类写法还有 `DiscoverViewModel` 的 `feed.items.isEmpty()` / `fanGroup.isEmpty()` 与
+  `VideoFeedViewModel` 的 `items.isEmpty()`：某个分类本来没有内容、用户确实还没关注任何人时，
+  都会被当成"没加载成功"反复重取。判据要换成错误标记：`feed.error` / `fanGroupError` /
+  `commentsError` / `error`。
+- 根因二：`App.watchNetwork()` 的 `onCapabilitiesChanged` **不只在换网时触发** ——
+  信号强度、带宽估算一变就回调，十几秒一次。以前每次回调都 `bump()`，等于"网络能力微调"就带动
+  所有页面重新加载。现在只有**换了网络（networkHandle 变化）**或**验证状态翻转**才算变化，
+  并且只在"变成已验证"时 bump（掉成未验证不必再打一轮请求，那必然失败）。
+- 验证手法：`logcat -s XhsNetRetry` 会打印详情页每次补载判定的输入
+  （`failed / item / comments / commentsError`）。连做 4 次断网-恢复，零评论作品的 8 次判定全是
+  `failed=false ... comments=0` → 一次都没重取；而首屏失败后再恢复，判定是 `failed=true` → 补载，
+  实测 6.3 秒恢复。改判据时**必须同时验这两头**：不该重取的别重取，该补载的要补上。
+
 ## I. 验证工具本身的坑
 
 **I1 · `uiautomator dump` 失败时会读到上一次的旧文件**

@@ -97,28 +97,26 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
         }
         loadMore()
         refreshFollowed()
-        // A network that only becomes usable later (turning a VPN on) must not leave the
-        // grid sitting on 「内容加载失败」: retry whatever is still missing.
+        // 网络恢复后补载**失败过**的那几块，而不是"空的"那几块。
+        //
+        // 用"空"当信号会误伤：某个分类本来就没有内容、或者用户确实还没关注任何人时，
+        // 每次网络状态变化都会再取一遍（用户 2026-10-09 报的"频繁重建"）。
         viewModelScope.launch {
             com.thirdparty.xhs.App.INSTANCE.networkEpoch.drop(1).collect {
-                if (_ui.value.feed.items.isEmpty() && !feedLoading) {
+                if (_ui.value.feed.error && !feedLoading) {
                     feedPage = 0
                     feedLoading = false
                     loadMore(force = true)
                 }
-                if (_ui.value.fanGroup.isEmpty() && !fanGroupLoading) {
-                    // The fan-group request needs our own user id, and that id is fetched
-                    // once at construction — an offline start leaves it 0, and with 0 the
-                    // request is never even made (`recs = null`). So re-read it here, or
-                    // this tab would stay empty even after the network comes back.
+                if (_ui.value.fanGroupError && !fanGroupLoading) {
+                    // 粉丝圈请求要用自己的 user id，而它只在构造时取一次 —— 离线启动会留在 0，
+                    // 为 0 时请求根本不会发（`recs = null`）。这里重读一次，否则网络回来了这个
+                    // 标签页还是空的。
                     if (myId <= 0) myId = runCatchingCancellable { repo.myUserId() }.getOrDefault(0)
                     loadFanGroup()
                 }
-                // 分类也要补：分类为空时发现页整块都是失败态，而它以前不在这个补载列表里 ——
-                // 网络恢复后页面就一直停在"分类加载失败"（实测：开回 Wi-Fi 8 秒仍未恢复）。
-                if (_ui.value.categories.isEmpty() && _ui.value.categoriesError) {
-                    loadCategories()
-                }
+                // 分类：整块失败态时补一次（实测网络恢复 8 秒仍未恢复的那个问题）
+                if (_ui.value.categoriesError) loadCategories()
             }
         }
     }

@@ -631,6 +631,33 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 
 
+### 阶段四十三 · 详情页「频繁重建」
+
+用户反馈：详情页有时候会频繁重建，返回上一个界面再进来又正常了。
+
+**根因（两条一起犯了）**
+
+1. `DetailViewModel` 的网络恢复补载条件是 `item == null || comments.isEmpty()`。
+   这条作品的**评论数为 0** 时，`comments.isEmpty()` 永远成立 —— 于是每次网络状态变化都整页重取，
+   表现就是"频繁重建"；返回上一页再进来会新建 ViewModel，所以又"恢复正常"了。
+   同类误用一并修掉：`DiscoverViewModel` 的 `feed.items.isEmpty()` / `fanGroup.isEmpty()`、
+   `VideoFeedViewModel` 的 `items.isEmpty()`，全部改成看**错误标记**（`feed.error` /
+   `fanGroupError` / `error`），也就是"**失败过**才补载，而不是'空'就补载"。
+2. `App.watchNetwork()` 的 `onCapabilitiesChanged` 不只在换网时触发：信号 / 带宽估算一变就回调。
+   以前每次都 `bump()`（`networkEpoch` +1 → 所有页面补载），等于网络能力微调就带动全应用重取。
+   现在只有**换了网络**（`networkHandle` 变化）或**验证状态翻转**才算一次变化，并且只在
+   "变成已验证"时 bump；网络断开（`onLost`）会清掉记录，这样它回来时还能再补一次。
+
+**验证（模拟器 API 34）**
+
+| 场景 | 结果 |
+| --- | --- |
+| 打开一条**零评论**作品，连做 4 次断网 / 恢复（8 次 bump） | `XhsNetRetry: failed=false item=true comments=0 commentsError=false` ×8 → **一次都没重取**（修前这 8 次都会整页重取） |
+| 断网冷启动进详情 → 出现失败态 → 恢复网络 | 判定 `failed=true ... commentsError=true` → 补载，**6.3 秒**自动恢复 |
+| 崩溃 | `crash: 0` |
+
+`assembleDebug` + `testDebugUnitTest` + `lintDebug` 通过。档案：GOTCHAS 新增 H23（含验证手法）。
+
 ### 阶段四十二 · 界面文案全面审查（全量，不只改碰过的那几处）
 
 用户驳回「这不是还有没改的吗？检查更新页呢？」后，把 `ui/`、`data/`、`net/` 里所有中文字面量（含参数化文案与错误原因）拉了一遍，逐条按硬约束 27 的口径过。

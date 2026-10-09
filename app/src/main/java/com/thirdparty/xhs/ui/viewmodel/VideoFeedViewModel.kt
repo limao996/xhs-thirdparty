@@ -34,7 +34,8 @@ class VideoFeedViewModel(private val repo: XhsRepository) : ViewModel() {
         // initial load when nothing arrived.
         viewModelScope.launch {
             com.thirdparty.xhs.App.INSTANCE.networkEpoch.drop(1).collect {
-                if (_ui.value.items.isEmpty() && !loading) loadMore()
+                // 只看"失败过"，不看"空"：推荐流本来就可能是空的，用空当信号会反复重取
+                if (_ui.value.error && !loading) loadMore()
             }
         }
     }

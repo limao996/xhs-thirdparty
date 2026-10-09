@@ -250,20 +250,56 @@ class App : Application() {
      */
     val networkEpoch = MutableStateFlow(0)
 
+    /**
+     * 上一次 bump 时的"网络身份"与验证状态。
+     *
+     * `onCapabilitiesChanged` 不只在换网时触发：信号强度、带宽估算一变它就回调，
+     * 有的是十几秒一次。以前每次回调都 bump，于是"网络能力微调"会带动所有页面重新加载 ——
+     * 详情页看起来就是在频繁重建（用户 2026-10-09 报的现象）。
+     * 现在只有**换了网络**或**验证状态翻转**才算一次真正的变化。
+     */
+    @Volatile
+    private var lastBumpNetworkHandle: Long = 0L
+
+    @Volatile
+    private var lastBumpValidated: Boolean = false
+
     private fun watchNetwork() {
         val cm = getSystemService(android.net.ConnectivityManager::class.java) ?: return
         runCatching {
             cm.registerDefaultNetworkCallback(object : android.net.ConnectivityManager.NetworkCallback() {
-                override fun onAvailable(network: android.net.Network) = bump()
+                override fun onAvailable(network: android.net.Network) {
+                    if (network.networkHandle != lastBumpNetworkHandle) {
+                        lastBumpNetworkHandle = network.networkHandle
+                        // 刚可用时还没验证过；等 onCapabilitiesChanged 报 VALIDATED 再补一次
+                        lastBumpValidated = false
+                        bump()
+                    }
+                }
 
                 override fun onCapabilitiesChanged(
                     network: android.net.Network,
                     caps: android.net.NetworkCapabilities
                 ) {
-                    if (caps.hasCapability(
-                            android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED
-                        )
-                    ) bump()
+                    val validated = caps.hasCapability(
+                        android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED
+                    )
+                    val changed = network.networkHandle != lastBumpNetworkHandle ||
+                        validated != lastBumpValidated
+                    if (changed) {
+                        lastBumpNetworkHandle = network.networkHandle
+                        lastBumpValidated = validated
+                    }
+                    // 只在"变成已验证"时补一次；掉成未验证不用再打一轮请求（会立刻失败）
+                    if (changed && validated) bump()
+                }
+
+                override fun onLost(network: android.net.Network) {
+                    // 网络没了：清掉记录，这样它回来（或换成另一个）还会再 bump 一次
+                    if (network.networkHandle == lastBumpNetworkHandle) {
+                        lastBumpNetworkHandle = 0L
+                        lastBumpValidated = false
+                    }
                 }
             })
         }

@@ -61,12 +61,23 @@ class DetailViewModel(
             // epoch left over from an earlier switch must not trigger a second load.
             repo.accountEpoch.drop(1).collect { if (it > 0) load() }
         }
-        // A network that only becomes usable later (the user switches a VPN on after the
-        // first requests failed) retries the page instead of leaving 「内容加载失败」 on
-        // screen — and re-asks for the comments if those came back empty.
+        // 网络恢复后补载**失败过**的那些，而不是"空的"那些。
+        //
+        // 以前这里写的是 `item == null || comments.isEmpty()`：一条**没有评论**的作品
+        // 永远满足 `comments.isEmpty()`，于是每次网络状态变化都会整页重取 ——
+        // 表现就是详情页在频繁重建（用户 2026-10-09 报的现象）。
         viewModelScope.launch {
             com.thirdparty.xhs.App.INSTANCE.networkEpoch.drop(1).collect {
-                if (_ui.value.item == null || _ui.value.comments.isEmpty()) load()
+                val failed = _ui.value.item == null || _ui.value.commentsError
+                if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+                    android.util.Log.i(
+                        "XhsNetRetry",
+                        "detail: failed=" + failed + " item=" + (_ui.value.item != null) +
+                            " comments=" + _ui.value.comments.size +
+                            " commentsError=" + _ui.value.commentsError
+                    )
+                }
+                if (failed) load()
             }
         }
     }
