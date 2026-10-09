@@ -631,6 +631,27 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 
 
+### 阶段四十六 · 修回「推荐页一直在 loading」
+
+上一轮把 `VideoFeedUiState.firstLoading` 的初值改成 `true`（为了不闪「暂无推荐内容」），但屏幕侧那个负责**发起首屏加载**的 effect 写的是：
+
+```kotlin
+LaunchedEffect(Unit) { if (state.items.isEmpty() && !state.firstLoading) viewModel.loadMore() }
+```
+
+条件里的 `!state.firstLoading` 从此永远为假 → 请求根本没发出去 → 一直转圈（用户 2026-10-09 报的「怎么推荐页一直在 loading」）。
+
+**改动**
+
+| 项 | 做法 |
+| --- | --- |
+| `VideoFeedViewModel` | `init` 里直接 `loadMore()`：**首屏加载由 ViewModel 拥有** |
+| `VideoFeedScreen` | 删掉那个 effect；`firstLoading` 只用于显示，不再参与「要不要加载」的判断 |
+| 同类排查 | 全仓搜 `!state.xxxLoading` 形式的触发条件，只有这一处（`UserListScreen` 那处是分页失败条的分支判断，正确） |
+
+**验证（模拟器 API 34）**：冷启动进推荐页 → 内容正常出现（首屏文本为作品标题 + 作者 + 点赞数），不再是空白 loading；`crash: 0`。
+`assembleDebug` + `testDebugUnitTest` + `lintDebug` 通过。档案：GOTCHAS H24 补「loading 标记不参与要不要加载的判断」。
+
 ### 阶段四十五 · 「加载中 / 失败 / 空」全量审查（推荐页同类问题）
 
 用户指出推荐页也有同样的毛病，要求全面审查。这次不看单个页面，而是把**所有 UiState 的 loading 初值**与**所有状态分支的顺序**一起过一遍。

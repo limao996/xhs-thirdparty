@@ -108,9 +108,9 @@ fun VideoFeedScreen(
     // 换挡触感用在下面「落定页变了」的地方
     val haptics = rememberHaptics()
 
-    LaunchedEffect(Unit) {
-        if (state.items.isEmpty() && !state.firstLoading) viewModel.loadMore()
-    }
+    // 首屏加载由 VideoFeedViewModel 的 init 发起。这里以前写的是
+    // `if (state.items.isEmpty() && !state.firstLoading) viewModel.loadMore()`：
+    // `firstLoading` 初值改成 true（表示"正在加载"）之后这个条件永远不成立，页面就一直转圈。
     // refresh when the 推荐 tab is re-tapped.
     //
     // Guarded on a CHANGE of refreshTick, not on `refreshTick > 0`: a

@@ -33,6 +33,10 @@ class VideoFeedViewModel(private val repo: XhsRepository) : ViewModel() {
     private var loading = false
 
     init {
+        // 首屏加载由这里发起，不再由屏幕根据 `firstLoading` 判断要不要加载 ——
+        // `firstLoading` 的初值是 true（表示"正在加载"），屏幕那边写 `!firstLoading` 就永远不触发，
+        // 表现是"推荐页一直在 loading"（2026-10-09 的回归）。
+        loadMore()
         // A network that only becomes usable later (the user turns a VPN on after the first
         // requests failed) must not leave the feed sitting on 「内容加载失败」 — retry the
         // initial load when nothing arrived.

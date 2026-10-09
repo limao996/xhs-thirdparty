@@ -589,6 +589,11 @@
   `UpdateUiState.checking`（检查更新页闪「尚未检查」）。
 - 顺带：`DiscoverViewModel` 的 init 以前是「取分类，取自己的 user id，取粉丝圈」一条顺序链，
   粉丝圈的空态窗口被拉长到整个分类往返之后；改成两个协程并行。
+- **改 loading 初值前，先搜一遍有没有人拿这个标记决定「要不要发起加载」**：
+  `VideoFeedScreen` 原来是 `LaunchedEffect(Unit) { if (state.items.isEmpty() && !state.firstLoading) viewModel.loadMore() }`，
+  把 `firstLoading` 初值改成 true 之后这个条件永远不成立，页面就一直转圈（2026-10-09 又踩一次）。
+  规矩：**首屏加载由 ViewModel 的 `init` 拥有**，屏幕只负责画状态；`loading` 系列标记只用于显示，
+  不参与"要不要加载"的判断。
 - 验证：临时给分类请求加 4 秒延迟，进发现页截图 → 内容是 M3 的 loading 组件、文本 dump 里
   没有「没有可用的分类」；去掉延迟后连拍 5 次 dump，字符串一次都没出现，chip 正常出现。
 
