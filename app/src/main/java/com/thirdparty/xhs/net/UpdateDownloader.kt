@@ -92,7 +92,7 @@ object UpdateDownloader {
             }
         }.onFailure { e ->
             tmp.delete()
-            return@withContext Outcome.Failed(e.message?.take(160) ?: "下载失败")
+            return@withContext Outcome.Failed(friendlyNetworkReason(e))
         }
         if (!tmp.exists() || tmp.length() <= 0L) {
             tmp.delete()

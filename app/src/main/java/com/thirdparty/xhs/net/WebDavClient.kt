@@ -70,7 +70,7 @@ class WebDavClient(
             val req = authed(Request.Builder().url(fileUrl(name)).put(body)).build()
             client.newCall(req).await().use { resp ->
                 if (!resp.isSuccessful) {
-                    throw IOException("上传失败 HTTP ${resp.code} ${resp.message}")
+                    throw IOException("上传失败（HTTP ${resp.code}）")
                 }
             }
         }
@@ -97,7 +97,7 @@ class WebDavClient(
         val req = authed(Request.Builder().url(url).get()).build()
         client.newCall(req).await().use { resp ->
             if (resp.code == 404) return null
-            if (!resp.isSuccessful) throw IOException("下载失败 HTTP ${resp.code} ${resp.message}")
+            if (!resp.isSuccessful) throw IOException("下载失败（HTTP ${resp.code}）")
             return resp.body?.bytes() ?: throw IOException("云端返回了空内容")
         }
     }
@@ -133,7 +133,7 @@ class WebDavClient(
                     resp.code == 401 || resp.code == 403 ->
                         throw IOException("认证失败（HTTP ${resp.code}），请检查账号与应用密码")
                     resp.code == 404 -> throw IOException("服务器地址不存在（HTTP 404），请检查路径")
-                    else -> throw IOException("无法访问服务器（HTTP ${resp.code} ${resp.message}）")
+                    else -> throw IOException("无法访问服务器（HTTP ${resp.code}）")
                 }
             }
         }

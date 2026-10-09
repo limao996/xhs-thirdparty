@@ -656,6 +656,9 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 | 缓存项说明 | 清除后只会重新解码一次，不需要重新下载 | 清除后再次浏览会重新解码，无需重新下载 |
 | VIP 开关提示 | 已开启：VIP 到期后自动切到有 VIP 的账号 | 已开启：VIP 到期后自动切换到其他账号 |
 | 稍后观看信息条 | 稍后观看 N 件 · 点这里查看 | 稍后观看 N 件 · 点击查看 |
+| 检查更新 / 下载失败原因（异常兜底） | 直接把 `e.message` 显示给用户（OkHttp 与 Java 的英文原文，如 `Failed to connect to github.com`） | 新增 `net/FriendlyError.kt` 的 `friendlyNetworkReason()`：无法连接服务器 / 连接超时 / 网络中断 / 连接不安全，逐类翻译成中文 |
+| 更新检查其它原因 | GitHub 应答解析失败 / GitHub 返回 HTTP 403 | 返回数据解析失败 / 服务器返回 HTTP 403 |
+| WebDAV 错误 | 上传失败 HTTP 500 Internal Server Error（夹带英文原文） | 上传失败（HTTP 500） |
 
 **验证**：`assembleDebug` + `testDebugUnitTest` + `lintDebug` 通过；实机（API 34）进「我的 → 检查更新」dump：
 `当前版本 / 小黄书 / v1.3.1-debug（build 766383）`、`状态 / 检查结果 / 当前已是最新版本（v1.3.1-debug）`、

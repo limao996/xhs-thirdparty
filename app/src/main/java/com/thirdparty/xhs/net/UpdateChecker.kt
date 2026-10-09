@@ -166,15 +166,15 @@ object UpdateChecker {
                 when {
                     response.code == 404 -> Result.NoRelease(RELEASES_URL)
                     response.code == 403 -> Result.Failed("GitHub 限流（HTTP 403），过一会儿再试")
-                    !response.isSuccessful -> Result.Failed("GitHub 返回 HTTP ${response.code}")
+                    !response.isSuccessful -> Result.Failed("服务器返回 HTTP ${response.code}")
                     else -> parse(response.body?.string().orEmpty(), currentVersion)
                 }
             }
         } catch (e: java.io.IOException) {
             // 连不上（没有翻墙 / DNS 被污染 / 没有默认网络）都会走到这里
-            Result.Failed(e.message?.take(160) ?: "当前无可用网络")
+            Result.Failed(friendlyNetworkReason(e))
         } catch (e: org.json.JSONException) {
-            Result.Failed("GitHub 应答解析失败")
+            Result.Failed("返回数据解析失败")
         }
     }
 
