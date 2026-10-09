@@ -156,11 +156,19 @@ class App : Application() {
 
     /** User closed the update dialog for now (it will be offered again next launch). */
     fun dismissUpdate() {
+        // 诊断用：这条日志带调用栈，能区分"用户按了以后再说/返回键"与"平台关掉了弹窗窗口"
+        // （2026-10-10 用户报「什么都没做弹窗自己消失」，就靠它定位）。
+        if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+            android.util.Log.i("XhsUpdatePrompt", "dismissUpdate() 被调用", Throwable("caller"))
+        }
         pendingUpdate.value = null
     }
 
     /** User pressed 跳过这个版本: never offer [version] again. */
     fun ignoreUpdateVersion(version: String) {
+        if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+            android.util.Log.i("XhsUpdatePrompt", "ignoreUpdateVersion($version) 被调用", Throwable("caller"))
+        }
         pendingUpdate.value = null
         settingsPrefs().edit { putString(KEY_IGNORED_UPDATE, version) }
     }

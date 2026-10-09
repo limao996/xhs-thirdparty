@@ -61,7 +61,18 @@ fun UpdateAvailableDialog(
 ) {
     val haptics = rememberHaptics()
     AlertDialog(
-        onDismissRequest = onLater,
+        onDismissRequest = {
+            // 走到这里只有两种可能：用户按了返回键，或**平台把弹窗窗口关掉了**（后者不是用户意图）。
+            // 带调用栈打日志，用来区分（2026-10-10 的「自己消失」问题）。
+            if (BuildConfig.DEBUG) {
+                android.util.Log.i(
+                    "XhsUpdatePrompt",
+                    "onDismissRequest（返回键或平台关窗）",
+                    Throwable("caller")
+                )
+            }
+            onLater()
+        },
         properties = DialogProperties(dismissOnClickOutside = false),
         icon = { Icon(Icons.Filled.SystemUpdate, null) },
         title = { Text("发现新版本 v${info.version}") },

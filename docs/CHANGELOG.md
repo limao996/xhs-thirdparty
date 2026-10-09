@@ -631,6 +631,41 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 
 
+### 阶段五十二 · 「检查更新一直停在正在检查」+ 同类问题全面审查
+
+用户报：「刚发布的 1.3.2 版本，检测更新会一直保持在正在检查」，并要求全面审查同类问题、修好后重新发布 1.3.2。
+
+**根因（是我上一轮改出来的，而且这次进了正式包）**
+
+阶段四十五我把 `UpdateUiState.checking` 的初值改成 `true`（为了不闪「尚未检查」），但 `check()` 的第一行是
+`if (_ui.value.checking) return`（防重复点击）——于是进页面时**首次检查被自己挡掉**，请求根本没发出去，
+`checking` 永远是 true，页面就永远停在「正在检查…」。**和"推荐页一直 loading"是同一个错误**：
+拿显示态当了"要不要发起"的判据。
+
+**修复**：防重入改用独立的私有字段 `UpdateViewModel.inFlight`；`checking` 退回纯显示用途（初值仍为 true），
+`finally` 里复位 `inFlight` 与 `checking`。同一条规则已升级为 **AGENTS.md 硬约束 29**。
+
+**全面审查（同类问题）**
+
+| 检查项 | 方法 | 结果 |
+| --- | --- | --- |
+| ViewModel 里拿 `_ui.value.*` 当决策/重入条件 | grep `if (_ui.value.X) return` 等 | 只有 `UpdateViewModel.checking` 一处（已修）；`DiscoverViewModel` / `DetailViewModel` / `VideoFeedViewModel` 用的都是**私有** `fanGroupLoading` / `commentsInFlight` / `loading`，写法正确 |
+| 屏幕侧拿 loading 标记决定是否发起加载 | grep `if (!?state.*Loading…)` | 只剩渲染分支（`AuthorScreen` / `CacheScreen` / `DetailScreen` / `ProfileScreen` / `UpdateScreen` / `WatchLaterScreen`），没有发起型判据；推荐页那处上一轮已改掉 |
+| loading 置 true 后是否所有退出路径都清掉 | 逐文件比对 `= true` / `= false` / `finally` 次数 | 绝大多数走 `runCatchingCancellable`（除取消外全兜住）；`UpdateViewModel`、`VideoFeedViewModel`、`SearchViewModel` 有 `finally` |
+| 断网时每个网络页面是否"失败看得见 + 能重试" | 实测：断网冷启动走一遍 | 推荐页「推荐加载失败 + 重试」、发现页「分类加载失败 + 网络连接失败，网络恢复后将自动重试」、粉丝圈「加载失败 + 重试」、我的页「加载失败 + 重试」、检查更新页「检查失败：当前无可用网络」；**没有一处永久转圈** |
+
+**修复后实测（模拟器 API 34）**
+
+| 场景 | 结果 |
+| --- | --- |
+| 进检查更新页 | 1.5 秒内出现「检查结果 / 当前已是最新版本（v1.3.2-debug）」（修前永远停在「正在检查…」） |
+| 断网冷启动进该页 | 「检查失败：当前无可用网络」，不转圈 |
+| 恢复网络后点「重新检查」 | 1.3 秒内回到「当前已是最新版本」 |
+| 崩溃 | `crash: 0` |
+
+**发布**：按用户要求保持版本号 `1.3.2` 重新构建并覆盖发布（`versionCode` 由时间戳表达式推导，自然大于上一版）。
+档案：AGENTS.md 硬约束 29、CLAUDE.md 要点 13、GOTCHAS H28。
+
 ### 阶段五十一 · 把「发布顺序」写成硬约束
 
 用户指令：「以后发布正式包要先改版本号构建正式包，确定没问题了再推送并发布」。

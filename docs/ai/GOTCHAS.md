@@ -632,6 +632,24 @@
 - 发布后核验两件：资产地址 HEAD 200 且 Content-Length 与本地一致；`releases.atom` 首条是新 tag
   （应用内检查更新读 feed，feed 里没有就不算发布成功）。
 
+**H28 · 显示态（loading/checking）不能当"要不要发起"的判据 —— 已经犯过两次**
+- 症状 A（2026-10-10）：推荐页一直 loading。根因：`VideoFeedUiState.firstLoading` 初值改成 true（为了不闪
+  「暂无推荐内容」）之后，屏幕侧的 `LaunchedEffect(Unit) { if (items.isEmpty() && !firstLoading) loadMore() }`
+  条件永远不成立 —— 请求根本没发出去。
+- 症状 B（2026-10-10，**随 v1.3.2 正式包发出**）：检查更新页一直停在「正在检查…」。根因：`UpdateUiState.checking`
+  初值改成 true，而 `check()` 第一行是 `if (_ui.value.checking) return` → 进页面时首次检查被自己挡掉。
+- 规矩：**显示态只用于渲染**；防重入用独立的私有字段（`private var inFlight` / `private var loading`）。
+  自查命令（两条都要跑）：
+  ```powershell
+  # ① ViewModel 里有没有拿 _ui.value 的标记当决策/重入条件
+  Select-String -Path app\src\main\java\com\thirdparty\xhs\ui\viewmodel\*.kt -Pattern 'if \(_ui\.value\.[A-Za-z]+\) return'
+  # ② 屏幕侧有没有拿 loading 标记决定是否发起加载
+  Select-String -Path app\src\main\java\com\thirdparty\xhs\ui\screens\*.kt -Pattern 'if \(!?state\.[a-zA-Z]*(Loading|loading|checking|searching)'
+  ```
+- 第二次的排查还留了两个可复用手段：① `XhsUpdatePrompt` 的 DEBUG 日志（更新弹窗门禁三元组、`dismissUpdate` /
+  `onDismissRequest` 的调用栈，能区分"被点的/被平台关的"）；② **断网走一遍所有会发请求的页面**，确认每页都是
+  "失败看得见 + 能重试"而不是永久转圈（2026-10-10 实测：推荐/发现/粉丝圈/我的/检查更新全部正常）。
+
 ## I. 验证工具本身的坑
 
 **I1 · `uiautomator dump` 失败时会读到上一次的旧文件**

@@ -493,6 +493,17 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
                     val haptics = com.thirdparty.xhs.ui.components.rememberHaptics()
                     androidx.compose.runtime.DisposableEffect(owner) {
                         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                            if (com.thirdparty.xhs.BuildConfig.DEBUG &&
+                                (event == androidx.lifecycle.Lifecycle.Event.ON_PAUSE ||
+                                    event == androidx.lifecycle.Lifecycle.Event.ON_RESUME)
+                            ) {
+                                android.util.Log.i(
+                                    "XhsUpdatePrompt",
+                                    "lifecycle=" + event + " picker=" + App.INSTANCE.systemPickerActive +
+                                        " pip=" + pipActive + " lockEnabled=" + biometricLockEnabled() +
+                                        " locked=" + locked
+                                )
+                            }
                             if (event == androidx.lifecycle.Lifecycle.Event.ON_PAUSE &&
                                 !App.INSTANCE.systemPickerActive &&
                                 !pipActive &&
@@ -613,6 +624,18 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
                     androidx.compose.runtime.LaunchedEffect(Unit) {
                         kotlinx.coroutines.delay(800)
                         updatePromptReady = true
+                    }
+                    androidx.compose.runtime.LaunchedEffect(
+                        pendingUpdate, locked, pipActive, updatePromptReady
+                    ) {
+                        if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+                            android.util.Log.i(
+                                "XhsUpdatePrompt",
+                                "门禁 locked=" + locked + " pip=" + pipActive +
+                                    " ready=" + updatePromptReady +
+                                    " pending=" + (pendingUpdate?.version ?: "null")
+                            )
+                        }
                     }
                     if (!locked && !pipActive && updatePromptReady) {
                         pendingUpdate?.let { info ->
