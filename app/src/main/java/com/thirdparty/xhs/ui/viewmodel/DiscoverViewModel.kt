@@ -37,6 +37,14 @@ data class FeedSection(
 data class DiscoverUiState(
     val categories: List<Category> = emptyList(),
     /**
+     * 分类正在加载。
+     *
+     * 初始 true：进页面时第一次请求就发出去了，界面必须知道"还没有结果"，
+     * 否则 `categories` 为空会被当成"没有分类"（2026-10-09 的回归就是这样：
+     * 一进发现页就显示「没有可用的分类」而不是加载中）。
+     */
+    val categoriesLoading: Boolean = true,
+    /**
      * 分类（顶部那一排 chip）加载失败。
      *
      * 以前这里失败是**完全静默**的（`getOrDefault(emptyList())`），于是发现页顶部就是一片空白，
@@ -338,12 +346,18 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
      * `categoriesError` 立起来，让发现页显示可点的失败提示（硬约束 26）。
      */
     private suspend fun loadCategories() {
+        _ui.update { it.copy(categoriesLoading = true) }
         val cats = runCatchingCancellable { repo.categories() }.getOrNull()
         _ui.update {
-            if (cats == null) {
-                it.copy(categoriesError = it.categories.isEmpty() || it.categoriesError)
-            } else {
-                it.copy(categories = cats, categoriesError = false)
+            when {
+                cats == null ->
+                    it.copy(
+                        categoriesLoading = false,
+                        categoriesError = it.categories.isEmpty() || it.categoriesError
+                    )
+
+                else ->
+                    it.copy(categories = cats, categoriesError = false, categoriesLoading = false)
             }
         }
     }

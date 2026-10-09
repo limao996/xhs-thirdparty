@@ -248,21 +248,36 @@ private fun FeedTab(
             }
     }
     if (state.categories.isEmpty()) {
-        // 分类一个都没有 —— 这里**必须早退**：
-        // 分类内容是一个 `HorizontalPager(pageCount = { categories.size })`，一个分类都没有时
-        // 它一页都不画，于是整块内容区就是**空白**，用户看不出是失败还是没内容
-        // （用户报的"发现页缺少访问失败提示"就是这个：分类请求失败 → 顶部没 chip → 下面全白）。
+        // 分类还没回来 / 失败了 / 真的没有 —— 这里**必须早退**：
+        // 分类内容是一个 `HorizontalPager(pageCount = { categories.size })`，分类为空时它一页都不画，
+        // 整块内容区就是空白。但"空白"要分成三种情况处理，缺了第一种就会出现
+        // 「一进发现页就显示『没有可用的分类』」的回归：
         Box(
             Modifier.fillMaxSize().padding(bottom = clear),
             contentAlignment = Alignment.Center
         ) {
-            EmptyState(
-                title = if (state.categoriesError) "分类加载失败" else "没有可用的分类",
-                modifier = Modifier.fillMaxSize(),
-                description = "网络连接失败，网络恢复后将自动重试",
-                actionLabel = "重试",
-                onAction = { viewModel.retryCategories() }
-            )
+            when {
+                // 1) 还在加载：转圈（进页面时第一次请求就在路上，此时不能下任何结论）
+                state.categoriesLoading -> androidx.compose.material3.LoadingIndicator()
+
+                // 2) 加载失败：说清原因，给重试
+                state.categoriesError -> EmptyState(
+                    title = "分类加载失败",
+                    modifier = Modifier.fillMaxSize(),
+                    description = "网络连接失败，网络恢复后将自动重试",
+                    actionLabel = "重试",
+                    onAction = { viewModel.retryCategories() }
+                )
+
+                // 3) 服务端确实没有可用分类
+                else -> EmptyState(
+                    title = "没有可用的分类",
+                    modifier = Modifier.fillMaxSize(),
+                    description = "稍后重试，或反馈给开发者",
+                    actionLabel = "重试",
+                    onAction = { viewModel.retryCategories() }
+                )
+            }
         }
         return
     }

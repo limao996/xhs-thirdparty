@@ -571,6 +571,20 @@
   `failed=false ... comments=0` → 一次都没重取；而首屏失败后再恢复，判定是 `failed=true` → 补载，
   实测 6.3 秒恢复。改判据时**必须同时验这两头**：不该重取的别重取，该补载的要补上。
 
+**H24 · 「加载中 / 失败 / 真的空」三种状态必须各有分支，判定顺序不能反**
+- 症状（用户 2026-10-09）：一进发现页就显示「没有可用的分类」，而且不给 loading。
+- 根因：上一轮为了修「发现页没有失败提示」，我加了"分类为空就整块失败态"的早退，但**没区分
+  "还没回来"和"回来了但没有"**：`categories` 初始就是空列表、请求还在路上，于是第一帧就下了
+  「没有可用的分类」的结论。
+- 规矩：任何"数据为空就显示某种状态"的地方，都要按 **loading → error → empty** 的顺序判，
+  并且状态里必须有独立的 loading 标记（`DiscoverUiState.categoriesLoading`，初始 true，因为
+  进页面时第一次请求就发出去了）。
+- 自查清单（本轮同时核对过，均 OK）：`VideoFeedScreen`（先 `firstLoading`）、`AuthorScreen`、
+  `SearchScreen`、`UserListScreen`、`DiscoverTabScreen` 的网格与粉丝圈页、`CacheScreen`、
+  `ProfileScreen`、`LoadMoreFooter`（只在列表非空时出现）。
+- 验证：临时给分类请求加 4 秒延迟，进发现页截图 → 内容是 M3 的 loading 组件、文本 dump 里
+  没有「没有可用的分类」；去掉延迟后连拍 5 次 dump，字符串一次都没出现，chip 正常出现。
+
 ## I. 验证工具本身的坑
 
 **I1 · `uiautomator dump` 失败时会读到上一次的旧文件**
