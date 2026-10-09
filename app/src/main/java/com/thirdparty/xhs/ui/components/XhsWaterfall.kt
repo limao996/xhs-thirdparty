@@ -68,7 +68,7 @@ fun XhsWaterfallGrid(
     loadingMore: Boolean = false,
     onLoadMore: (() -> Unit)? = null,
     /**
-     * 分页（下一页）失败：列表非空时在底部给一个「加载失败，点这里重试」。
+     * 分页（下一页）失败：列表非空时在底部给一个「加载失败，点击重试」。
      *
      * 以前只有 `loadingMore`，所以"下一页失败"在界面上**完全看不出来** —— 列表就那么停住，
      * 用户以为博主就这些内容（硬约束 26）。

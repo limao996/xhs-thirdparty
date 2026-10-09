@@ -259,7 +259,7 @@ private fun FeedTab(
             EmptyState(
                 title = if (state.categoriesError) "分类加载失败" else "没有可用的分类",
                 modifier = Modifier.fillMaxSize(),
-                description = "网络不通，或线路到不了海外服务器。网络恢复后会自动重试",
+                description = "网络连接失败，网络恢复后将自动重试",
                 actionLabel = "重试",
                 onAction = { viewModel.retryCategories() }
             )
@@ -347,7 +347,7 @@ private fun FeedCategoryPage(
         EmptyState(
             title = "内容加载失败",
             modifier = Modifier.fillMaxSize(),
-            description = "网络不通，或线路到不了海外服务器。网络恢复后会自动重试",
+            description = "网络连接失败，网络恢复后将自动重试",
             actionLabel = "重试",
             onAction = { viewModel.retry() }
         )
@@ -358,7 +358,7 @@ private fun FeedCategoryPage(
         EmptyState(
             title = "这个分类还没有内容",
             modifier = Modifier.fillMaxSize(),
-            description = "换一个分类试试",
+            description = "可切换其他分类",
             icon = Icons.Filled.Search
         )
         return
@@ -472,7 +472,7 @@ private fun FanGroupTab(
         EmptyState(
             title = "内容加载失败",
             modifier = Modifier.fillMaxSize(),
-            description = "网络不通，或线路到不了海外服务器。网络恢复后会自动重试",
+            description = "网络连接失败，网络恢复后将自动重试",
             actionLabel = "重试",
             onAction = onRetry
         )
@@ -482,7 +482,7 @@ private fun FanGroupTab(
         EmptyState(
             title = "暂无推荐粉丝圈",
             modifier = Modifier.fillMaxSize(),
-            description = "去详情页关注喜欢的作者吧",
+            description = "在作品详情页可关注作者",
             icon = Icons.Filled.Group
         )
         return
@@ -692,7 +692,7 @@ private fun FollowedMineTab(
         EmptyState(
             title = "还没有关注任何作者",
             modifier = Modifier.fillMaxSize(),
-            description = "在作者主页或详情页点「关注」即可",
+            description = "可在作者主页或作品详情页关注",
             icon = Icons.Filled.Group
         )
         return

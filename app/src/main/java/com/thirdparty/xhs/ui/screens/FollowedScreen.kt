@@ -81,7 +81,7 @@ fun FollowedScreen(
                 EmptyState(
                     title = "还没有关注任何作者",
                     modifier = Modifier.fillMaxSize(),
-                    description = "在作者主页或详情页点「关注」即可",
+                    description = "可在作者主页或作品详情页关注",
                     icon = Icons.Filled.Group
                 )
             }

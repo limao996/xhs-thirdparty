@@ -18,7 +18,7 @@ import com.thirdparty.xhs.ui.theme.Spacing
  * 用户会把"加载不出来"当成"内容就这些"。凡是能翻页的网络列表都要用它（硬约束 26）。
  */
 @Composable
-fun FooterRetry(onClick: (() -> Unit)?, label: String = "加载失败，点这里重试") {
+fun FooterRetry(onClick: (() -> Unit)?, label: String = "加载失败，点击重试") {
     val haptics = rememberHaptics()
     Box(
         Modifier.fillMaxWidth().padding(Spacing.m),

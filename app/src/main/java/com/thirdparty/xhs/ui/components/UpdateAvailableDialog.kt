@@ -85,9 +85,9 @@ fun UpdateAvailableDialog(
                 when (download) {
                     is UpdateDownloadState.Idle -> Text(
                         if (info.apkUrl != null) {
-                            "可以直接下载安装，也可以去浏览器打开发布页。"
+                            "可在应用内直接下载安装，也可前往发布页手动下载。"
                         } else {
-                            "这次只能去浏览器下载，发布页里没有直接的安装包地址。"
+                            "未找到安装包直链，请前往发布页下载。"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -114,7 +114,7 @@ fun UpdateAvailableDialog(
                     }
 
                     is UpdateDownloadState.Ready -> Text(
-                        "下载完成${download.versionName?.let { "（v$it）" } ?: ""}，点「安装」交给系统安装。",
+                        "下载完成${download.versionName?.let { "（v$it）" } ?: ""}，点击「安装」继续。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary
                     )

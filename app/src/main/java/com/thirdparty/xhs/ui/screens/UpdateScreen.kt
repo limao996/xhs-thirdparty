@@ -220,7 +220,7 @@ fun UpdateScreen(
                 TextButton(onClick = haptics.click {
                     showNotes = false
                     openUrl(context, newer.apkUrl ?: newer.pageUrl)
-                }) { Text("打开发布页") }
+                }) { Text("前往发布页") }
             },
             dismissButton = {
                 TextButton(onClick = haptics.click { showNotes = false }) { Text("关闭") }
@@ -324,9 +324,9 @@ private fun checkStatusText(state: UpdateUiState): String {
     if (state.checking) return "正在查询最新版本…"
     return when (val r = state.result) {
         null -> "还没有查过"
-        is UpdateChecker.Result.Newer -> "有新版 v${r.version}，你现在是 v${state.versionName}"
-        is UpdateChecker.Result.UpToDate -> "已是最新（v${r.current}）"
-        is UpdateChecker.Result.NoRelease -> "还没有发布过正式版本"
+        is UpdateChecker.Result.Newer -> "发现新版本 v${r.version}，当前版本 v${state.versionName}"
+        is UpdateChecker.Result.UpToDate -> "当前已是最新版本（v${r.current}）"
+        is UpdateChecker.Result.NoRelease -> "暂未发布正式版本"
         is UpdateChecker.Result.Failed -> "检查失败：${r.reason}"
     }
 }

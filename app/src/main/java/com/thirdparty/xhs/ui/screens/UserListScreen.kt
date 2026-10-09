@@ -91,7 +91,7 @@ fun UserListScreen(
             state.error && state.users.isEmpty() -> Box(Modifier.fillMaxSize().padding(pad)) {
                 EmptyState(
                     title = "加载失败",
-                    description = "网络或账号异常，点下面重试",
+                    description = "网络或账号异常，请重试",
                     actionLabel = "重试",
                     onAction = { viewModel.load(reset = true) },
                     modifier = Modifier.fillMaxSize(),
@@ -102,7 +102,7 @@ fun UserListScreen(
                 EmptyState(
                     title = if (mode == UserListMode.FOLLOWING) "还没有关注任何人" else "还没有粉丝",
                     modifier = Modifier.fillMaxSize(),
-                    description = if (mode == UserListMode.FOLLOWING) "在作者主页点「关注」即可"
+                    description = if (mode == UserListMode.FOLLOWING) "可在作者主页关注"
                     else "别人关注你之后会出现在这里",
                     icon = Icons.Filled.Group
                 )

@@ -174,7 +174,7 @@ fun BackupScreen(onBack: () -> Unit) {
             androidx.compose.material3.AlertDialog(
                 onDismissRequest = { confirmUpload = false },
                 title = { Text("上传备份到云端？") },
-                text = { Text("云端的备份会被覆盖，本机上的不受影响。") },
+                text = { Text("云端已有备份将被覆盖，不影响本机备份。") },
                 confirmButton = {
                     androidx.compose.material3.TextButton(onClick = rememberHaptics().confirmClick {
                         confirmUpload = false

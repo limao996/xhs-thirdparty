@@ -450,7 +450,7 @@ fun DetailScreen(
             state.missing && inherited == null -> Box(Modifier.fillMaxSize().padding(pad), contentAlignment = Alignment.Center) {
                 Text(
                     // 接口在海外：没开 VPN 时就会看到这句；网络恢复后详情页会自动重试
-                    "打不开这条内容：可能已下线、需要付费，或者线路访问不了服务器"
+                    "内容加载失败，可能已下线或需要付费"
                 )
             }
             else -> {
@@ -706,7 +706,7 @@ private fun DetailContent(
                 // than spin forever — the media plays on either way.
                 if (state.missing) {
                     Text(
-                        "打不开这条内容：可能已下线，或者需要付费",
+                        "内容加载失败，可能已下线或需要付费",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -726,7 +726,7 @@ private fun DetailContent(
                     onClick = {}, onLongClick = {
                         (ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager)
                             ?.setPrimaryClip(android.content.ClipData.newPlainText("title", item.title))
-                        android.widget.Toast.makeText(ctx.applicationContext, "已复制标题", android.widget.Toast.LENGTH_SHORT).show()
+                        android.widget.Toast.makeText(ctx.applicationContext, "标题已复制", android.widget.Toast.LENGTH_SHORT).show()
                     })
             )
             Spacer(Modifier.height(2.dp))
@@ -875,7 +875,7 @@ private fun DetailContent(
                     // 下一批评论失败：给一条能点的提示，而不是默默停住（硬约束 26）
                     FooterRetry(
                         onClick = { viewModel.loadMoreComments() },
-                        label = "评论加载失败，点这里重试"
+                        label = "评论加载失败，点击重试"
                     )
                 }
             }

@@ -204,7 +204,7 @@ fun SearchScreen(
                 state.empty -> EmptyState(
                     title = if (state.mode == SearchResultMode.USER) "没有找到相关作者" else "没有找到相关内容",
                     modifier = Modifier.fillMaxSize(),
-                    description = "换个关键词试试",
+                    description = "可尝试其他关键词",
                     icon = Icons.Filled.Search
                 )
                 // nothing searched yet and nothing in history -> tell the user what to do
@@ -213,7 +213,7 @@ fun SearchScreen(
                     modifier = Modifier.fillMaxSize(),
                     // the 内容 / 作者 tabs sit ABOVE this block, so the old
                     // "在下方切换" pointed the wrong way
-                    description = "输入关键词，在上方切换「内容」或「作者」",
+                    description = "输入关键词搜索，可切换「内容」或「作者」",
                     icon = Icons.Filled.Search
                 )
                 // No pull-to-refresh here: the list is produced by the query, so

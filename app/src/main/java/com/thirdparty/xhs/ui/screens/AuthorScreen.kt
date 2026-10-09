@@ -140,7 +140,7 @@ fun AuthorScreen(
                 EmptyState(
                     title = "加载失败",
                     modifier = Modifier.fillMaxSize(),
-                    description = "网络不通，或线路到不了海外服务器。网络恢复后会自动重试",
+                    description = "网络连接失败，网络恢复后将自动重试",
                     actionLabel = "重试",
                     onAction = { viewModel.retry() }
                 )
@@ -148,7 +148,7 @@ fun AuthorScreen(
                 EmptyState(
                     title = "作者还没有发布内容",
                     modifier = Modifier.fillMaxSize(),
-                    description = "换个作者看看吧",
+                    description = "可返回浏览其他作者",
                     icon = Icons.Filled.PhotoLibrary
                 )
             } else {

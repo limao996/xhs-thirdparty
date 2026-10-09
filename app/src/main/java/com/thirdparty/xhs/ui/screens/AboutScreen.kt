@@ -96,7 +96,7 @@ fun AboutScreen(
             ListSection("更新") {
                 ListItem(
                     headlineContent = { Text("检查更新") },
-                    supportingContent = { Text("去 GitHub 发布页看看有没有新版本") },
+                    supportingContent = { Text("在 GitHub 发布页查看最新版本") },
                     leadingContent = { Icon(Icons.Filled.Autorenew, null, tint = MaterialTheme.colorScheme.primary) },
                     trailingContent = {
                         Icon(

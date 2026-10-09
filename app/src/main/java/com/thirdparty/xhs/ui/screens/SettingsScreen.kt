@@ -128,8 +128,8 @@ fun SettingsScreen(
                     headlineContent = { Text("指纹解锁") },
                     supportingContent = {
                         Text(
-                            if (biometricAvailable) "每次打开或切回都要验指纹（或设备密码）"
-                            else "先在系统里录入指纹或设个锁屏密码，才能开启"
+                            if (biometricAvailable) "打开应用或从后台返回时，验证指纹或设备密码"
+                            else "设备未设置指纹或锁屏密码，无法启用"
                         )
                     },
                     leadingContent = { Icon(Icons.Filled.Lock, null, tint = MaterialTheme.colorScheme.primary) },
@@ -167,7 +167,7 @@ fun SettingsScreen(
 
                 ListItem(
                     headlineContent = { Text("VIP 到期自动切换") },
-                    supportingContent = { Text("当前账号的 VIP 用完时，自动换成有 VIP 的新账号") },
+                    supportingContent = { Text("当前账号的 VIP 即将到期时，自动切换到其他账号") },
                     leadingContent = { Icon(Icons.Filled.Autorenew, null, tint = MaterialTheme.colorScheme.primary) },
                     trailingContent = {
                         Switch(checked = autoOn, onCheckedChange = {
