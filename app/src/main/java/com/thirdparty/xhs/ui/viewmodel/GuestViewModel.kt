@@ -101,7 +101,7 @@ class GuestViewModel(private val repo: XhsRepository) : ViewModel() {
             onToast("已关闭：VIP 到期后不再自动切换")
             return
         }
-        onToast("已开启：VIP 到期后自动切到有 VIP 的账号")
+        onToast("已开启：VIP 到期后自动切换到其他账号")
         // apply immediately — the current account may already be expired
         viewModelScope.launch {
             _rotating.value = true

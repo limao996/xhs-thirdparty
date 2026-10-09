@@ -25,7 +25,7 @@ enum class CacheKind(val title: String, val hint: String) {
     ),
     IMAGE_MEMORY(
         "图片内存缓存",
-        "已解码图片占用的内存。清除后只会重新解码一次，不需要重新下载。"
+        "已解码图片占用的内存。清除后再次浏览会重新解码，无需重新下载。"
     ),
     TEMP_FILES(
         "其它临时文件",

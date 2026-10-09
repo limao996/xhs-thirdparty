@@ -204,7 +204,7 @@ fun CacheScreen(
 
             ListSection("说明") {
                 Text(
-                    "收藏、最近浏览、我关注的作者是你的数据，不是缓存，不会被这里清掉" +
+                    "收藏、最近浏览、关注的作者属于本地数据，不在清理范围内" +
                         "（要搬走请用「备份与恢复」）。视频是边看边下的，退出即释放，不占缓存。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

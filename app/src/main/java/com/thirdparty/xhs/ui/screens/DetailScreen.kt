@@ -1038,7 +1038,7 @@ private fun shareNote(context: android.content.Context, item: NoteItem?) {
         }
     }
     runCatching { context.startActivity(chooser) }.onFailure {
-        android.widget.Toast.makeText(context, "没有可用的分享目标", android.widget.Toast.LENGTH_SHORT)
+        android.widget.Toast.makeText(context, "未找到可分享的应用", android.widget.Toast.LENGTH_SHORT)
             .show()
     }
 }

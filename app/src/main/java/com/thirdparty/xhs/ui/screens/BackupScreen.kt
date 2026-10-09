@@ -87,7 +87,7 @@ fun BackupScreen(onBack: () -> Unit) {
         status = "$label…"
         scope.launch {
             status = runCatchingCancellable { block() }
-                .getOrElse { e -> "失败：${e.message ?: e.javaClass.simpleName}" }
+                .getOrElse { e -> "失败：${e.message ?: "请重试"}" }
             busy = false
         }
     }

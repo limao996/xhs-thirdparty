@@ -198,7 +198,7 @@ class XhsApi(private val context: Context, private val client: okhttp3.OkHttpCli
      * 而不是把"没网"和"服务器出错"混成一句话。
      */
     class NoUsableNetworkException(path: String) :
-        java.io.IOException("当前没有可用网络（$path）：需要能访问海外的线路")
+        java.io.IOException("当前无可用网络")
 
     /** 非 2xx 响应；4xx 不重试，见 [doCall]。 */
     class HttpStatusException(val code: Int, path: String) :

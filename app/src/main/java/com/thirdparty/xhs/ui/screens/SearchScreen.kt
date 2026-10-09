@@ -209,7 +209,7 @@ fun SearchScreen(
                 )
                 // nothing searched yet and nothing in history -> tell the user what to do
                 !state.searched && state.history.isEmpty() -> EmptyState(
-                    title = "搜索短视频 / 笔记 / 作者",
+                    title = "搜索作品 / 作者",
                     modifier = Modifier.fillMaxSize(),
                     // the 内容 / 作者 tabs sit ABOVE this block, so the old
                     // "在下方切换" pointed the wrong way

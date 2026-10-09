@@ -74,7 +74,7 @@ fun WatchLaterBar(onOpen: () -> Unit, modifier: Modifier = Modifier) {
             )
             Spacer(Modifier.width(Spacing.s))
             Text(
-                "稍后观看 $count 件 · 点这里查看",
+                "稍后观看 $count 件 · 点击查看",
                 style = MaterialTheme.typography.labelLarge
             )
         }

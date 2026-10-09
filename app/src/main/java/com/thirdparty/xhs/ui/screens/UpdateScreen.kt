@@ -54,10 +54,9 @@ import com.thirdparty.xhs.ui.viewmodel.UpdateUiState
 import com.thirdparty.xhs.ui.viewmodel.UpdateViewModel
 
 /**
- * 检查更新：独立页面，只做「查 GitHub Releases 上有没有新版本」这一件事。
+ * 检查更新：独立页面，只做「有没有新版本」这一件事。
  *
- * 检查走 `releases.atom`（网页 feed，不吃 GitHub API 的 60 次/小时额度，见 net/UpdateChecker），
- * 不带账号信息。发现新版后有两条路：**应用内下载并安装**（UpdateDownloader），或去浏览器打开发布页。
+ * 不带账号信息；有新版本时给两条路，应用内下载安装（UpdateDownloader）或前往发布页。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -200,9 +199,7 @@ fun UpdateScreen(
             }
 
             Text(
-                "只查询 GitHub 上的公开发布信息（走 releases.atom，不占用 API 额度）。发现新版后可以直接在本" +
-                    "应用内下载安装，也可以去浏览器打开发布页 —— 装不装由你决定。「没有正式版」「限流」「断网」" +
-                    "都会如实写在上面的状态里。",
+                "检查结果会显示在上方。发现新版本后，可以在此直接下载安装，也可以前往 GitHub 发布页手动下载。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = Spacing.l, vertical = Spacing.m)
@@ -229,12 +226,10 @@ fun UpdateScreen(
     }
 }
 
-/** 有更新时才出现的行动区：一个下载按钮 + 可选的更新说明入口。 */
 /**
  * 有更新时才出现的行动区。
  *
- * 主按钮是**应用内下载**（下完变成「安装」），旁边是「浏览器打开」与「更新说明」——
- * 两条路都给，用户自己挑（有人习惯用浏览器看发布页，有人嫌来回切麻烦）。
+ * 主按钮是「应用内下载」（下完变成「安装」），旁边是「前往发布页」与「更新说明」。
  */
 @Composable
 private fun NewerBanner(
@@ -281,7 +276,7 @@ private fun NewerBanner(
 
                 is com.thirdparty.xhs.ui.components.UpdateDownloadState.Ready -> {
                     Text(
-                        "安装包已下载完成，点「安装」交给系统安装器。",
+                        "安装包已下载完成，点击「安装」继续。",
                         style = MaterialTheme.typography.bodySmall
                     )
                     Spacer(Modifier.height(Spacing.xs))
@@ -311,7 +306,7 @@ private fun NewerBanner(
                     )
                 }
                 Spacer(Modifier.size(Spacing.s))
-                TextButton(onClick = haptics.click(onOpenPage)) { Text("浏览器打开") }
+                TextButton(onClick = haptics.click(onOpenPage)) { Text("前往发布页") }
                 if (onShowNotes != null) {
                     TextButton(onClick = haptics.click(onShowNotes)) { Text("更新说明") }
                 }
@@ -321,9 +316,9 @@ private fun NewerBanner(
 }
 
 private fun checkStatusText(state: UpdateUiState): String {
-    if (state.checking) return "正在查询最新版本…"
+    if (state.checking) return "正在检查…"
     return when (val r = state.result) {
-        null -> "还没有查过"
+        null -> "尚未检查"
         is UpdateChecker.Result.Newer -> "发现新版本 v${r.version}，当前版本 v${state.versionName}"
         is UpdateChecker.Result.UpToDate -> "当前已是最新版本（v${r.current}）"
         is UpdateChecker.Result.NoRelease -> "暂未发布正式版本"

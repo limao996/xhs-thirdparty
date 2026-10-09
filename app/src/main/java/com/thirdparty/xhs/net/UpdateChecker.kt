@@ -80,7 +80,7 @@ object UpdateChecker {
             // 没有可用网络就别打请求了：立即返回失败（界面不阻塞），
             // 等网络恢复（开 VPN）时 `App.bump()` 会清掉退避并立刻重查 —— 见 App.checkUpdateOnLaunch。
             if (!com.thirdparty.xhs.App.INSTANCE.hasValidatedNetwork()) {
-                return@withContext Result.Failed("当前没有可用网络（需要能访问海外的线路）")
+                return@withContext Result.Failed("当前无可用网络")
             }
             val viaAtom = runCatching { fetchAtom() }.getOrNull()
             if (viaAtom != null) {
@@ -172,7 +172,7 @@ object UpdateChecker {
             }
         } catch (e: java.io.IOException) {
             // 连不上（没有翻墙 / DNS 被污染 / 没有默认网络）都会走到这里
-            Result.Failed(e.message?.take(160) ?: "网络不可用")
+            Result.Failed(e.message?.take(160) ?: "当前无可用网络")
         } catch (e: org.json.JSONException) {
             Result.Failed("GitHub 应答解析失败")
         }
@@ -182,7 +182,7 @@ object UpdateChecker {
     internal fun parse(body: String, currentVersion: String): Result {
         val json = JSONObject(body)
         val tag = json.optString("tag_name").removePrefix("v").trim()
-        if (tag.isEmpty()) return Result.Failed("应答里没有 tag_name")
+        if (tag.isEmpty()) return Result.Failed("返回数据格式异常")
         val pageUrl = json.optString("html_url").ifEmpty { RELEASES_URL }
         val notes = json.optString("body").trim()
         val apkUrl = json.optJSONArray("assets")?.let { assets ->

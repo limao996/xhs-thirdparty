@@ -132,7 +132,7 @@ fun ProfileScreen(
                         )
                         Spacer(Modifier.height(Spacing.xs))
                         Text(
-                            if (state.error) "点击下方「切换游客账号」重试"
+                            if (state.error) "可切换游客账号后重试"
                             else "游客 ID：${state.profile?.userId ?: 0}",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -260,7 +260,7 @@ fun ProfileScreen(
         if (onOpenUpdate != null) {
             ProfileEntry(
                 Icons.Filled.Autorenew, "检查更新",
-                "到 GitHub Releases 看有没有新版本",
+                "查看 GitHub 发布页的最新版本",
                 onOpenUpdate
             )
         }

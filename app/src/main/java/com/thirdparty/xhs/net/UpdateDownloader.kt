@@ -62,7 +62,7 @@ object UpdateDownloader {
     ): Outcome = withContext(Dispatchers.IO) {
         // 外部数据：地址必须还是 GitHub 的，否则不下载
         if (!UpdateChecker.isTrustedDownloadUrl(url)) {
-            return@withContext Outcome.Failed("下载地址不在可信域名内，已中止")
+            return@withContext Outcome.Failed("下载地址不可信，已中止")
         }
         val dest = targetFile(context, version)
         val tmp = File(dest.parentFile, dest.name + ".part")
@@ -72,9 +72,9 @@ object UpdateDownloader {
                 .build()
             client.newCall(request).await().use { response ->
                 if (!response.isSuccessful) {
-                    return@withContext Outcome.Failed("下载失败 HTTP ${response.code}")
+                    return@withContext Outcome.Failed("下载失败（HTTP ${response.code}）")
                 }
-                val body = response.body ?: return@withContext Outcome.Failed("下载失败：应答为空")
+                val body = response.body ?: return@withContext Outcome.Failed("下载内容为空")
                 val total = body.contentLength()
                 body.byteStream().use { input ->
                     tmp.outputStream().use { output ->
@@ -96,21 +96,21 @@ object UpdateDownloader {
         }
         if (!tmp.exists() || tmp.length() <= 0L) {
             tmp.delete()
-            return@withContext Outcome.Failed("下载到的文件是空的")
+            return@withContext Outcome.Failed("下载内容为空")
         }
         if (dest.exists()) dest.delete()
         if (!tmp.renameTo(dest)) {
             tmp.delete()
-            return@withContext Outcome.Failed("无法保存安装包")
+            return@withContext Outcome.Failed("安装包保存失败")
         }
         val info = packageInfo(context, dest)
         if (info == null) {
             dest.delete()
-            return@withContext Outcome.Failed("下载到的不是有效安装包")
+            return@withContext Outcome.Failed("安装包无法识别")
         }
         if (info.first != context.packageName) {
             dest.delete()
-            return@withContext Outcome.Failed("安装包与本应用包名不一致，已删除")
+            return@withContext Outcome.Failed("安装包与本应用不匹配，已删除")
         }
         Outcome.Ready(dest, info.second)
     }
