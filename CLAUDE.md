@@ -17,4 +17,4 @@
 11. `minSdk` 保持 26；改 Room schema 必须写真迁移（现存 `MIGRATION_1_2` / `MIGRATION_2_3`），不要挂 `fallbackToDestructiveMigration()`。
 12. **发布正式包按顺序来**：先改版本号 → 构建正式包 → 本机实测确认 → 最后才推送并发布 Release；发布批次的代码提交先留在本地。
 
-完整条目（27 条）见 [AGENTS.md](AGENTS.md) §0。
+完整条目（28 条，另含 5b / 17b 两条细分）见 [AGENTS.md](AGENTS.md) §0。
