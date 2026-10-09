@@ -24,6 +24,36 @@ cp local.properties.example local.properties
 # Debug（包名 com.thirdparty.xhs.debug）
 ./gradlew assembleDebug          # Windows: gradlew.bat assembleDebug
 
+# 发布流程（顺序不能变，硬约束 28）
+
+用户 2026-10-10 明确要求：「以后发布正式包要先改版本号构建正式包，确定没问题了再推送并发布」。
+**先推后验**的代价是：一旦正式包有问题，远端已经有坏版本，撤回要动 tag、还得再发一版。所以顺序固定成四步：
+
+```powershell
+# ① 先改版本号（Release 资产名与 tag 都由它推导：xhs-thirdparty-<version>-release.apk / v<version>）
+#    编辑 app/build.gradle 的 def appVersionName = 'x.y.z'
+#    versionCode 不用手写（时间戳表达式推导，天然单调递增）
+
+# ② 构建正式包
+$env:JAVA_HOME='D:\Scoop\apps\temurin17-jdk\current'
+& "$env:USERPROFILE\.gradle\wrapper\dists\gradle-9.8.0-bin\*\gradle-9.8.0\bin\gradle.bat" :app:assembleRelease
+
+# ③ 本机实测确认没问题（三件事都要做）
+#    - 覆盖安装：adb -s emulator-5554 install -r app\build\outputs\apk\release\app-release.apk
+#    - 冒烟：冷启动有内容、crash 0、dumpsys package 的 versionName 是新版本号
+#    - 验签：apksigner verify --print-certs，证书 SHA-256 必须与上一版一致（否则老用户覆盖不了）
+#    另外核对 aapt2 dump badging 的 versionCode 比上一版大
+
+# ④ 全部通过之后，才推送并发布
+git push origin main
+gh release create v<version> <apk> --title 'v<version>' --notes-file <notes> --latest
+# 发布后核验：资产地址 HEAD 200 / Content-Length 与本地一致；releases.atom 首条是新 tag
+#（应用内检查更新走 feed，feed 里能看到才算真的发布成功）
+```
+
+手机与模拟器同时连着时，`adb` 必须显式 `-s emulator-5554`（或用 `$env:ANDROID_SERIAL`）：
+本项目验证一律在模拟器上做，**不要动用户的真机**。
+
 # Release（R8 + 资源压缩 + 自签名）
 ./gradlew assembleRelease
 
