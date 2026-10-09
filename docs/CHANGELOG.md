@@ -631,6 +631,24 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 
 
+### 阶段五十 · 发布 v1.3.2（正式包 + 推送 + Release）
+
+用户指令：「推送并发布正式包」。
+
+| 项 | 结果 |
+| --- | --- |
+| 推送 | 7 个本地提交推到 `origin/main`（`01d8c71 → 7c9b37e`） |
+| 版本 | `versionName` `1.3.1 → 1.3.2`；`versionCode` 仍按时间戳表达式推导 = `778804`（上一版 `568071`，单调递增 ✓） |
+| 产物 | `app-release.apk` **`3,372,530 B`（3.22 MB）** / md5 `2a4c92887c25d487ae6191caf3a7ecff` / sha256 `ad21f18d3c45498a7316207f177943c5c886bb45b460f0f0e8d697d1bb80fdba` |
+| 签名 | `apksigner verify`：**v2 方案通过**；证书 SHA-256 `6cb35809…1439`，与 `v1.3.1` **完全一致** → 老用户可直接覆盖升级 |
+| 装机 | 模拟器（emulator-5554）`1.3.1 → 1.3.2` 覆盖安装 Success；`dumpsys package` → `versionName=1.3.2`；冷启动有内容、`crash: 0` |
+| Release | [v1.3.2](https://github.com/limao996/xhs-thirdparty/releases/tag/v1.3.2)（**Latest**、非 draft、非 prerelease），资产 `xhs-thirdparty-1.3.2-release.apk` `3372530 B` `state=uploaded` |
+| 更新链路核验 | 应用内拼出的地址 `…/releases/download/v1.3.2/xhs-thirdparty-1.3.2-release.apk` → **HTTP 200**、`Content-Length=3372530`、`application/vnd.android.package-archive`；`releases.atom` 首条为 `v1.3.2`（应用内检查更新走 feed） |
+| 本轮内容 | 详情页频繁重建、推荐页一直 loading、发现页「没有可用的分类」、四处加载态初值、文案 9 处、权限审查、图标去锯齿 |
+
+**注意**：本次操作设备时 `adb devices` 里有用户的真机（PKX110）与模拟器两台，所有安装/验证都显式指定
+`emulator-5554`，**没有碰用户手机**。
+
 ### 阶段四十九 · 图标去锯齿（设计不变，只改产出方式）
 
 用户反馈「icon 的锯齿也太严重了吧」。查下来是**产出方式**的问题，跟设计无关：

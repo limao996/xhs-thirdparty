@@ -68,7 +68,7 @@ Get-FileHash $apk -Algorithm MD5                          # 分发时贴这个�
 | --- | --- |
 | 大小 / md5 | `3,334,005 B` / `9bb147ebd31838af3a7066a8278ec7c0` |
 | sha256 | `235cf4f306e1dd1823e4bab8a44fdd11a4ed43545ca569c6a5321e2bfd48ffbd` |
-| versionName / versionCode | **`1.3.1`**（已发布：[v1.3.1](https://github.com/limao996/xhs-thirdparty/releases/tag/v1.3.1)；上一版 `1.3.0` / `469201`） |
+| versionName / versionCode | **`1.3.2`**（已发布：[v1.3.2](https://github.com/limao996/xhs-thirdparty/releases/tag/v1.3.2)；上一版 `1.3.1` / `568071`，更早 `1.3.0` / `469201`） |
 | minSdk / targetSdk / compileSdk | `26` / `37` / `37` |
 | 签名 | v2 scheme（v1/v3 未启用），`CN=ThirdParty XHS Client`，RSA 2048 |
 | 权限（合并后） | `INTERNET`、`ACCESS_NETWORK_STATE`、`WAKE_LOCK`、`REQUEST_INSTALL_PACKAGES`（应用内更新用）+ `USE_BIOMETRIC`、`USE_FINGERPRINT`（biometric 库合入）+ `com.thirdparty.xhs.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`（androidx 合入） |
@@ -104,7 +104,8 @@ CI（`.github/workflows/android.yml`）在 push / PR 上跑 `assembleDebug` → 
 
 `versionName` 变了就更新 `docs/CHANGELOG.md` 的统计表与 `docs/ai/CONTEXT.md`。
 
-发布留档：`v1.3.1`（`3,334,005 B` / md5 `9bb147ebd31838af3a7066a8278ec7c0` / sha256 `235cf4f306e1dd1823e4bab8a44fdd11a4ed43545ca569c6a5321e2bfd48ffbd` / versionCode `568071`，2026-10-07；资产名 `xhs-thirdparty-1.3.1-release.apk`，[下载](https://github.com/limao996/xhs-thirdparty/releases/download/v1.3.1/xhs-thirdparty-1.3.1-release.apk)）；`v1.3.0`（`3,317,161 B` / md5 `0bf90e90feb084d9f7010a490d4b43a5` / sha256 `2a77c42e9a2eca05ae4fa78e15561c27bf0471814aa23744d84bb16df59747f2` / versionCode `469201`，2026-10-06）；`v1.2.1`（`3,306,226 B` / md5 `6d799ca08d1fab281aef854961c70057` / versionCode `326862`）；`v1.2.0`（`3,289,838 B` / md5 `1ea558980a0f9d6085c232d0fc6b0462` / versionCode `321075`）。
+发布留档：`v1.3.2`（`3,372,530 B` / md5 `2a4c92887c25d487ae6191caf3a7ecff` / sha256 `ad21f18d3c45498a7316207f177943c5c886bb45b460f0f0e8d697d1bb80fdba` / versionCode `778804`，2026-10-10；证书 SHA-256 `6cb3580937ffa195ea5ee06df2aca5c56a818e7c39123bcf478e2a93acdb1439…`，与 `v1.3.1` **一致**（老用户可直接覆盖升级）；资产名 `xhs-thirdparty-1.3.2-release.apk`，[下载](https://github.com/limao996/xhs-thirdparty/releases/download/v1.3.2/xhs-thirdparty-1.3.2-release.apk)）；
+`v1.3.1`（`3,334,005 B` / md5 `9bb147ebd31838af3a7066a8278ec7c0` / sha256 `235cf4f306e1dd1823e4bab8a44fdd11a4ed43545ca569c6a5321e2bfd48ffbd` / versionCode `568071`，2026-10-07；资产名 `xhs-thirdparty-1.3.1-release.apk`，[下载](https://github.com/limao996/xhs-thirdparty/releases/download/v1.3.1/xhs-thirdparty-1.3.1-release.apk)）；`v1.3.0`（`3,317,161 B` / md5 `0bf90e90feb084d9f7010a490d4b43a5` / sha256 `2a77c42e9a2eca05ae4fa78e15561c27bf0471814aa23744d84bb16df59747f2` / versionCode `469201`，2026-10-06）；`v1.2.1`（`3,306,226 B` / md5 `6d799ca08d1fab281aef854961c70057` / versionCode `326862`）；`v1.2.0`（`3,289,838 B` / md5 `1ea558980a0f9d6085c232d0fc6b0462` / versionCode `321075`）。
 
 ## 4. 签名
 
