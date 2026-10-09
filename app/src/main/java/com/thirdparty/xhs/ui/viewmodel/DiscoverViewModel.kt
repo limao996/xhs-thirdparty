@@ -26,7 +26,11 @@ enum class DiscoverTab(val label: String) {
 /** Waterfall feed for a single category (v2/home/discover-note with category_id). */
 data class FeedSection(
     val items: List<NoteItem> = emptyList(),
-    val firstLoading: Boolean = false,
+    /**
+     * 首屏加载中。**初值 true**：切分类 / 首次进入时都有一轮请求在路上，
+     * 初值 false 会让第一帧显示「这个分类还没有内容」。
+     */
+    val firstLoading: Boolean = true,
     val hasMore: Boolean = true,
     /** true while the next page is in flight (drives the trailing spinner) */
     val loadingMore: Boolean = false,
@@ -54,7 +58,8 @@ data class DiscoverUiState(
     val selectedCategory: Int = 0,
     val feed: FeedSection = FeedSection(),
     val fanGroup: List<FanGroupAuthor> = emptyList(),
-    val fanGroupLoading: Boolean = false,
+    /** 初值 true，同上：粉丝圈请求在进入页面后立刻发出，先显示加载而不是「暂无推荐粉丝圈」。 */
+    val fanGroupLoading: Boolean = true,
     val fanGroupError: Boolean = false,
     /** true while the next batch of fan-group authors is in flight */
     val fanGroupMore: Boolean = false,
@@ -98,8 +103,10 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
     init {
         // 关注 tab 的列表要跟着其它页面的关注操作走
         viewModelScope.launch { repo.followVersion.collect { refreshFollowed() } }
+        // 分类与粉丝圈各自一趟请求，**并行**发出：以前写成一条顺序链（分类返回后才开始取自己的
+        // user id 与粉丝圈），粉丝圈的空态窗口被拉长到整个分类往返之后。
+        viewModelScope.launch { loadCategories() }
         viewModelScope.launch {
-            loadCategories()
             myId = runCatchingCancellable { repo.myUserId() }.getOrDefault(0)
             loadFanGroup()
         }

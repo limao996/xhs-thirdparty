@@ -582,6 +582,13 @@
 - 自查清单（本轮同时核对过，均 OK）：`VideoFeedScreen`（先 `firstLoading`）、`AuthorScreen`、
   `SearchScreen`、`UserListScreen`、`DiscoverTabScreen` 的网格与粉丝圈页、`CacheScreen`、
   `ProfileScreen`、`LoadMoreFooter`（只在列表非空时出现）。
+- **初值也算**：区分「还没回来」靠的是 loading 标记的**初值**。凡是在 `init` 或进页面时就发请求的页面，
+  `xxxLoading` 的初值必须是 `true`，否则第一帧就落到「空」分支。2026-10-09 一次扫出四处：
+  `VideoFeedUiState.firstLoading`（推荐页闪「暂无推荐内容」）、`FeedSection.firstLoading`
+  （分类网格闪「这个分类还没有内容」）、`DiscoverUiState.fanGroupLoading`（粉丝圈闪「暂无推荐粉丝圈」）、
+  `UpdateUiState.checking`（检查更新页闪「尚未检查」）。
+- 顺带：`DiscoverViewModel` 的 init 以前是「取分类，取自己的 user id，取粉丝圈」一条顺序链，
+  粉丝圈的空态窗口被拉长到整个分类往返之后；改成两个协程并行。
 - 验证：临时给分类请求加 4 秒延迟，进发现页截图 → 内容是 M3 的 loading 组件、文本 dump 里
   没有「没有可用的分类」；去掉延迟后连拍 5 次 dump，字符串一次都没出现，chip 正常出现。
 

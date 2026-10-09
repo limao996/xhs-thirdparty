@@ -19,7 +19,8 @@ import kotlinx.coroutines.launch
 data class UpdateUiState(
     val versionName: String = BuildConfig.VERSION_NAME,
     val versionCode: Int = BuildConfig.VERSION_CODE,
-    val checking: Boolean = false,
+    /** 进页面即触发一次检查，所以初值是"正在检查"（否则第一帧闪「尚未检查」）。 */
+    val checking: Boolean = true,
     val result: UpdateChecker.Result? = null,
     val checkedAt: Long = 0L
 )

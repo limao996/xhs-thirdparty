@@ -16,7 +16,11 @@ import com.thirdparty.xhs.common.runCatchingCancellable
 /** UI state for the immersive short-video feed. */
 data class VideoFeedUiState(
     val items: List<NoteItem> = emptyList(),
-    val firstLoading: Boolean = false,
+    /**
+     * 首屏加载中。**初值必须是 true**：进页面时第一次请求就发出去了，
+     * 初值 false 会让第一帧落到"空"分支，闪一下「暂无推荐内容」（用户 2026-10-09 报的就是这个）。
+     */
+    val firstLoading: Boolean = true,
     val error: Boolean = false
 )
 

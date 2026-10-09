@@ -631,6 +631,34 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 
 
+### 阶段四十五 · 「加载中 / 失败 / 空」全量审查（推荐页同类问题）
+
+用户指出推荐页也有同样的毛病，要求全面审查。这次不看单个页面，而是把**所有 UiState 的 loading 初值**与**所有状态分支的顺序**一起过一遍。
+
+**初值不对的有 4 处（全部修掉）**
+
+| 状态 | 初值 | 症状 |
+| --- | --- | --- |
+| `VideoFeedUiState.firstLoading` | false，改为 **true** | 进推荐页第一帧闪「暂无推荐内容」 |
+| `FeedSection.firstLoading` | false，改为 **true** | 进发现页或切分类第一帧闪「这个分类还没有内容」 |
+| `DiscoverUiState.fanGroupLoading` | false，改为 **true** | 切到粉丝圈第一帧闪「暂无推荐粉丝圈」 |
+| `UpdateUiState.checking` | false，改为 **true** | 进检查更新页第一帧闪「尚未检查」 |
+
+**顺带修掉的顺序链**：`DiscoverViewModel.init` 原来是「取分类，取自己的 user id，取粉丝圈」一条顺序链，粉丝圈的空态窗口被拉长到整个分类往返之后；改成两个协程并行。
+
+**审查为 OK 的（不改）**：`AuthorUiState.notesLoading`、`CacheUiState.loading`、`DetailUiState.loading`、`DiscoverUiState.categoriesLoading`（上一轮已修）、`LocalListUiState.loading`、`ProfileUiState.loading`、`UserListUiState.loading`、`WatchLaterUiState.loading` 初值都是 true；`SearchUiState.searching` 初值 false 是**对的**（还没搜过不是「加载中」，页面给的是搜索提示）；`FollowedMineTab` 读本地库、没有网络态。各屏幕的分支顺序也逐一核过，都是 `loading → error → empty`；唯一的例外是分页失败条，它只在列表非空时出现，且失败优先于转圈。
+
+**验证（模拟器 API 34，临时给三处请求各加 5 秒延迟以暴露第一帧）**
+
+| 页面 | 窗口期内 |
+| --- | --- |
+| 推荐 | 内容区只有 loading，**没有**「暂无推荐内容」「推荐加载失败」 |
+| 发现（网格） | 没有「这个分类还没有内容」「内容加载失败」 |
+| 粉丝圈 | 没有「暂无推荐粉丝圈」 |
+| 检查更新 | 没有「尚未检查」 |
+
+临时延迟已全部删除（`TEMP-VERIFY` 残留 = 0）。`assembleDebug` + `testDebugUnitTest` + `lintDebug` 通过。档案：GOTCHAS H24 补「初值也算」一节。
+
 ### 阶段四十四 · 修回上一轮引入的回归：发现页一进来就「没有可用的分类」
 
 用户反馈：一进发现页就显示「没有可用的分类」，而且加载时没有 loading。
