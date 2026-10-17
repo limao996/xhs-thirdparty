@@ -8,7 +8,7 @@
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.1.21-7F52FF?logo=kotlin&logoColor=white)
 ![Material 3](https://img.shields.io/badge/Material%203-Expressive-6750A4)
 ![License](https://img.shields.io/badge/License-MIT-FFC73D)
-[![Release](https://img.shields.io/github/v/release/limao996/xhs-thirdparty?label=release&color=success)](https://github.com/limao996/xhs-thirdparty/releases/latest)
+[![Release](https://img.shields.io/github/v/release/limao996/xhs-thirdparty?label=release&color=success&sort=semver&display_name=tag)](https://github.com/limao996/xhs-thirdparty/releases/latest)
 
 ## 功能
 
