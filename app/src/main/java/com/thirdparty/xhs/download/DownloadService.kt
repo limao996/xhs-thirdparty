@@ -73,6 +73,10 @@ class DownloadService : Service() {
          */
         const val EXTRA_OPEN_DOWNLOADS = "com.thirdparty.xhs.download.OPEN_DOWNLOADS"
 
+        const val ACTION_PAUSE_WORK = "com.thirdparty.xhs.download.PAUSE_WORK"
+        const val ACTION_RESUME_WORK = "com.thirdparty.xhs.download.RESUME_WORK"
+        const val EXTRA_NOTE_ID = "noteId"
+
         /** 启动（或唤醒）服务。已在跑时不会重复建服务。 */
         fun start(context: Context) {
             val intent = Intent(context, DownloadService::class.java).setAction(ACTION_START)
@@ -205,6 +209,10 @@ class DownloadService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var foregroundStarted = false
 
+    /** 每个作品的临时通知 id（`noteId -> id`）：作品结束后收掉。前台那条固定用 [NOTIFICATION_ID]。 */
+    private val workNoticeIds = mutableMapOf<Long, Int>()
+    private var nextNoticeId = 4810
+
     /**
      * 故意**不设超时**：下载本身可能持续几十分钟（大视频还要软件重编码），超时到点被系统释放会让
      * 编码在后台再次被挂起 —— 这正是要修的 bug。锁的边界交给服务生命周期：`onDestroy` 释放，
@@ -252,6 +260,7 @@ class DownloadService : Service() {
                     return@collectLatest
                 }
                 val notification = buildNotification(snapshot)
+                refreshWorkNotifications(snapshot)
                 if (!foregroundStarted) {
                     promote(notification)
                 } else {
@@ -280,6 +289,10 @@ class DownloadService : Service() {
         when (intent?.action) {
             ACTION_PAUSE_ALL -> DownloadEngine.pauseAll()
             ACTION_RESUME_ALL -> DownloadEngine.resumeAll()
+            ACTION_PAUSE_WORK -> intent.getLongExtra(EXTRA_NOTE_ID, -1L)
+                .takeIf { it > 0 }?.let { DownloadEngine.pauseWork(it) }
+            ACTION_RESUME_WORK -> intent.getLongExtra(EXTRA_NOTE_ID, -1L)
+                .takeIf { it > 0 }?.let { DownloadEngine.resumeWork(it) }
             ACTION_CANCEL -> intent.getLongExtra(EXTRA_TASK_ID, -1L)
                 .takeIf { it > 0 }?.let { DownloadEngine.cancel(it) }
             // 只有显式 START 动作才排一次队（onStartCommand 可能被系统重放，不能每次都排）
@@ -291,9 +304,111 @@ class DownloadService : Service() {
     override fun onDestroy() {
         scope.cancel()
         releaseWakeLock()
+        // 服务退出时把"每个作品一条"的临时通知收掉（完成通知 FINISHED_NOTIFICATION_ID 留着让用户点）
+        runCatching {
+            val manager = NotificationManagerCompat.from(this)
+            workNoticeIds.values.forEach { id -> manager.cancel(id) }
+            workNoticeIds.clear()
+        }
         super.onDestroy()
     }
 
+    /**
+     * 按快照把**每个未结束的作品**刷成一条通知（用户 2026-10-17：不要挤在一条通知里）。
+     *
+     * - 前台服务那条（[NOTIFICATION_ID]）复用**第一件作品**的通知内容：Android 只允许服务挂一条常驻通知，
+     *   其余作品各占一条普通通知（id 由 [workNoticeIds] 按需分配，作品结束后立刻收掉）；
+     * - 每条通知只讲自己那件作品：标题 = 作品标题，正文 = 它的进度行，进度条 = 它自己的分片/张数比例；
+     * - 没有作品时退回一条"准备中"的兜底通知（`startForeground` 必须马上有内容）。
+     */
+    private fun refreshWorkNotifications(snapshot: DownloadEngine.Snapshot) {
+        val granted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(
+                this,
+                android.Manifest.permission.POST_NOTIFICATIONS
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!granted) return
+
+        val manager = NotificationManagerCompat.from(this)
+        val liveNotes = snapshot.works.map { it.noteId }.toSet()
+        // 结束的作品：收掉它的通知
+        workNoticeIds.filterKeys { it !in liveNotes }.forEach { (noteId, id) ->
+            runCatching { manager.cancel(id) }
+            workNoticeIds.remove(noteId)
+        }
+        snapshot.works.forEachIndexed { index, work ->
+            val id = if (index == 0) {
+                NOTIFICATION_ID
+            } else {
+                workNoticeIds.getOrPut(work.noteId) { nextNoticeId++ }
+            }
+            workNoticeIds[work.noteId] = id
+            runCatching { manager.notify(id, buildWorkNotification(work)) }
+        }
+    }
+
+    /**
+     * 一件作品的通知：标题 = 作品标题；正文 = 它的进度 + 状态；进度条 = 它的真实进度。
+     *
+     * 处理阶段（合并 / 转封装 / 保存）没有可数进度 → 用不确定进度条，并在正文补「已用 N 秒」与
+     * 「视频较大，可能需要几分钟」（用户之前报过"卡住"与"进度条没效果"）。
+     */
+    private fun buildWorkNotification(work: DownloadEngine.WorkNotice): Notification {
+        val open = pendingOpenDownloads()
+        val pause = PendingIntent.getService(
+            this,
+            (work.noteId % 1000).toInt() * 2,
+            Intent(this, DownloadService::class.java)
+                .setAction(ACTION_PAUSE_WORK)
+                .putExtra(EXTRA_NOTE_ID, work.noteId),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val resume = PendingIntent.getService(
+            this,
+            (work.noteId % 1000).toInt() * 2 + 1,
+            Intent(this, DownloadService::class.java)
+                .setAction(ACTION_RESUME_WORK)
+                .putExtra(EXTRA_NOTE_ID, work.noteId),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val state = when {
+            work.failed -> "部分失败"
+            work.running -> "下载中"
+            work.paused -> "已暂停"
+            else -> "排队中"
+        }
+        val text = DownloadCopy.runningText(
+            detail = work.detail,
+            stageSeconds = if (work.processing) work.stageSeconds else 0,
+            slowHint = DownloadStage.slowHint(
+                if (work.processing) DownloadStage.REMUXING else "",
+                work.stageSeconds
+            )
+        )
+        val determinate = work.running && !work.processing && work.total > 0
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_download)
+            .setContentTitle(work.title.ifBlank { "下载" })
+            .setContentText(text)
+            .setSubText(state)
+            .setProgress(
+                if (determinate) work.total else 0,
+                if (determinate) work.done.coerceIn(0, work.total) else 0,
+                !determinate
+            )
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setContentIntent(open)
+        if (work.paused) {
+            builder.addAction(0, "继续", resume)
+        } else {
+            builder.addAction(0, "暂停", pause)
+        }
+        return builder.build()
+    }
+
+    /** 把一条通知挂到前台服务上（API 34+ 必须声明服务类型，否则 `startForeground` 抛异常）。 */
     private fun promote(notification: Notification) {
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
@@ -307,75 +422,27 @@ class DownloadService : Service() {
         foregroundStarted = true
     }
 
-    private fun buildNotification(snapshot: DownloadEngine.Snapshot): Notification {
-        val open = PendingIntent.getActivity(
-            this,
-            0,
-            Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-        val pause = PendingIntent.getService(
-            this,
-            1,
-            Intent(this, DownloadService::class.java).setAction(ACTION_PAUSE_ALL),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-        val resume = PendingIntent.getService(
-            this,
-            2,
-            Intent(this, DownloadService::class.java).setAction(ACTION_RESUME_ALL),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-        val done = snapshot.doneBytes.toInt()
-        val total = maxOf(snapshot.totalBytes.toInt(), 1)
-        val stageLabel = DownloadStage.label(snapshot.currentStage)
-        val processing = DownloadStage.isProcessing(snapshot.currentStage)
-        val running = snapshot.running > 0 || snapshot.queued > 0
+    private fun buildNotification(snapshot: DownloadEngine.Snapshot): Notification =
+        snapshot.works.firstOrNull()?.let { buildWorkNotification(it) } ?: buildIdleNotification()
 
-        // 文案统一成"作品"口径（用户 2026-10-17：原来的通知太乱）：
-        //   标题 = 状态 + 在做哪件作品；正文 = 这件作品的进度行（与下载管理页同一套口径）；副标题 = 作品数
-        val title = when {
-            running -> DownloadCopy.runningTitle(snapshot.currentTitle, snapshot.running)
-            snapshot.worksTotal > 0 -> "下载已暂停"
-            else -> "下载任务已结束"
-        }
-        val text = if (running) {
-            // 处理阶段没有可数进度：用"已用 N 秒"和"视频较大"提示，而不是干杵着
-            DownloadCopy.runningText(
-                currentDetail = snapshot.currentDetail,
-                // 只在"没有可数进度"的处理阶段才贴阶段标签：拉切片/拉图时进度行本身已经说明在干什么，
-                // 再补一个「· 下载中」只是噪音（标题里已经有「下载中」了）
-                stageLabel = stageLabel?.takeIf { processing },
-                slowHint = DownloadStage.slowHint(snapshot.currentStage, 0)
-            )
-        } else {
-            "点开可继续未完成的作品"
-        }
-        val subText = DownloadCopy.worksSubText(snapshot.worksDone, snapshot.worksTotal)
-
-        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+    /** 没有任何作品时的兜底通知（`startForeground` 必须立刻有内容）。 */
+    private fun buildIdleNotification(): Notification =
+        NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_download)
-            .setContentTitle(title)
-            .setContentText(text)
-            // 处理阶段（没有可数进度）用不确定进度条：动着的条本身就是"还活着"的信号
-            .setProgress(
-                total,
-                done,
-                !running || processing
-            )
+            .setContentTitle("下载")
+            .setContentText("正在准备…")
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setContentIntent(open)
-            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-        subText?.let { builder.setSubText(it) }
-        // 只放"当前点得动"的那个动作：全都在暂停时不该出现「暂停全部」，反之亦然
-        if (snapshot.running > 0 || snapshot.queued > 0) {
-            builder.addAction(0, "暂停全部", pause)
-        } else {
-            builder.addAction(0, "继续全部", resume)
-        }
-        return builder.build()
-    }
+            .setContentIntent(pendingOpenDownloads())
+            .build()
+
+    private fun pendingOpenDownloads(): PendingIntent = PendingIntent.getActivity(
+        this,
+        0,
+        Intent(this, MainActivity::class.java)
+            .putExtra(EXTRA_OPEN_DOWNLOADS, true),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+    )
 
     /** 库里还有没有未完成的任务（停止服务的判据以库为准，避免内存摘要滞后导致误停）。 */
     private suspend fun noUnfinishedWork(): Boolean =

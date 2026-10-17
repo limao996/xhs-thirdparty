@@ -51,6 +51,18 @@ data class DownloadGroup(
         it.status == DownloadStatus.RUNNING && DownloadStage.isProcessing(it.stage)
     }
 
+    /**
+     * 进度计量单位数：视频看**分片数**、图集看**图片张数**（通知里进度条就用它算比例）。
+     *
+     * 不要用"条目数"：图集是每个作品一个条目、视频也是，那样永远只有 0% 和 100% 两档。
+     */
+    fun progressUnits(): Int =
+        video?.let { if (it.totalSegments > 0) it.totalSegments else 1 } ?: images.size
+
+    /** 已完成的进度计量单位数（同上口径）。 */
+    fun doneProgressUnits(): Int =
+        video?.let { it.doneSegments } ?: doneImages
+
     /** 已完成的图片张数（列表里显示「图片 12/43 张」用）。 */
     val doneImages: Int get() = images.count { it.status == DownloadStatus.DONE }
 

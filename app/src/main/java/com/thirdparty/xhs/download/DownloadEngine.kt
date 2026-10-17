@@ -102,9 +102,43 @@ object DownloadEngine {
         val currentDetail: String = "",
         /** 当前作品的标题（通知标题用）。 */
         val currentTitle: String = "",
-        /** 作品总数 / 已完成作品数（通知的"已完成 x / y 件作品"）。 */
+        /** 作品总数 / 已完成作品数（通知的「已完成 x / y 件作品」）。 */
         val worksTotal: Int = 0,
-        val worksDone: Int = 0
+        val worksDone: Int = 0,
+        /**
+         * 当前单元的**真实进度**（视频看分片数、图集看图片张数）。
+         *
+         * 原来的 `totalBytes/doneBytes` 名字骗人：它们其实是"未完成条目数 / 已完成条目数"，
+         * 单个视频时就是 1 和 0 —— 进度条永远停在 0%（用户 2026-10-17：「进度条没效果」）。
+         */
+        val progressDone: Int = 0,
+        val progressTotal: Int = 0,
+        /** 处理阶段（合并 / 转封装 / 保存）已经过去多少秒；非处理阶段为 0。 */
+        val stageSeconds: Int = 0,
+        /**
+         * **每个未结束的作品一条通知**用的数据（用户 2026-10-17：不要挤在一条通知里）。
+         *
+         * 顺序 = 作品在库里的先后（新到的排在前面由 DAO 决定），服务端按这个顺序分配通知 id。
+         */
+        val works: List<WorkNotice> = emptyList()
+    )
+
+    /**
+     * 一件作品在通知里的全部信息。**只讲这一件作品**，不带全局计数
+     * （全局进度放在前台那条的副标题里，见 [DownloadService]）。
+     */
+    data class WorkNotice(
+        val noteId: Long,
+        val title: String,
+        /** 这件作品的进度行，如 `图片 26/43 张` / `视频 5/14 片` / `转换为 mp4…` */
+        val detail: String,
+        val done: Int,
+        val total: Int,
+        val running: Boolean,
+        val paused: Boolean,
+        val failed: Boolean,
+        val processing: Boolean,
+        val stageSeconds: Int
     )
 
     private val _state = MutableStateFlow(Snapshot())
@@ -206,6 +240,32 @@ object DownloadEngine {
         val pending = dao.unfinished()
         if (pending.isNotEmpty()) Log.i(TAG, "恢复未完成任务 ${pending.size} 个")
         resumedOnce = true
+        schedule()
+    }
+
+    /** 暂停**一件作品**（通知上的「暂停」按钮）。图集是整单元停，单元内其它在跑的也一起落状态。 */
+    fun pauseWork(noteId: Long) = scope.launch {
+        val tasks = dao.unfinished().filter { it.noteId == noteId }
+        val keys = tasks.map { DownloadUnit.keyOf(it) }.distinct()
+        keys.forEach { key -> synchronized(lock) { jobs.remove(key) }?.cancel() }
+        tasks.filter { it.status == DownloadStatus.RUNNING }.forEach {
+            dao.setStatus(it.id, DownloadStatus.PAUSED, null, System.currentTimeMillis())
+            forgetSpeed(it.id)
+        }
+        tasks.forEach {
+            if (dao.byId(it.id)?.status == DownloadStatus.QUEUED) {
+                dao.setStatus(it.id, DownloadStatus.PAUSED, null, System.currentTimeMillis())
+            }
+        }
+        refreshState()
+    }
+
+    /** 继续**一件作品**（通知上的「继续」按钮）。 */
+    fun resumeWork(noteId: Long) = scope.launch {
+        dao.unfinished()
+            .filter { it.noteId == noteId && it.status == DownloadStatus.PAUSED }
+            .forEach { dao.setStatus(it.id, DownloadStatus.QUEUED, null, System.currentTimeMillis()) }
+        DownloadService.start(appContext)
         schedule()
     }
 
@@ -607,7 +667,31 @@ object DownloadEngine {
             currentDetail = activeGroup?.statusSummary().orEmpty(),
             currentTitle = activeGroup?.title.orEmpty(),
             worksTotal = groups.size,
-            worksDone = groups.count { it.settled }
+            worksDone = groups.count { it.settled },
+            progressDone = activeGroup?.doneProgressUnits() ?: 0,
+            progressTotal = activeGroup?.progressUnits() ?: 0,
+            stageSeconds = active.map { it.updatedAt }.minOrNull()
+                ?.let { ((System.currentTimeMillis() - it) / 1000).toInt().coerceAtLeast(0) }
+                ?.takeIf { active.any { t -> DownloadStage.isProcessing(t.stage) } } ?: 0,
+            works = groups.filter { !it.settled }.map { g ->
+                val running = g.items.any { it.status == DownloadStatus.RUNNING }
+                val stageSeconds = g.items.filter { it.status == DownloadStatus.RUNNING }
+                    .map { it.updatedAt }.minOrNull()
+                    ?.let { ((System.currentTimeMillis() - it) / 1000).toInt().coerceAtLeast(0) }
+                    ?: 0
+                WorkNotice(
+                    noteId = g.noteId,
+                    title = g.title,
+                    detail = g.statusSummary(),
+                    done = g.doneProgressUnits(),
+                    total = g.progressUnits(),
+                    running = running,
+                    paused = !running && g.pausedCount > 0,
+                    failed = g.failedCount > 0,
+                    processing = g.processing,
+                    stageSeconds = stageSeconds
+                )
+            }
         )
     }
 
