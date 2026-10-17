@@ -49,6 +49,10 @@ class XhsRepository(context: Context, private val httpClient: OkHttpClient) {
      */
     val downloadHttp: okhttp3.OkHttpClient by lazy {
         httpClient.newBuilder()
+            // **关掉磁盘缓存**：主客户端的 64MB 缓存是给封面/头像用的，而视频分片响应带
+            // `Cache-Control: max-age=31536000`，会被整片塞进缓存 —— 分片只拉一次（拉完就合进 mp4），
+            // 缓存完全没有收益，只会白占几十~几百 MB 并挤掉图片缓存（2026-10-17 审查发现）。
+            .cache(null)
             .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
             .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
             .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)

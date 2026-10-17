@@ -747,6 +747,34 @@ CPU 打满。此时前台服务只保证进程不被杀，**不保证 CPU 不休
 要么在发现现有渠道重要性偏低时"删掉重建"（用户主动关掉的 `IMPORTANCE_NONE` 不要重建）。
 
 
+### H37. 并发"限流"不要用轮询等待；进度回调别接太密（下载变慢的根因）
+
+下载切片早期自己实现并发闸门：`while (inflight >= effective) delay(150)`。286 个切片协程会一起进这个
+循环 —— **空转 + 每次取许可最多等 150ms**，用户直接反馈「用了自适应降并发之后变慢了」。
+
+- 正解：`kotlinx.coroutines.sync.Semaphore`（拿不到许可**真正挂起**）；要降并发就临时**扣住**若干许可
+  （`acquire()` 后不归还、`onOk()` 时 `release()`），并给降速加**下限（设置值的一半）+ 冷却（2 秒）+
+  成功即逐路回升**。回归测试见 `app/src/test/java/com/thirdparty/xhs/download/AdaptiveGateTest.kt`。
+- **同类陷阱**：进度回调别接太密。引擎侧 `onProgress` 每次都 `dao.setProgress + refreshState()`
+  （**整表查询 + 分组**）；"每 500ms × 每路一次"在 8 路时就是每秒十几次全表查询。
+  实践口径：**上报限流到 ≤1 秒一次**，另外"一片真正完成"时立即上报一次。
+
+### H38. 派生 `OkHttpClient` 会继承磁盘缓存与超时，下载必须显式覆盖
+
+`httpClient.newBuilder()` 会**带上主客户端的 64MB 磁盘缓存**。视频分片响应带
+`Cache-Control: max-age=31536000`，会被整片写进缓存 —— 分片只拉一次（拉完即合进 mp4），缓存零收益，
+只会白占几十~几百 MB 并挤掉图片缓存。下载客户端务必 `.cache(null)`，并放宽超时
+（connect 15s / read 30s / **callTimeout 120s**：主客户端的 20s `callTimeout` 是给"海外小接口"收紧的，
+1 MB 级分片必被掐断）。
+
+### H39. 单测里 `android.util.Log` 是"未 mock"，会直接抛异常
+
+纯逻辑（例如下载闸门）想在 JVM 单测里跑，要在 `app/build.gradle` 打开
+`testOptions { unitTests.returnDefaultValues = true }`。
+**Groovy DSL 的属性名是 `returnDefaultValues`** —— 写成 `isReturnDefaultValues` 不报错但**不生效**
+（本轮实测：测试仍旧抛 `Method w in android.util.Log not mocked`）。
+
+
 ## I. 验证工具本身的坑
 
 **I1 · `uiautomator dump` 失败时会读到上一次的旧文件**

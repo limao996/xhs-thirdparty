@@ -596,6 +596,7 @@ object DownloadEngine {
                         schedule()
                     }
                 } else {
+                    fetchRetries.remove(task.id)
                     dao.setStatus(
                         task.id, DownloadStatus.FAILED, outcome.reason, System.currentTimeMillis()
                     )
@@ -605,6 +606,7 @@ object DownloadEngine {
             }
 
             is HlsDownloader.Outcome.Ok -> {
+                fetchRetries.remove(task.id)
                 dao.setStage(task.id, DownloadStage.SAVING, System.currentTimeMillis())
                 refreshState()
                 val name = DownloadNames.uniqueName(

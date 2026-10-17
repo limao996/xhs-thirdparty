@@ -11,9 +11,12 @@ import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -164,32 +167,15 @@ class HlsDownloader(
         // （2026-10-17 排查大视频卡住时发现；局部变量不能用 @Volatile）。
         val failure = java.util.concurrent.atomic.AtomicReference<String?>(null)
 
-        // 自适应并发闸门：失败攒起来时**主动降并发**，成功几次再慢慢升回去。
-        // 依据是实测：在这台模拟器的线路上，8 路各 1 MB 的并发传输会让**每一条**都在几百 KB 处超时
-        // （日志里整屏 `已收 xxx 字节 … timeout`），降到 1~2 路反而能持续跑下去。
+        // 自适应并发闸门：网络吃紧时**温和地**降并发，一旦恢复正常就立刻升回去。
+        //
+        // 两条实测教训（2026-10-17）：
+        // 1. 第一版用 `while (inflight >= effective) delay(150)` 轮询等待 —— 286 个协程一起轮询，
+        //    既空转又给每次取许可加了最多 150ms 延迟，用户直接反馈"变慢了"。现在用信号量**真正挂起等待**；
+        // 2. 第一版"一次中断就降一路、能降到 1 路"，在正常线路上也会把并发压到很低。现在下限是
+        //    **设置值的一半**、降速有 2 秒冷却、每成功一片就回升一路，正常线路几秒内就回到满并发。
         val maxParallel = parallel.coerceAtLeast(1)
-        val gate = object {
-            val effective = AtomicInteger(maxParallel)
-            val inflight = AtomicInteger(0)
-
-            suspend fun acquire() {
-                while (inflight.get() >= effective.get()) kotlinx.coroutines.delay(150)
-                inflight.incrementAndGet()
-            }
-
-            fun release() {
-                inflight.decrementAndGet()
-            }
-
-            fun onFail() {
-                val now = effective.updateAndGet { (it - 1).coerceAtLeast(1) }
-                if (now < maxParallel) Log.w(TAG, "网络吃紧，并发降到 $now 路")
-            }
-
-            fun onOk() {
-                effective.updateAndGet { (it + 1).coerceAtMost(maxParallel) }
-            }
-        }
+        val gate = AdaptiveGate(maxParallel, coroutineContext)
 
         // 抓取阶段的看门狗：连续 STALL_MS **一个字节都没进来**才算搁死，主动失败。
         // 判据用"字节有没有增长"而不是"有没有整片完成"：分片内断点续传时，一片可能要分几次才拉完，
@@ -208,14 +194,20 @@ class HlsDownloader(
             }
         }
         // 半成品也计入进度：弱网下一片可能要分好几次才拉完，只按"整片完成"报进度会让界面看着卡住
-        // （用户 2026-10-17 反馈的"卡进度"）。partial 记的是 .part 里的密文字节。
-        val partialBytes = AtomicLong(0)
+        // （用户 2026-10-17 反馈的"卡进度"）。partialBytes 记的是 .part 里的密文字节。
+        //
+        // 但上报要**限流**：引擎侧的 onProgress 会写库并 refreshState()（整表查询+分组），
+        // 按每 500ms × 每路一次上报时，8 路 = 每秒十几次全表查询 —— 用户反馈"变慢了"的主因之一。
+        // 现在最多 1 秒一次，另外每完成一片仍立即上报一次（那才是进度真正跳格的时刻）。
+        val partialBytes = AtomicLong(
+            wanted.indices.sumOf { i -> File(segFile(workDir, i) + ".part").takeIf { it.exists() }?.length() ?: 0L }
+        )
         var lastReportAt = 0L
         val onChunk: (Long) -> Unit = { n ->
             lastOkAt.set(System.currentTimeMillis())
             val total = partialBytes.addAndGet(n) + bytes.get()
             val now = System.currentTimeMillis()
-            if (now - lastReportAt > 500) {
+            if (now - lastReportAt > 1_000) {
                 lastReportAt = now
                 onProgress(Progress(done.get(), wanted.size, total))
             }
@@ -224,11 +216,11 @@ class HlsDownloader(
         coroutineScope {
             val jobs = wanted.mapIndexed { index, segment ->
                 launch(Dispatchers.IO) {
-                    gate.acquire()
-                    try {
-                        if (failure.get() != null) return@launch
+                    // 信号量**挂起等待**（不轮询）：拿到许可才发起传输
+                    gate.withPermit {
+                        if (failure.get() != null) return@withPermit
                         val target = File(segFile(workDir, index))
-                        if (target.length() > 0) return@launch
+                        if (target.length() > 0) return@withPermit
                         try {
                             // 与观看一致：拉每一片之前确认账号带 VIP（闸门里有缓存，不贵）
                             ensureAccount?.invoke()
@@ -259,14 +251,13 @@ class HlsDownloader(
                             gate.onFail()
                             failure.compareAndSet(null, humanError(e, "切片 ${index + 1} 下载失败"))
                         }
-                    } finally {
-                        gate.release()
                     }
                 }
             }
             jobs.joinAll()
         }
         watchdog.cancel()
+        gate.close()
         // 抓取阶段的失败都能靠"重排队 + 复用已下好的分片"救回来（网络类）
         failure.get()?.let { return@withContext Merged.Failed(it, retryable = true) }
 
@@ -349,6 +340,13 @@ class HlsDownloader(
                     val code = resp.code
                     // 服务端忽略 Range 时（200）要从头写；206 则追加
                     val append = have > 0 && code == 206
+                    if (code == 416) {
+                        // Range 起点 >= 远端大小：说明本地那个 part 已经不可信（或服务端换了文件），
+                        // 删掉重来一次，不要当成永久失败
+                        Log.w(TAG, "Range 被拒（416，已收 $have 字节），丢弃本地残片从头拉")
+                        part.delete()
+                        throw java.io.IOException("HTTP 416")
+                    }
                     if (!resp.isSuccessful && code != 206) {
                         throw IllegalStateException("HTTP $code")
                     }
@@ -397,5 +395,57 @@ class HlsDownloader(
         val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
         cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(key, "AES"), IvParameterSpec(iv))
         return cipher.doFinal(data)
+    }
+}
+
+/**
+ * 自适应并发闸门：正常时放行 [maxParallel] 路，网络吃紧时临时**扣住**若干许可来降并发。
+ *
+ * 两条实测教训（2026-10-17，用户先报"卡住"、后报"变慢"）：
+ * 1. **必须真正挂起等待**：第一版写成 `while (inflight >= effective) delay(150)` 轮询，
+ *    286 个协程一起轮询既空转、又给每次取许可加最多 150ms 延迟 → 用户直接说"变慢了"。
+ *    现在用 [Semaphore]，拿不到许可的协程老实挂起。
+ * 2. **降速要温和且自愈**：第一版"一次中断就降一路、能降到 1 路"，正常线路上也会被压得很低。
+ *    现在下限是设置值的**一半**（[floor]）、降速有 [PENALTY_COOLDOWN_MS] 冷却、每成功一片立刻放回一路。
+ */
+internal class AdaptiveGate(
+    private val maxParallel: Int,
+    parent: kotlin.coroutines.CoroutineContext,
+    /** 降速冷却：这段时间内多次中断只降一路（避免一拥而上把并发压到底）。单测传 0 以便验证下限。 */
+    private val cooldownMs: Long = PENALTY_COOLDOWN_MS
+) {
+    private val semaphore = Semaphore(maxParallel)
+    private val floor = (maxParallel / 2).coerceAtLeast(1)
+    private val held = java.util.concurrent.atomic.AtomicInteger(0)
+    private val lastDropAt = java.util.concurrent.atomic.AtomicLong(0)
+    private val scope = kotlinx.coroutines.CoroutineScope(parent + kotlinx.coroutines.SupervisorJob())
+
+    suspend fun withPermit(block: suspend () -> Unit) = semaphore.withPermit { block() }
+
+    /** 一次中断：在冷却与下限允许时扣住一路许可（降并发一路）。 */
+    fun onFail() {
+        val now = System.currentTimeMillis()
+        if (now - lastDropAt.get() < cooldownMs) return
+        if (maxParallel - held.get() <= floor) return
+        lastDropAt.set(now)
+        held.incrementAndGet()
+        // 扣住一路：协程拿到许可就结束，但许可不会被归还，直到 onOk 放回
+        scope.launch { semaphore.acquire() }
+        android.util.Log.w("XhsDownload", "网络吃紧，并发降到 ${maxParallel - held.get()} 路（正常后自动回升）")
+    }
+
+    /** 一片成功：立刻放回一路许可（恢复正常后几秒内回到满并发）。 */
+    fun onOk() {
+        if (held.get() <= 0) return
+        held.decrementAndGet()
+        semaphore.release()
+    }
+
+    fun close() {
+        scope.cancel()
+    }
+
+    companion object {
+        const val PENALTY_COOLDOWN_MS = 2_000L
     }
 }

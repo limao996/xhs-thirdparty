@@ -65,6 +65,12 @@ android {
         }
     }
 
+    testOptions {
+        // JVM 单测里 android.util.* 这些桩类默认是「未 mock」并直接抛异常；
+        // 让它们返回默认值，纯逻辑（例如下载的自适应并发闸门）才能在单测里跑。
+        unitTests.returnDefaultValues = true
+    }
+
     buildTypes {
         debug {
             // Distinct package so a debug build and a release build can be
