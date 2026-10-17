@@ -14,8 +14,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -48,9 +46,7 @@ class HlsDownloader(
         const val DEFAULT_PARALLEL = 4
 
         /** 分片重试的退避（1s / 3s / 8s）：这个 CDN 的分片常"传到一半断"，给足喘息时间。 */
-        private val RETRY_BACKOFF_MS = longArrayOf(1000L, 3000L, 8000L)
-
-        /** 抓取阶段「一片都没完成」多久算搁死（主动失败，交给上层/用户重试）。 */
+        private val RETRY_BACKOFF_MS = longArrayOf(1000L, 3000L, 8000L)        /** 抓取阶段「一片都没完成」多久算搁死（主动失败，交给上层/用户重试）。 */
         private const val STALL_MS = 90_000L
         private const val TAG = "XhsDownload"
     }
@@ -163,14 +159,41 @@ class HlsDownloader(
             Log.i(TAG, "跳过已下载的 ${already.size} 片（断点续传）")
             onProgress(Progress(done.get(), wanted.size, bytes.get()))
         }
-        val semaphore = Semaphore(parallel.coerceAtLeast(1))
         // 失败原因用 AtomicReference：**多个切片协程并发写 / 读**，普通 var 在弱内存模型下别的线程
         // 可能看不到，于是它们会一直闷头拉下去 —— 表现就是「进度卡住、状态永远 RUNNING」
         // （2026-10-17 排查大视频卡住时发现；局部变量不能用 @Volatile）。
         val failure = java.util.concurrent.atomic.AtomicReference<String?>(null)
 
-        // 抓取阶段的看门狗：连续 STALL_MS 没有任何一片完成就判定网络搁死，主动失败。
-        // 没有它的话，弱网 + 重试会让任务长时间停在同一个进度上（用户报的「卡进度」）。
+        // 自适应并发闸门：失败攒起来时**主动降并发**，成功几次再慢慢升回去。
+        // 依据是实测：在这台模拟器的线路上，8 路各 1 MB 的并发传输会让**每一条**都在几百 KB 处超时
+        // （日志里整屏 `已收 xxx 字节 … timeout`），降到 1~2 路反而能持续跑下去。
+        val maxParallel = parallel.coerceAtLeast(1)
+        val gate = object {
+            val effective = AtomicInteger(maxParallel)
+            val inflight = AtomicInteger(0)
+
+            suspend fun acquire() {
+                while (inflight.get() >= effective.get()) kotlinx.coroutines.delay(150)
+                inflight.incrementAndGet()
+            }
+
+            fun release() {
+                inflight.decrementAndGet()
+            }
+
+            fun onFail() {
+                val now = effective.updateAndGet { (it - 1).coerceAtLeast(1) }
+                if (now < maxParallel) Log.w(TAG, "网络吃紧，并发降到 $now 路")
+            }
+
+            fun onOk() {
+                effective.updateAndGet { (it + 1).coerceAtMost(maxParallel) }
+            }
+        }
+
+        // 抓取阶段的看门狗：连续 STALL_MS **一个字节都没进来**才算搁死，主动失败。
+        // 判据用"字节有没有增长"而不是"有没有整片完成"：分片内断点续传时，一片可能要分几次才拉完，
+        // 每次都在推进就不该被判失败。
         val lastOkAt = AtomicLong(System.currentTimeMillis())
         val watchdog = launch(Dispatchers.IO) {
             while (failure.get() == null && done.get() < wanted.size) {
@@ -184,31 +207,60 @@ class HlsDownloader(
                 }
             }
         }
+        // 半成品也计入进度：弱网下一片可能要分好几次才拉完，只按"整片完成"报进度会让界面看着卡住
+        // （用户 2026-10-17 反馈的"卡进度"）。partial 记的是 .part 里的密文字节。
+        val partialBytes = AtomicLong(0)
+        var lastReportAt = 0L
+        val onChunk: (Long) -> Unit = { n ->
+            lastOkAt.set(System.currentTimeMillis())
+            val total = partialBytes.addAndGet(n) + bytes.get()
+            val now = System.currentTimeMillis()
+            if (now - lastReportAt > 500) {
+                lastReportAt = now
+                onProgress(Progress(done.get(), wanted.size, total))
+            }
+        }
 
         coroutineScope {
             val jobs = wanted.mapIndexed { index, segment ->
                 launch(Dispatchers.IO) {
-                    semaphore.withPermit {
-                        if (failure.get() != null) return@withPermit
+                    gate.acquire()
+                    try {
+                        if (failure.get() != null) return@launch
                         val target = File(segFile(workDir, index))
-                        if (target.length() > 0) return@withPermit
+                        if (target.length() > 0) return@launch
                         try {
                             // 与观看一致：拉每一片之前确认账号带 VIP（闸门里有缓存，不贵）
                             ensureAccount?.invoke()
-                            val enc = fetchBytesWithRetry(segment.uri) { failure.get() != null }
+                            // 分片内断点续传：把**密文**按字节范围续到 `NN.ts.part`，拉完再解密成 `NN.ts`。
+                            // 这个 CDN 有 `Accept-Ranges: bytes`，而弱网下 1 MB 分片常传到一半断 ——
+                            // 整片重试等于每次从头再来（用户 2026-10-17 报的大视频卡住，主因之一）。
+                            val part = File(segFile(workDir, index) + ".part")
+                            fetchSegmentToFile(
+                                url = segment.uri,
+                                part = part,
+                                onBytes = onChunk,
+                                shouldAbort = { failure.get() != null },
+                                onAttemptFailed = { gate.onFail() }
+                            )
                             val plain = if (key != null) {
                                 val iv = playlist.keyIv ?: HlsPlaylist.ivForSequence(segment.sequence)
-                                decrypt(key, iv, enc)
+                                decrypt(key, iv, part.readBytes())
                             } else {
-                                enc
+                                part.readBytes()
                             }
                             target.writeBytes(plain)
+                            partialBytes.addAndGet(-part.length())
+                            part.delete()
                             bytes.addAndGet(plain.size.toLong())
-                            lastOkAt.set(System.currentTimeMillis())
+                            gate.onOk()
                             onProgress(Progress(done.incrementAndGet(), wanted.size, bytes.get()))
                         } catch (e: Exception) {
+                            gate.onFail()
                             failure.compareAndSet(null, humanError(e, "切片 ${index + 1} 下载失败"))
                         }
+                    } finally {
+                        gate.release()
                     }
                 }
             }
@@ -265,28 +317,68 @@ class HlsDownloader(
         }
 
     /**
-     * 拉分片：网络类失败自动重试（最多 4 次，退避 1s / 3s / 8s）。
+     * 拉一个分片到 [part]（**密文**，调用方负责解密）—— 带**分片内按字节范围续传**。
      *
-     * 这个大文件 CDN 的分片**经常传到一半就断**（本机直连同一片也会 `ResponseEnded`，
-     * 2026-10-17 实测）；限流时还会返回一长串重定向，而 OkHttp 的重定向上限是写死的 20
-     * （`Too many follow-up requests`），改不了 —— 两种情况都当"可重试"处理。
-     * HTTP 4xx/5xx 不重试（服务端明确拒绝，重试没意义）。
+     * 这个 CDN 的分片 1 MB 上下，弱网下经常"传到一半断"（本机直连同一片也出现过
+     * `Response ended prematurely`，2026-10-17 实测）。CDN 明确支持 `Accept-Ranges: bytes`，
+     * 所以断掉之后**从已收到的字节数接着拉**，而不是整片从头再来：
+     *
+     * - 请求带 `Range: bytes=<已收>-`；服务端回 206 就**追加**写，回 200 说明不支持范围请求 → 截断重写；
+     * - 每收到一段就回调 [onBytes]（上传"还在动"的信号，看门狗据此判活）；
+     * - 网络类失败最多重试 [attempts] 次，退避 1s / 3s / 8s；HTTP 4xx 直接放弃（服务端明确拒绝）；
+     * - 部分数据**留在 part 文件里**：任务级自动重排队重来时也接着传。
      *
      * @param shouldAbort 已经判定整体失败时提前放弃，别把重试时间白白花掉
      */
-    private suspend fun fetchBytesWithRetry(
+    private suspend fun fetchSegmentToFile(
         url: String,
-        attempts: Int = 4,
-        shouldAbort: () -> Boolean = { false }
-    ): ByteArray {
+        part: File,
+        onBytes: (Long) -> Unit,
+        shouldAbort: () -> Boolean,
+        onAttemptFailed: () -> Unit = {},
+        attempts: Int = 6
+    ) {
         var last: Exception? = null
         for (i in 0 until attempts) {
             if (shouldAbort()) throw java.io.IOException("已放弃")
+            val have = if (part.exists()) part.length() else 0L
             try {
-                return fetchBytes(url)
+                val builder = Request.Builder().url(url)
+                if (have > 0) builder.header("Range", "bytes=$have-")
+                client.newCall(builder.build()).execute().use { resp ->
+                    val code = resp.code
+                    // 服务端忽略 Range 时（200）要从头写；206 则追加
+                    val append = have > 0 && code == 206
+                    if (!resp.isSuccessful && code != 206) {
+                        throw IllegalStateException("HTTP $code")
+                    }
+                    if (have > 0 && !append) {
+                        Log.w(TAG, "服务端忽略了 Range（HTTP $code），从头重拉这一片")
+                    }
+                    if (!append) part.delete()
+                    resp.body!!.byteStream().use { input ->
+                        java.io.FileOutputStream(part, append).use { out ->
+                            val buf = ByteArray(64 * 1024)
+                            while (true) {
+                                val n = input.read(buf)
+                                if (n <= 0) break
+                                out.write(buf, 0, n)
+                                onBytes(n.toLong())
+                            }
+                        }
+                    }
+                }
+                return
             } catch (e: java.io.IOException) {
                 last = e
-                Log.w(TAG, "分片下载失败（第 ${i + 1}/$attempts 次）：${e.message}")
+                val now = if (part.exists()) part.length() else 0L
+                Log.w(
+                    TAG,
+                    "分片下载中断（第 ${i + 1}/$attempts 次，已收 $now 字节）：${e.message}"
+                )
+                // **每次中断**就通知闸门（不是等 6 次用完）：第一次断往往就是线路吃紧的信号，
+                // 及时把并发降下来，后面的传输才稳（2026-10-17 实测：8 路时几乎每条都在几百 KB 处断）
+                onAttemptFailed()
                 if (i < attempts - 1) {
                     kotlinx.coroutines.delay(RETRY_BACKOFF_MS.getOrElse(i) { 8000L })
                 }
