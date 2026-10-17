@@ -660,8 +660,15 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 **产物**：`app/build/outputs/apk/release/app-release.apk`（3.46 MB，sha256 `F350B5646B4FFC07EF78461D454D4046A75DFB8252EAD15534E67849076A4BC1`）。
 APK 不入库（硬约束 8）。
 
-**未做 / 待办**：`git push`、建 tag `v1.4.0` 与 Release（资产名 `xhs-thirdparty-1.4.0-release.apk`）、
-发布后同步 `docs/BUILD.md` 的版本行 —— 都要等用户明确说"推"。
+**④ 推送与发布（用户确认后执行，2026-10-18）**
+
+- `git push origin main`：`dbb6db5..b203a4d`（32 个提交）；
+- `git tag -a v1.4.0` + 推送 tag；
+- `gh release create v1.4.0 … --latest` → https://github.com/limao996/xhs-thirdparty/releases/tag/v1.4.0
+  （资产 `xhs-thirdparty-1.4.0-release.apk`）；
+- **发布后核验**：资产地址 `HEAD` **200**、`Content-Length 3626205` 与本地**完全一致**；
+  `releases.atom` **首条即 v1.4.0**（应用内「检查更新」走的就是这个 feed ⇒ 老版本能发现新版）；
+- `docs/BUILD.md` 的版本行已同步为 `1.4.0` / `1483501`。
 
 
 ### 阶段七十一 · 手动停止下载（取消 / 删除 / 暂停）的收尾与竞态（2026-10-18，用户提醒）
