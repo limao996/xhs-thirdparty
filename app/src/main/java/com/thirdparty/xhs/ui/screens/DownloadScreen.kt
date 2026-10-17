@@ -254,13 +254,13 @@ fun DownloadScreen(
                         Text(
                             when {
                                 scanning -> "正在检查重复 / 孤儿文件…"
-                                count > 0 -> "检查重复 / 孤儿文件 · 发现 $count 个"
-                                else -> "检查重复 / 孤儿文件"
+                                count > 0 -> "检查多余文件 · 发现 $count 个"
+                                else -> "检查多余文件"
                             },
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Text(
-                            "早期版本重复下载会留下多份文件；记录删掉后文件仍留在相册里，都可以在这里清掉",
+                            "重复下载会留下多份文件、删除记录后文件也会留在相册里，都可以在这里检查并清理",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -273,7 +273,7 @@ fun DownloadScreen(
     // 删除一条：让用户选"只删记录"还是"连文件一起删"（用户 2026-10-17 要求）
     pendingDelete?.let { target ->
         DeleteChoiceDialog(
-            title = "删除这条下载？",
+            title = "删除下载记录？",
             recordText = target.savedPath?.ifBlank { null } ?: "这条记录还没有保存到公共目录",
             hasFile = target.savedUri != null,
             onDeleteRecord = {
@@ -697,7 +697,7 @@ private fun ItemRow(
         IconButton(onClick = { haptics.reject(); onCancel() }) {
             Icon(
                 Icons.Filled.DeleteOutline,
-                contentDescription = if (task.status == DownloadStatus.DONE) "删除记录" else "取消下载"
+                contentDescription = if (task.status == DownloadStatus.DONE) "删除" else "取消下载"
             )
         }
     }
@@ -712,14 +712,17 @@ private fun itemStatusLine(task: DownloadTaskEntity, elapsedSeconds: Int? = null
                 (elapsedSeconds?.let { " · 已用 $it 秒" }.orEmpty()) +
                 (elapsedSeconds?.let { DownloadStage.slowHint(task.stage, it) }?.let { "（$it）" } ?: "")
 
+        // 与通知、组级汇总同一口径：视频说「片」、图片说「张」，前面带类型
         task.kind == DownloadKind.VIDEO && task.totalSegments > 0 ->
-            "下载中 ${task.doneSegments}/${task.totalSegments} 片 · ${formatBytes(task.bytes)}"
+            "视频 ${task.doneSegments}/${task.totalSegments} 片 · ${formatBytes(task.bytes)}"
 
         else -> "下载中 · ${formatBytes(task.bytes)}"
     }
 
     // 暂停原因优先显示：只写「已暂停」用户不知道是自己按的还是被"仅 Wi-Fi"挡住的
+    // 暂停原因用简称（取括号前那截）：完整说明在设置项与组级文案里已经交代过，单条再写一遍太长
     DownloadStatus.PAUSED -> task.error?.takeIf { it.isNotBlank() }
+        ?.substringBefore('（')?.trim()?.takeIf { it.isNotEmpty() }
         ?.let { "已暂停 · $it" }
         ?: "已暂停 · ${formatBytes(task.bytes)}"
     DownloadStatus.DONE -> "已完成 · ${formatBytes(task.bytes)}"

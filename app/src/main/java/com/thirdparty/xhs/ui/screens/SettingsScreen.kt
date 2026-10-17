@@ -224,7 +224,7 @@ fun SettingsScreen(
                 )
                 ListItem(
                     headlineContent = { Text("仅 Wi-Fi 下载") },
-                    supportingContent = { Text("打开后，移动网络下任务会暂停等待 Wi-Fi") },
+                    supportingContent = { Text("打开后，移动网络下任务会暂停等待 Wi-Fi；恢复 Wi-Fi 后自动继续") },
                     leadingContent = { Icon(Icons.Filled.Wifi, null, tint = MaterialTheme.colorScheme.primary) },
                     trailingContent = {
                         Switch(checked = dl.wifiOnly, onCheckedChange = {

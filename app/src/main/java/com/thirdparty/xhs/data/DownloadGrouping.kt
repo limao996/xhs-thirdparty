@@ -73,16 +73,21 @@ data class DownloadGroup(
         return (v.doneSegments.toFloat() / v.totalSegments.toFloat()).coerceIn(0f, 1f)
     }
 
-    /** 自报作品里有哪几类内容，如「1 个视频 + 43 张图片」。 */
+    /**
+     * 自报作品里有哪几类内容，如「1 个视频、12 张图片」。
+     *
+     * 用量词（个 / 张）+ 顿号：与完成通知、选择对话框里的说法一致 ——
+     * 原来写「视频 + 12 张图片」，既没量词又用加号，读起来像算式。
+     */
     fun itemPart(): String = buildList {
-        if (video != null) add("视频")
+        if (video != null) add("1 个视频")
         if (images.isNotEmpty()) add("${images.size} 张图片")
-    }.joinToString(" + ").ifEmpty { "0 项" }
+    }.joinToString("、").ifEmpty { "0 项" }
 
     /**
      * 组级状态说明（应用文案，书面中性）：
-     * - 整组完成 → 「已完成 · 1 个视频 + 43 张图片」
-     * - 整组结束但有失败 → 「视频 下载失败」/「失败 2 项 · 1 个视频 + 43 张图片」
+     * - 整组完成 → 「已完成 · 1 个视频、43 张图片」
+     * - 整组结束但有失败 → 「视频 下载失败」/「失败 2 项 · 1 个视频、43 张图片」
      *   （这类会单独落在「失败」组，见 [failed]）
      * - 只有图片在跑 → 「图片 12/43 张」；视频与图片同时在跑则两段都写。
      */
