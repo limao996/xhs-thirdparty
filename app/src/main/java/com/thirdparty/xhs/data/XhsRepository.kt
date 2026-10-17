@@ -96,7 +96,17 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
             for ((_, detail) in resolved) {
                 if (videos.size >= perNote) break
                 val data = detail?.optJSONObject("data") ?: continue
-                if (data.optString("note_media_url").isNotEmpty()) videos.add(NoteItem(data))
+                if (data.optString("note_media_url").isNotEmpty()) {
+                val probe = NoteItem(data)
+                if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+                    android.util.Log.i(
+                        "XhsProbe",
+                        "mediaUrl=" + probe.mediaUrl + " | images=" + probe.images.size +
+                            " | type=" + probe.noteType + " | isVideo=" + probe.isVideo
+                    )
+                }
+                videos.add(probe)
+            }
             }
 
             // NOTE: no history write here. A page is fetched (and neighbours are

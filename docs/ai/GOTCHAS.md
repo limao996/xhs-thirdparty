@@ -650,6 +650,19 @@
   `onDismissRequest` 的调用栈，能区分"被点的/被平台关的"）；② **断网走一遍所有会发请求的页面**，确认每页都是
   "失败看得见 + 能重试"而不是永久转圈（2026-10-10 实测：推荐/发现/粉丝圈/我的/检查更新全部正常）。
 
+**H29 · HLS 转 mp4：别自己驱动 `TsExtractor`，用 media3 的 `Transformer`**
+- 症状（2026-10-17）：自己拿 `TsExtractor` + `Mp4Muxer`（`media3-muxer`）驱动真实 HLS 切片解密后的 TS，
+  适配层日志是 `tracks=[] dataCalls=0 samples=0`，mp4 产出 **0 字节**。
+- 根因：`Extractor.read()` 的返回值里 **1 = `RESULT_SEEK`**（不是"成功"）。TS 的 extractor 会先请求跳到
+  尾部（约 `总长-112KB`）再请求回到 0，用来估算时长；不处理就空转 200 万次，处理不当（重开输入）又会在两端来回、
+  永远不产出样本。
+- **结论**：这类"extractor 驱动 + muxer 编排"不要自己写，交给 `androidx.media3:media3-transformer`
+  的 `Transformer`（它内部把 seek、样本搬运、muxer 都做了）。实测一次通过：
+  8,370,888 B TS → 8,358,452 B mp4、时长 60,040 ms、耗时 3.75 s、`moov` 里 2 个 `trak`。
+- 顺带两条：`Transformer` **必须在有 Looper 的线程创建与启动**（切 `Dispatchers.Main`，结果用
+  `CountDownLatch` 等回调）；`MediaItem` 指向本地文件时用 `Uri.fromFile`，但 **JVM 单元测试里
+  `android.net.Uri` 是空壳**，所以这条链路只能在真机/模拟器上验证。
+
 ## I. 验证工具本身的坑
 
 **I1 · `uiautomator dump` 失败时会读到上一次的旧文件**
