@@ -16,7 +16,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import okhttp3.OkHttpClient
 
@@ -41,6 +43,9 @@ object DownloadEngine {
     private val jobs = mutableMapOf<Long, Job>()
     private val lock = Any()
 
+    /** `schedule()` 的串行锁（见该函数注释：并发排期会突破并发上限）。 */
+    private val scheduleMutex = Mutex()
+
     /** 给通知用的一份摘要。 */
     data class Snapshot(
         val running: Int = 0,
@@ -64,6 +69,41 @@ object DownloadEngine {
         client = OkHttpClient.Builder().build()
         // 应用启动时把上次没跑完的任务接着跑（用户强停/系统杀进程后）
         scope.launch { resumeUnfinished() }
+        // 网络恢复（开 Wi-Fi / 连上线路）后，把"等待 Wi-Fi"而暂停的任务自动接上
+        scope.launch {
+            com.thirdparty.xhs.App.INSTANCE.networkEpoch.collect { epoch ->
+                if (epoch > 0) resumeWaitingWifi()
+            }
+        }
+    }
+
+    /** 「仅 Wi-Fi 下载」把任务挡下来时写的暂停原因（也是自动恢复的判据）。 */
+    const val WAITING_WIFI_REASON = "等待 Wi-Fi（已开启仅 Wi-Fi 下载）"
+
+    /**
+     * 网络恢复后，把**因网络门禁而暂停**的任务重新排上（不碰用户手动暂停的）。
+     *
+     * 硬约束 25 的口径：网络恢复要自动重试。下载这一侧的对照点就是这里 ——
+     * 否则用户开了"仅 Wi-Fi"之后回到 Wi-Fi 还得手动点一次「继续全部」。
+     */
+    private suspend fun resumeWaitingWifi() {
+        val waiting = dao.all().filter {
+            it.status == DownloadStatus.PAUSED && it.error == WAITING_WIFI_REASON
+        }
+        if (waiting.isEmpty()) return
+        var resumed = 0
+        waiting.forEach { task ->
+            // 再确认一次状态：这中间它可能已经被别的路径（用户点继续、上一轮排期）跑起来了，
+            // 无脑重置成 QUEUED 会让同一个任务被启动两次
+            if (dao.byId(task.id)?.status == DownloadStatus.PAUSED) {
+                dao.setStatus(task.id, DownloadStatus.QUEUED, null, System.currentTimeMillis())
+                resumed++
+            }
+        }
+        if (resumed == 0) return
+        Log.i(TAG, "网络恢复：继续 $resumed 个等待 Wi-Fi 的任务")
+        DownloadService.start(appContext)
+        schedule()
     }
 
     /** 入队（由下载对话框调用）并启动前台服务。 */
@@ -140,19 +180,34 @@ object DownloadEngine {
         refreshState()
     }
 
-    /** 按并发上限把 `QUEUED` 的任务排上。 */
+    /**
+     * 按并发上限把 `QUEUED` 的任务排上。
+     *
+     * **必须串行**：容量 = 上限 − 在跑数，如果两次 `schedule` 同时读容量（例如"任务完成→排下一个"
+     * 与"启动时恢复队列"撞在一起），两边都会看到空位、各排一个，于是并发上限被突破
+     * （2026-10-17 实测：设成 1 时出现过 3 个任务同时开跑）。用 `scheduling` 门串起来。
+     */
     private fun schedule() = scope.launch {
-        val concurrent = DownloadSettings.concurrentTasks(appContext)
-        val queued = dao.unfinished().filter { it.status != DownloadStatus.PAUSED }
-        val capacity = concurrent - synchronized(lock) { jobs.size }
-        if (capacity <= 0) return@launch
-        queued.filter { it.status == DownloadStatus.QUEUED }
-            .take(capacity)
-            .forEach { task -> startTask(task) }
-        refreshState()
+        // 用 Mutex 串行（不要用布尔门：`synchronized { if (busy) return@launch; busy = true }` 的
+        // `finally` 在早退分支也会执行，会把别的进行中那次的标记清掉，等于没锁 —— 2026-10-17 实际踩到）。
+        scheduleMutex.withLock {
+            val concurrent = DownloadSettings.concurrentTasks(appContext)
+            val queued = dao.unfinished().filter { it.status == DownloadStatus.QUEUED }
+            val capacity = concurrent - synchronized(lock) { jobs.size }
+            if (capacity <= 0) return@withLock
+            queued.take(capacity).forEach { task -> startTask(task) }
+            refreshState()
+        }
     }
 
     private fun startTask(task: DownloadTaskEntity) {
+        // 同一个任务只允许有一个在跑：多路径（排期 / 网络恢复 / 用户点继续）可能同时到达，
+        // 重复启动会让同一个文件被下载两遍，并让并发名额算错
+        val alreadyRunning = synchronized(lock) { jobs.containsKey(task.id) }
+        if (alreadyRunning) {
+            Log.i(TAG, "任务 ${task.id} 已在跑，跳过重复启动")
+            return
+        }
         val job = scope.launch {
             dao.setStatus(task.id, DownloadStatus.RUNNING, null, System.currentTimeMillis())
             Log.i(TAG, "开始任务 ${task.id}（${task.kind} ${task.title}）")
@@ -173,14 +228,38 @@ object DownloadEngine {
             refreshState()
             // 空出名额后继续排下一个
             schedule()
+            maybeNotifyFinished()
         }
         synchronized(lock) { jobs[task.id] = job }
+    }
+
+    /** 记录上一批结束时的任务数，用来判断"这一批是不是刚收尾"。 */
+    private var lastReportedFinished = -1
+
+    /**
+     * 一批任务收尾时发一条完成通知（受设置里的「下载完成通知」控制，见 [DownloadService.notifyFinished]）。
+     *
+     * 判据用**库**而不是内存计数：队列里没有未完成任务（含排队/暂停之外的全部结束）才叫收尾。
+     * 只在"上一批已经报过"到"这一批又结束"之间发一次，避免每次 schedule 都重复通知。
+     */
+    private suspend fun maybeNotifyFinished() {
+        if (!::appContext.isInitialized) return
+        val all = dao.all()
+        val unfinished = all.count { it.status in DownloadStatus.unfinished }
+        if (unfinished > 0) return
+        if (all.size == lastReportedFinished) return
+        lastReportedFinished = all.size
+        val ok = all.count { it.status == DownloadStatus.DONE }
+        val failed = all.count { it.status == DownloadStatus.FAILED }
+        if (ok + failed == 0) return
+        Log.i(TAG, "一批下载结束：成功 $ok，失败 $failed")
+        DownloadService.notifyFinished(appContext, ok, failed)
     }
 
     private suspend fun execute(task: DownloadTaskEntity) {
         if (!hasNetworkFor(task)) {
             dao.setStatus(
-                task.id, DownloadStatus.PAUSED, "等待 Wi-Fi（已开启仅 Wi-Fi 下载）",
+                task.id, DownloadStatus.PAUSED, WAITING_WIFI_REASON,
                 System.currentTimeMillis()
             )
             return

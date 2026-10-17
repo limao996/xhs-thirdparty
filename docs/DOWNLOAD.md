@@ -179,8 +179,30 @@ Room（任务表）、Android `MediaStore`（公共目录）。
   截图：`tools/out/t7-menu.png`（菜单）、`tools/out/t7-picker.png`（多选对话框）。
   说明：这条作品是图文（43 张图、无视频），所以「视频」行按设计不显示；视频成品为真 mp4 已由
   T5/T6 的实机流程证明（走的是同一个引擎）。
-- [ ] **T8 设置「下载」分组**：`ui/screens/SettingsScreen.kt` + prefs（并发任务数 / 并行切片 / 仅 Wi-Fi / 完成通知）；
-  验收：改成 1 并发后同时下载数确实为 1；仅 Wi-Fi 打开后在流量下任务自动暂停。
+- [x] **T8 设置「下载」分组 —— 2026-10-17 通过**
+  文件：`ui/screens/SettingsScreen.kt`（新增「下载」分组四项：同时下载任务数 1–5、
+  单个视频并行切片 1/2/4/6/8、仅 Wi-Fi 下载、下载完成通知）、
+  `download/DownloadSettings.kt`（新增 `Prefs` 数据类 + `read/write`，四项打成一个值，
+  避免设置页参数从 11 涨到 19）、`data/XhsRepository.kt`（`downloadPrefs` / `setDownloadPrefs` 桥）、
+  `download/DownloadService.kt`（新增**下载完成通知**：一批收尾时发 id=4802 的通知，
+  受「完成通知」开关与通知权限双重约束 —— 之前这个开关是空的，属于自己挖的坑）、
+  `download/DownloadEngine.kt`（一批收尾判定 + 网络恢复自动继续 + 排期串行化 + 防重复启动）。
+  **实机证据（模拟器 API 34）**：
+  设置页出现「下载」分组，文案 `当前 2 个，超出的排队等待` / `当前 4 路；越大越快，也越吃网络与电量`；
+  点「同时下载任务数」→ `1 个 | 2 个（当前） | 3 个 | 4 个 | 5 个` → 选 1 个 → 行文案变
+  `当前 1 个，超出的排队等待`，且 `shared_prefs/settings.xml` 读回 `download_concurrent_tasks=1`；
+  **并发上限实测生效**：5 个任务时只有 1 个 `下载中`、其余 `排队中`，日志只有一条 `开始任务`；
+  **仅 Wi-Fi 门禁实测生效**：打开开关（读回 `download_wifi_only=true`）后关掉 Wi-Fi 再入队，
+  3 个任务全部落成 `PAUSED` 且原因是 `等待 Wi-Fi（已开启仅 Wi-Fi 下载）`；
+  **网络恢复自动继续**：打回 Wi-Fi 后日志 `网络恢复：继续 3 个等待 Wi-Fi 的任务` 并继续下载；
+  **完成通知实测生效**：一批结束日志 `一批下载结束：成功 4，失败 1`，
+  `dumpsys notification` 里出现 `id=4802 channel=downloads`、`android.title=下载已结束`、
+  `android.text=完成 4 项，失败 1 项`；最后把设置还原成默认（读回 `2 / 4 / false / true`）。
+  **本轮修掉的三个真缺陷**：① 完成通知开关是空的（见上）；② `schedule()` 并发排期会突破并发上限
+  （先用了布尔门，但 `finally` 在早退分支也会执行把标记清掉，等于没锁 → 换成 `Mutex`）；
+  ③ 同一任务可能被重复启动（排期 / 网络恢复 / 用户点继续多路径同时到达）→ `startTask` 加"已在跑则跳过"。
+  说明：模拟器只有 Wi-Fi 一种上网方式（`Transports: WIFI`、蜂窝无网），所以"仅 Wi-Fi"的隔离验证是
+  用**关闭 Wi-Fi**（无可用网络）触发的同一条分支；真机上移动网络下的表现仍未实测。
 - [ ] **T9 文档与档案**：本文件定稿、`AGENTS.md`（仓库表 + 新硬约束：下载/公共目录/权限）、
   `docs/ai/GOTCHAS.md`（`RESULT_SEEK` 坑、MediaStore 版本差异）、`docs/CHANGELOG.md`、`README.md` 功能列表。
 

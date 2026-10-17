@@ -20,6 +20,36 @@ object DownloadSettings {
     const val DEFAULT_CONCURRENT = 2
     const val DEFAULT_SEGMENTS = 4
 
+    /**
+     * 四项下载设置的整体快照。
+     *
+     * 为什么打包成一个数据类：设置页一次要读写四项，逐项传参会让 `SettingsScreen`
+     * 从 11 个参数涨到 19 个（导航层也要跟着加 8 个）。打成一个值 + 一个回调，
+     * 页面与导航层各只多两个参数。
+     */
+    data class Prefs(
+        val concurrentTasks: Int = DEFAULT_CONCURRENT,
+        val parallelSegments: Int = DEFAULT_SEGMENTS,
+        val wifiOnly: Boolean = false,
+        val notifyOnFinish: Boolean = true
+    )
+
+    /** 读取全部四项（界面用）。 */
+    fun read(context: Context): Prefs = Prefs(
+        concurrentTasks = concurrentTasks(context),
+        parallelSegments = parallelSegments(context),
+        wifiOnly = wifiOnly(context),
+        notifyOnFinish = notifyOnFinish(context)
+    )
+
+    /** 写入（只写有变化的项也没必要：四项都写一遍是最小实现）。 */
+    fun write(context: Context, prefs: Prefs) {
+        setConcurrentTasks(context, prefs.concurrentTasks)
+        setParallelSegments(context, prefs.parallelSegments)
+        setWifiOnly(context, prefs.wifiOnly)
+        setNotifyOnFinish(context, prefs.notifyOnFinish)
+    }
+
     /** 同时下载的任务数（1–5）。上限压住是为了别把带宽/IO 打满。 */
     fun concurrentTasks(context: Context): Int =
         prefs(context).getInt(KEY_CONCURRENT, DEFAULT_CONCURRENT).coerceIn(1, 5)

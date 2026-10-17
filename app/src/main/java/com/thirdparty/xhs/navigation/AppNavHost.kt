@@ -389,7 +389,9 @@ fun AppNavHost(
                         ?: run { App.repo.autoSwitchOnVipExpiry = on }
                 },
                 onOpenBackup = { nav.navigate(Routes.BACKUP) },
-                onOpenCache = { nav.navigate(Routes.CACHE) }
+                onOpenCache = { nav.navigate(Routes.CACHE) },
+                downloadPrefs = App.repo.downloadPrefs,
+                onSetDownloadPrefs = { App.repo.setDownloadPrefs(it) }
             )
         }
         composable(Routes.BACKUP) {

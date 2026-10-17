@@ -11,9 +11,13 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -34,6 +38,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import com.thirdparty.xhs.download.DownloadSettings
 import com.thirdparty.xhs.ui.components.SectionLabel
 import com.thirdparty.xhs.ui.theme.Spacing
 import com.thirdparty.xhs.ui.theme.ThemeMode
@@ -71,7 +76,10 @@ fun SettingsScreen(
     onSetAutoVip: (Boolean) -> Unit,
     onOpenBackup: () -> Unit,
     /** 清除缓存：多选要清的缓存类型 */
-    onOpenCache: () -> Unit
+    onOpenCache: () -> Unit,
+    /** 下载设置（并发任务数 / 单文件并行切片 / 仅 Wi-Fi / 完成通知） */
+    downloadPrefs: DownloadSettings.Prefs = DownloadSettings.Prefs(),
+    onSetDownloadPrefs: (DownloadSettings.Prefs) -> Unit = {}
 ) {
     var pickTheme by remember { mutableStateOf(false) }
     // 设置项的点击反馈（系统触感）
@@ -84,6 +92,10 @@ fun SettingsScreen(
     var autoOn by remember { mutableStateOf(autoVip) }
     var limit by remember { androidx.compose.runtime.mutableIntStateOf(historyLimit) }
     var pickLimit by remember { mutableStateOf(false) }
+    // 下载设置：同样镜像到本地（SharedPreferences 不是可观察的，见上面那段注释）
+    var dl by remember { mutableStateOf(downloadPrefs) }
+    var pickConcurrent by remember { mutableStateOf(false) }
+    var pickSegments by remember { mutableStateOf(false) }
 
     // 数据 组的说明里要显示缓存总共占多少。量一次就够了：这张页面每次被打开
     // 都会重新组合（清缓存在另一个页面，回来时数值自然刷新），而且量磁盘缓存
@@ -185,6 +197,61 @@ fun SettingsScreen(
                 )
             }
 
+            SettingsGroup("下载") {
+                ListItem(
+                    headlineContent = { Text("同时下载任务数") },
+                    supportingContent = { Text("当前 ${dl.concurrentTasks} 个，超出的排队等待") },
+                    leadingContent = { Icon(Icons.Filled.Download, null, tint = MaterialTheme.colorScheme.primary) },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    modifier = Modifier.clickable { haptics.tick(); pickConcurrent = true }
+                )
+                ListItem(
+                    headlineContent = { Text("单个视频并行切片") },
+                    supportingContent = {
+                        Text("当前 ${dl.parallelSegments} 路；越大越快，也越吃网络与电量")
+                    },
+                    leadingContent = { Icon(Icons.Filled.Speed, null, tint = MaterialTheme.colorScheme.primary) },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    modifier = Modifier.clickable { haptics.tick(); pickSegments = true }
+                )
+                ListItem(
+                    headlineContent = { Text("仅 Wi-Fi 下载") },
+                    supportingContent = { Text("打开后，移动网络下任务会暂停等待 Wi-Fi") },
+                    leadingContent = { Icon(Icons.Filled.Wifi, null, tint = MaterialTheme.colorScheme.primary) },
+                    trailingContent = {
+                        Switch(checked = dl.wifiOnly, onCheckedChange = {
+                            haptics.tick()
+                            dl = dl.copy(wifiOnly = it)
+                            onSetDownloadPrefs(dl)
+                        })
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    modifier = Modifier.clickable {
+                        haptics.tick()
+                        dl = dl.copy(wifiOnly = !dl.wifiOnly)
+                        onSetDownloadPrefs(dl)
+                    }
+                )
+                ListItem(
+                    headlineContent = { Text("下载完成通知") },
+                    supportingContent = { Text("每批下载结束后发一条通知") },
+                    leadingContent = { Icon(Icons.Filled.Notifications, null, tint = MaterialTheme.colorScheme.primary) },
+                    trailingContent = {
+                        Switch(checked = dl.notifyOnFinish, onCheckedChange = {
+                            haptics.tick()
+                            dl = dl.copy(notifyOnFinish = it)
+                            onSetDownloadPrefs(dl)
+                        })
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    modifier = Modifier.clickable {
+                        haptics.tick()
+                        dl = dl.copy(notifyOnFinish = !dl.notifyOnFinish)
+                        onSetDownloadPrefs(dl)
+                    }
+                )
+            }
+
             SettingsGroup("数据") {
                 ListItem(
                     headlineContent = { Text("备份与恢复") },
@@ -271,6 +338,69 @@ fun SettingsScreen(
         )
     }
 
+    if (pickConcurrent) {
+        AlertDialog(
+            onDismissRequest = { pickConcurrent = false },
+            title = { Text("同时下载任务数") },
+            text = {
+                Column {
+                    (1..5).forEach { n ->
+                        ListItem(
+                            headlineContent = { Text("$n 个" + if (n == dl.concurrentTasks) "（当前）" else "") },
+                            leadingContent = {
+                                RadioButton(selected = n == dl.concurrentTasks, onClick = {
+                                    haptics.tick()
+                                    dl = dl.copy(concurrentTasks = n)
+                                    onSetDownloadPrefs(dl)
+                                    pickConcurrent = false
+                                })
+                            },
+                            colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
+                            modifier = Modifier.clickable {
+                                haptics.tick()
+                                dl = dl.copy(concurrentTasks = n)
+                                onSetDownloadPrefs(dl)
+                                pickConcurrent = false
+                            }
+                        )
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = haptics.click { pickConcurrent = false }) { Text("关闭") } }
+        )
+    }
+
+    if (pickSegments) {
+        AlertDialog(
+            onDismissRequest = { pickSegments = false },
+            title = { Text("单个视频并行切片") },
+            text = {
+                Column {
+                    listOf(1, 2, 4, 6, 8).forEach { n ->
+                        ListItem(
+                            headlineContent = { Text("$n 路" + if (n == dl.parallelSegments) "（当前）" else "") },
+                            leadingContent = {
+                                RadioButton(selected = n == dl.parallelSegments, onClick = {
+                                    haptics.tick()
+                                    dl = dl.copy(parallelSegments = n)
+                                    onSetDownloadPrefs(dl)
+                                    pickSegments = false
+                                })
+                            },
+                            colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
+                            modifier = Modifier.clickable {
+                                haptics.tick()
+                                dl = dl.copy(parallelSegments = n)
+                                onSetDownloadPrefs(dl)
+                                pickSegments = false
+                            }
+                        )
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = haptics.click { pickSegments = false }) { Text("关闭") } }
+        )
+    }
 }
 
 private fun ThemeMode.label(): String = when (this) {

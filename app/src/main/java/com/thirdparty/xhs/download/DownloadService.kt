@@ -50,10 +50,54 @@ class DownloadService : Service() {
         private const val CHANNEL_NAME = "下载"
         private const val NOTIFICATION_ID = 4801
 
+        /** 下载完成的一次性通知（与常驻进度通知分开 id，避免互相覆盖）。 */
+        private const val FINISHED_NOTIFICATION_ID = 4802
+
         /** 启动（或唤醒）服务。已在跑时不会重复建服务。 */
         fun start(context: Context) {
             val intent = Intent(context, DownloadService::class.java).setAction(ACTION_START)
             runCatching { ContextCompat.startForegroundService(context, intent) }
+        }
+
+        /**
+         * 一批下载结束后发一条完成通知。
+         *
+         * 由 [DownloadEngine] 在"队列彻底没有未完成任务"时调用（= 一批任务收尾）。
+         * 受设置里的「下载完成通知」控制；权限被拒时静默跳过（下载本身已经完成，不该因此报错）。
+         */
+        fun notifyFinished(context: Context, okCount: Int, failedCount: Int) {
+            if (!DownloadSettings.notifyOnFinish(context)) return
+            if (android.os.Build.VERSION.SDK_INT >= 33 &&
+                ContextCompat.checkSelfPermission(
+                    context, android.Manifest.permission.POST_NOTIFICATIONS
+                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                return
+            }
+            val manager = NotificationManagerCompat.from(context)
+            val text = when {
+                failedCount > 0 && okCount > 0 -> "完成 $okCount 项，失败 $failedCount 项"
+                failedCount > 0 -> "失败 $failedCount 项"
+                else -> "完成 $okCount 项"
+            }
+            val open = PendingIntent.getActivity(
+                context,
+                0,
+                Intent(context, MainActivity::class.java),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            runCatching {
+                manager.notify(
+                    FINISHED_NOTIFICATION_ID,
+                    NotificationCompat.Builder(context, CHANNEL_ID)
+                        .setSmallIcon(R.drawable.ic_download)
+                        .setContentTitle("下载已结束")
+                        .setContentText(text)
+                        .setAutoCancel(true)
+                        .setContentIntent(open)
+                        .build()
+                )
+            }
         }
 
         /** 前台服务不再有活干时调用（例如全部任务都结束了）。 */

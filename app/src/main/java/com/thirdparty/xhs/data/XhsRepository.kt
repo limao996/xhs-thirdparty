@@ -555,6 +555,18 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
     var biometricLock: Boolean
         get() = api.biometricLock
         set(v) { api.biometricLock = v }
+
+    /**
+     * 下载设置（并发任务数 / 单文件并行切片 / 仅 Wi-Fi / 完成通知）。
+     *
+     * 真正的读写实现在 `download/DownloadSettings.kt`（与主题、浏览上限同一个 `settings` 偏好文件），
+     * 这里只是为了和上面这些偏好一样，让界面统一从仓库取值、不直接摸 SharedPreferences。
+     */
+    val downloadPrefs: com.thirdparty.xhs.download.DownloadSettings.Prefs
+        get() = com.thirdparty.xhs.download.DownloadSettings.read(appContext)
+
+    fun setDownloadPrefs(prefs: com.thirdparty.xhs.download.DownloadSettings.Prefs) =
+        com.thirdparty.xhs.download.DownloadSettings.write(appContext, prefs)
     /** The identity currently in use. */
     fun currentDeviceMac(): String = api.currentDeviceMac()
 
