@@ -247,7 +247,10 @@ class DownloadService : Service() {
         // 大视频的软件重编码在后台/息屏时会被挂起，表现为 muxer / codec 报错（用户 2026-10-17 反馈）
         acquireWakeLock()
         createChannel()
-        DownloadEngine.init(applicationContext)
+        // 引擎正常已在 App.onCreate 里用仓库初始化过；这里只兜底应用被系统直接拉起服务的场景
+        (applicationContext as? com.thirdparty.xhs.App)?.let { app ->
+            runCatching { DownloadEngine.init(applicationContext, app.repository) }
+        }
         // **立刻进前台**：`startForegroundService` 之后系统只给 ~5 秒窗口，等状态收集器再提升会来不及
         // （2026-10-17 实测：收集器先看到"没活干"就 stopSelf，随后系统抛
         // `ForegroundServiceDidNotStartInTimeException` 把进程干掉）。

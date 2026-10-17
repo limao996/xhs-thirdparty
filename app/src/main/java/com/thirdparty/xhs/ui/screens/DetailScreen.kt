@@ -606,7 +606,8 @@ fun DetailScreen(
                         }
                     }
                     if (tasks.isEmpty()) return@launch
-                    com.thirdparty.xhs.download.DownloadEngine.init(context)
+                    // 引擎已在 App.onCreate 里用仓库初始化过（这里只是兜底：正常不会走到）
+                    runCatching { com.thirdparty.xhs.download.DownloadEngine.currentSpeeds }
                     // 引擎内部会去重：同一作品同一条内容只留一条有效任务（用户可能反复点下载）
                     val plan = com.thirdparty.xhs.download.DownloadEngine.enqueue(tasks)
                     val message = buildString {

@@ -203,11 +203,9 @@ class App : Application() {
     override fun onCreate() {
         super.onCreate()
         INSTANCE = this
-        // 下载引擎：读取上次未完成的任务并接着跑（状态真相在 Room）。
-        // **必须放在 `INSTANCE = this` 之后**：引擎会观察 `App.INSTANCE.networkEpoch`
-        // （网络恢复后自动继续"等待 Wi-Fi"的任务），放在前面会偶发
-        // `lateinit property INSTANCE has not been initialized` 崩在启动路径上（2026-10-17 实测踩到）。
-        com.thirdparty.xhs.download.DownloadEngine.init(this)
+        // 下载引擎的初始化挪到**仓库创建之后**（引擎要用仓库的下载客户端与账号/VIP 闸门，
+        // 见下面 `DownloadEngine.init(this, repository)`）。
+        // 「必须在 `INSTANCE = this` 之后」这条依然成立：`INSTANCE` 就是上面这一行赋的。
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: android.app.Activity) {
                 val wasBackground = startedActivities == 0
@@ -245,6 +243,11 @@ class App : Application() {
             .callTimeout(20, TimeUnit.SECONDS)
             .build()
         repository = XhsRepository(this, httpClient)
+        // 下载引擎：读取上次未完成的任务并接着跑（状态真相在 Room）。
+        // 放在**仓库之后**：引擎要用仓库的下载客户端（超时放宽、共用连接池）与账号/VIP 闸门，
+        // 所以它必须在 `repository` 赋值之后初始化，否则会 `lateinit property repository has not
+        // been initialized` 直接崩在启动路径上（2026-10-17 实测踩到）。
+        com.thirdparty.xhs.download.DownloadEngine.init(this, repository)
         themeState.value = loadThemeMode()
         watchNetwork()
         // 冷启动那一次由 onActivityStarted（0→1）触发，这里不再单独查

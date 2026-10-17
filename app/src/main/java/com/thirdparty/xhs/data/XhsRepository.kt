@@ -18,7 +18,7 @@ import androidx.core.content.edit
 /**
  * Coordinates network fetches with the purely local favorite/history storage.
  */
-class XhsRepository(context: Context, httpClient: OkHttpClient) {
+class XhsRepository(context: Context, private val httpClient: OkHttpClient) {
 
     private val appContext = context.applicationContext
     private val http = httpClient
@@ -40,6 +40,23 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
         downloadDao.observeAll()
 
     /** 全部下载记录里已落盘的路径（重复文件检查用：判断某个文件是否还被记录引用）。 */
+    /**
+     * 下载用的 HTTP 客户端：与主客户端**同一份连接池与拦截器**，只把超时放宽。
+     *
+     * 为什么必须单独放宽：主客户端按"接口在海外、单次请求最多 20 秒"收紧（见 App.kt 注释），
+     * 而下载是**1~2 MB 一个分片**的持续传输，20 秒的 `callTimeout` 在网络稍差时会直接把分片掐断
+     * （用户 2026-10-17 反馈"大型视频卡进度、连接超时"）。
+     */
+    val downloadHttp: okhttp3.OkHttpClient by lazy {
+        httpClient.newBuilder()
+            .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            // 单个分片最多 2 分钟：足够慢速网络传完一片，又不会让任务无限挂着
+            .callTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+    }
+
     suspend fun downloadSavedPaths(): Set<String> = withContext(Dispatchers.IO) {
         downloadDao.all().mapNotNull { it.savedPath?.takeIf { p -> p.isNotBlank() } }.toSet()
     }

@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
@@ -148,11 +149,25 @@ object DownloadEngine {
     private lateinit var dao: DownloadTaskDao
     private var client: OkHttpClient = OkHttpClient()
 
-    fun init(context: Context) {
+    /** 仓库引用：下载要像观看一样过账号/VIP 闸门（[XhsRepository.ensureAccountForRequest]）。 */
+    private var repo: com.thirdparty.xhs.data.XhsRepository? = null
+
+    /** 下载前确保账号带 VIP：与观看同一条链路（不足 60 秒就换新游客号）。 */
+    private suspend fun ensureAccount() {
+        runCatching {
+            repo?.ensureAccountForRequest()
+            Log.i(TAG, "下载前已检查 VIP（账号有效，必要时已换新游客号）")
+        }.onFailure { Log.w(TAG, "下载前检查 VIP 失败：${it.message}") }
+    }
+
+    fun init(context: Context, repository: com.thirdparty.xhs.data.XhsRepository) {
         if (::appContext.isInitialized) return
         appContext = context.applicationContext
         dao = XhsDatabase.get(appContext).downloadTaskDao()
-        client = OkHttpClient.Builder().build()
+        repo = repository
+        // 用仓库的下载客户端：超时放宽 + 与主客户端共用连接池与拦截器（原来是自己 new 一个裸的，
+        // OkHttp 默认 read 10s，大分片必超时 —— 用户 2026-10-17 反馈）
+        client = repository.downloadHttp
         // 应用启动时把上次没跑完的任务接着跑（用户强停/系统杀进程后）
         scope.launch { resumeUnfinished() }
         // 网络恢复（开 Wi-Fi / 连上线路）后，把"等待 Wi-Fi"而暂停的任务自动接上。
@@ -426,6 +441,8 @@ object DownloadEngine {
             return
         }
         val job = scope.launch {
+            // 与观看一致：动手前先确认账号带 VIP（不足就换新游客号）
+            ensureAccount()
             if (unit.isImageSet) {
                 Log.i(TAG, "开始图集 ${unit.key}（${unit.images.size} 张，并发=$unitParallel）")
                 val semaphore = Semaphore(unitParallel.coerceAtLeast(1))
@@ -482,6 +499,12 @@ object DownloadEngine {
      * 不要拿"库里 DONE 的总数"来报：那会把历史所有下载都算进去，用户只下了 1 个作品却看到
      * 「完成 17 项」（2026-10-17 实测发现）。报完清零；"这一轮什么都没跑完"时不发通知。
      */
+    /** 网络类失败自动重排队的计数（taskId -> 次数）；成功/最终失败时清掉。 */
+    private val fetchRetries = java.util.concurrent.ConcurrentHashMap<Long, Int>()
+
+    /** 网络类失败最多自动重排 2 次（每次间隔 20 秒，且复用已下好的分片）。 */
+    private const val FETCH_RETRY_LIMIT = 2
+
     private val runOkVideo = java.util.concurrent.atomic.AtomicInteger(0)
     private val runOkImage = java.util.concurrent.atomic.AtomicInteger(0)
     private val runFailedVideo = java.util.concurrent.atomic.AtomicInteger(0)
@@ -529,7 +552,7 @@ object DownloadEngine {
     private suspend fun executeVideo(task: DownloadTaskEntity) {
         val work = tempDir(task.id)
         val parallel = DownloadSettings.parallelSegments(appContext)
-        val downloader = HlsDownloader(client, parallel = parallel)
+        val downloader = HlsDownloader(client, parallel = parallel, ensureAccount = { ensureAccount() })
         val outcome = downloader.remuxToMp4(
             context = appContext,
             playlistUrl = task.sourceUrl,
@@ -557,9 +580,28 @@ object DownloadEngine {
         )
         when (outcome) {
             is HlsDownloader.Outcome.Failed -> {
-                dao.setStatus(task.id, DownloadStatus.FAILED, outcome.reason, System.currentTimeMillis())
-                runFailedVideo.incrementAndGet()
-                forgetSpeed(task.id)
+                // 网络类失败自动重排队：重来时**已下好的分片会被复用**（切片级断点），
+                // 所以重试成本只是没下完的那部分。用户报的"大视频卡进度 / 连接超时"里，
+                // 真正的卡点常是某几片反复超时 —— 让它自己歇 20 秒再来，比直接把任务判死有用。
+                val tries = fetchRetries.merge(task.id, 1) { a, _ -> a + 1 } ?: 1
+                if (outcome.retryable && tries <= FETCH_RETRY_LIMIT) {
+                    Log.i(
+                        TAG,
+                        "网络类失败，20 秒后自动重排队（第 $tries/$FETCH_RETRY_LIMIT 次）：${outcome.reason}"
+                    )
+                    dao.setStatus(task.id, DownloadStatus.QUEUED, null, System.currentTimeMillis())
+                    forgetSpeed(task.id)
+                    scope.launch {
+                        delay(20_000)
+                        schedule()
+                    }
+                } else {
+                    dao.setStatus(
+                        task.id, DownloadStatus.FAILED, outcome.reason, System.currentTimeMillis()
+                    )
+                    runFailedVideo.incrementAndGet()
+                    forgetSpeed(task.id)
+                }
             }
 
             is HlsDownloader.Outcome.Ok -> {
