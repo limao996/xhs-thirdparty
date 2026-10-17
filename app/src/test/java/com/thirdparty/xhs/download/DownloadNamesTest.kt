@@ -50,6 +50,23 @@ class DownloadNamesTest {
     }
 
     @Test
+    fun image_mime_matches_the_file_extension() {
+        // 与文件名必须对得上：MediaStore 会按 MIME 补扩展名，对不上就会落成 `01.png.jpg`（实测过）
+        assertEquals("image/png", DownloadNames.imageMimeType("png"))
+        assertEquals("image/png", DownloadNames.imageMimeType("PNG"))
+        assertEquals("image/webp", DownloadNames.imageMimeType("webp"))
+        assertEquals("image/gif", DownloadNames.imageMimeType("gif"))
+        assertEquals("image/jpeg", DownloadNames.imageMimeType("jpg"))
+        assertEquals("image/jpeg", DownloadNames.imageMimeType("jpeg"))
+        assertEquals("image/jpeg", DownloadNames.imageMimeType(""))
+        // 扩展名 → MIME → 文件名，三步串起来也不该出现双扩展名
+        val ext = DownloadNames.imageExtension("https://x/a/01.png?sign=1")
+        val name = DownloadNames.imageFileName(0, ext)
+        assertEquals("01.png", name)
+        assertEquals("image/png", DownloadNames.imageMimeType(ext))
+    }
+
+    @Test
     fun unique_name_appends_counter_on_conflict() {
         val taken = mutableSetOf("标题_1.mp4")
         val first = DownloadNames.uniqueName("标题_1", "mp4") { false }

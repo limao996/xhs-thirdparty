@@ -409,7 +409,12 @@ object DownloadEngine {
         val downloader = ImageDownloader(client)
         dao.setStage(task.id, DownloadStage.FETCHING, System.currentTimeMillis())
         refreshState()
-        when (val outcome = downloader.saveToGallery(appContext, task.sourceUrl, relativeDir, name)) {
+        // MIME 按扩展名给：写死 image/jpeg 会让 .png 的图落成 `01.png.jpg`（实测）
+        when (
+            val outcome = downloader.saveToGallery(
+                appContext, task.sourceUrl, relativeDir, name, DownloadNames.imageMimeType(ext)
+            )
+        ) {
             is ImageDownloader.Outcome.Failed -> {
                 dao.setStatus(task.id, DownloadStatus.FAILED, outcome.reason, System.currentTimeMillis())
                 runFailed.incrementAndGet()

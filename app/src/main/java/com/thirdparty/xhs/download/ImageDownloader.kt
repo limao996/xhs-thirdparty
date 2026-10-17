@@ -44,11 +44,15 @@ class ImageDownloader(private val client: OkHttpClient) {
         context: android.content.Context,
         url: String,
         relativeDir: String,
-        displayName: String
+        displayName: String,
+        /** 必须与 [displayName] 的扩展名对得上，否则 MediaStore 会再补一次扩展名（如 `01.png.jpg`） */
+        mimeType: String = "image/jpeg"
     ): Outcome = try {
         val bytes = fetchDecrypted(client, url)
         Log.i(TAG, "图片解密后 ${bytes.size} 字节：$displayName")
-        when (val saved = MediaStoreWriter.saveImage(context, bytes, relativeDir, displayName)) {
+        when (
+            val saved = MediaStoreWriter.saveImage(context, bytes, relativeDir, displayName, mimeType)
+        ) {
             is MediaStoreWriter.Result.Failed -> Outcome.Failed(saved.reason)
             // 带上公共目录前缀（Pictures/…）与 MediaStore uri：前者用于显示，后者用于预览/打开
             is MediaStoreWriter.Result.Ok -> Outcome.Ok(saved.bytes, saved.displayPath, saved.uri.toString())

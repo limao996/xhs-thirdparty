@@ -49,6 +49,21 @@ object DownloadNames {
     }
 
     /**
+     * 由扩展名给图片 MIME。
+     *
+     * **必须与文件名对得上**：MediaStore 会用 MIME 去补扩展名，如果文件名是 `01.png` 而 MIME 写死
+     * `image/jpeg`，落盘就会变成 `01.png.jpg`（2026-10-17 在模拟器照片目录里实测到）。
+     */
+    fun imageMimeType(extension: String): String = when (extension.lowercase()) {
+        "png" -> "image/png"
+        "webp" -> "image/webp"
+        "gif" -> "image/gif"
+        "heic", "heif" -> "image/heic"
+        "bmp" -> "image/bmp"
+        else -> "image/jpeg"
+    }
+
+    /**
      * 同名冲突时追加 `(2)`、`(3)`…（[exists] 由调用方给，便于单测）。
      * 视频带了 noteId 基本不会冲突，但用户可能从别的客户端存过同名文件。
      */
