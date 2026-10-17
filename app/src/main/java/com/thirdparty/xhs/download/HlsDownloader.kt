@@ -74,11 +74,18 @@ class HlsDownloader(
         val ts = (merged as Merged.Ok).file
         val mp4 = File(workDir, "video.mp4")
         onStage(DownloadStage.REMUXING)
-        return when (val out = HlsRemuxer.remux(context, ts, mp4)) {
-            is HlsRemuxer.Outcome.Failed -> Outcome.Failed(out.reason)
+        // 失败自动重试一次：切后台/息屏时 media3 的重编码可能被系统打断（报 muxer/codec 错），
+        // 这种失败通常是瞬时的，重试一次基本能过；合并好的 TS 还在，重试只重跑转封装本身。
+        var last = HlsRemuxer.remux(context, ts, mp4)
+        if (last is HlsRemuxer.Outcome.Failed) {
+            Log.w(TAG, "转 mp4 第一次失败（${last.reason}），重试一次")
+            last = HlsRemuxer.remux(context, ts, mp4)
+        }
+        return when (last) {
+            is HlsRemuxer.Outcome.Failed -> Outcome.Failed(last.reason)
             is HlsRemuxer.Outcome.Ok -> {
                 ts.delete()
-                Outcome.Ok(out.file, out.bytes, merged.bytes, out.durationMs)
+                Outcome.Ok(last.file, last.bytes, merged.bytes, last.durationMs)
             }
         }
     }

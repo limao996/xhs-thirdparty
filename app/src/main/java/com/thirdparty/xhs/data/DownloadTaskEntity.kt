@@ -103,5 +103,14 @@ object DownloadStage {
     }
 
     /** 这一段是不是"没有可数进度"的处理阶段（界面要换成不确定进度条 + 秒数）。 */
+    /**
+     * 处理阶段超过一定时间后的补充说明（纯函数，可单测）。
+     *
+     * 为什么要有：大视频 media3 会落到**重编码**，耗时以分钟计。界面只显示「转换为 mp4… · 已用 68 秒」
+     * 用户会以为卡死；超过 30 秒后补一句"视频较大"，把预期说清楚。
+     */
+    fun slowHint(stage: String?, elapsedSeconds: Int): String? =
+        if (stage == REMUXING && elapsedSeconds >= 30) "视频较大，可能需要几分钟" else null
+
     fun isProcessing(stage: String?): Boolean = stage == MERGING || stage == REMUXING || stage == SAVING
 }

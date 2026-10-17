@@ -631,6 +631,50 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 
 
+### 阶段六十三 · 下载：后台转 mp4 的 muxer error + 完成通知的横幅/振动 + 通知跳转不重复建页（2026-10-17，用户反馈）
+
+用户报三件事：①「切后台到合并 mp4 阶段就 muxer error」；
+②「完成通知要默认开启系统横幅和振动（系统配置，和渠道有关）」；
+③「当前界面是下载管理时，通知跳转不应该新建下载管理界面」。
+
+**① 后台 muxer error（真 bug）**
+
+实测（模拟器 API 34，163 片 / 115 MB 的视频）：这个视频 media3 **不是转封装**，
+而是落到 `c2.android.avc.encoder` 软件重编码，耗时以分钟计；当时应用**没有唤醒锁**
+（`dumpsys power` 的 `mWakeLockSummary=0x0`），切后台/息屏后 CPU 被挂起 → 报 muxer/codec 错或假死。四改：
+
+- 下载期间由 `DownloadService` 持有 `PARTIAL_WAKE_LOCK`（随服务生命周期获取/释放，实测 `xhs:download` ACQ/REL）；
+- **卡住检测**：每 5 秒读 `Transformer.getProgress()`，90 秒没前进就主动失败（原来只能干等 10 分钟超时）；
+- 转 mp4 失败**自动重试一次**（合并好的 TS 还在，重试只重跑转封装）；
+- 失败原因**全中文**（`ExportException.errorCode` → 封装/编码/解码/读写/权限），media3 英文原文只进日志；
+  另外转完记录体积占比，`< 95%` 即说明走了重编码（仅日志，用于排查）；
+  UI 上「转换为 mp4…」超过 30 秒补一句「视频较大，可能需要几分钟」（`DownloadStage.slowHint` + 单测）。
+
+**② 完成通知的系统横幅 + 振动**
+
+按用户口径改成「只设渠道重要性，其余交给系统」：`download_done` 渠道**只**设 `IMPORTANCE_HIGH`
+（系统定义 = 横幅 + 系统提示音 + 系统振动），**不写**自定义 `vibrationPattern`；
+顺带**撤掉**我一度加上的 `VIBRATE` 权限 —— 通知振动由系统进程执行，不需要它（与硬约束 19 同一口径）。
+渠道重要性创建后不可改，所以发现现有渠道重要性偏低时会删掉重建（用户主动关成 `NONE` 的不重建）。
+
+**③ 通知跳转不再重复建页**
+
+原来无条件 `navigate(Routes.DOWNLOADS)`：已经在下载管理页时再点通知就压了第二层。
+现在先比当前路由，不在下载管理时才 `navigate(...) { launchSingleTop = true }`。
+
+**证据（模拟器 API 34）**
+
+- ①：`dumpsys power` 显示 `PARTIAL_WAKE_LOCK 'xhs:download' ACQ=… (uid=10192)`、`mWakeLockSummary=0x1`，下载结束 `REL` 释放；
+- ②：`dumpsys notification` 里 `download_done : importance=4  mVibration=null  mVibrationEnabled=true`
+  （HIGH + 系统默认振动、无自定义模式），对照进度渠道 `downloads : importance=2 mVibrationEnabled=false`；
+  `dumpsys package` 里**没有** `android.permission.VIBRATE`；
+- ③：下载完成后自动跳到下载管理（`已完成 · 5 件作品`）→ 点完成通知仍停在下载管理 →
+  **按一次 Back 回到详情页**（`女友的上位`）= 没有多压一层；
+- 单测 **52 例**全绿（新增 `slowHint` 1 例）；`assembleDebug + lintDebug` 绿（lint 9）。
+
+**未验证**：① 的「后台重编码最终能成功」—— 115 MB 的样本在模拟器上即使有唤醒锁也跑不完（CPU 太弱），
+只验证到唤醒锁确实持有、卡住检测会把假死变成 90 秒内的明确失败；真机大文件的后台转码结果待用户复测。
+
 ### 阶段六十二 · 下载：全面审查一轮（5 项发现，含 1 个真 bug）（2026-10-17，用户要求）
 
 用户要求「全面审查并优化（包括文案）」。按 **状态机正确性 / 文案一致性 / 交互与恢复 / 可访问性**

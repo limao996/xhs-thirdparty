@@ -40,4 +40,17 @@ class DownloadStageTest {
         assertTrue(DownloadStage.isProcessing(DownloadStage.REMUXING))
         assertTrue(DownloadStage.isProcessing(DownloadStage.SAVING))
     }
+
+    @Test
+    fun slow_hint_only_for_long_remux() {
+        // 大视频 media3 会落到重编码、耗时以分钟计；超过 30 秒要给出"视频较大"的预期，避免被当成卡死
+        assertNull(DownloadStage.slowHint(DownloadStage.REMUXING, 0))
+        assertNull(DownloadStage.slowHint(DownloadStage.REMUXING, 29))
+        assertEquals("视频较大，可能需要几分钟", DownloadStage.slowHint(DownloadStage.REMUXING, 30))
+        assertEquals("视频较大，可能需要几分钟", DownloadStage.slowHint(DownloadStage.REMUXING, 600))
+        // 只有"转 mp4"这一段提示（合并/保存通常很快）
+        assertNull(DownloadStage.slowHint(DownloadStage.MERGING, 300))
+        assertNull(DownloadStage.slowHint(DownloadStage.SAVING, 300))
+        assertNull(DownloadStage.slowHint(null, 300))
+    }
 }

@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
@@ -133,22 +134,42 @@ class DownloadService : Service() {
         }
 
         /**
-         * 确保"下载完成"渠道存在且为高优先级。
+         * 确保"下载完成"渠道存在且为**高重要性** —— 横幅与振动都交给系统默认，自己不要另设。
          *
-         * 渠道创建后重要性改不了，所以这里只在不存在时创建；老版本装过的用户原来只有低优先级渠道，
-         * 新渠道会被单独创建出来（`download_done` 这个名字之前没用过）。
+         * 用户 2026-10-17 的要求："弹出的通知默认开启系统横幅和振动，这是系统的配置，应该和通知渠道有关"。
+         * 确实如此：`IMPORTANCE_HIGH` 的含义就是"发出声音并**以横幅形式**显示"，
+         * 同时系统会给它套用**默认的提示音与振动**（用户还能在系统设置里逐项改）。
+         * 所以这里只创建渠道并设重要性，**不写** `vibrationPattern` 之类的自定义值 ——
+         * 自己写模式等于覆盖系统默认，也违背用户的本意。
+         *
+         * 重要性**创建后改不了**，所以发现现有渠道不是 HIGH（且不是用户主动关掉的 NONE）就删掉重建，
+         * 让老装机也拿到"横幅 + 振动"的默认配置。
          */
         private fun ensureDoneChannel(context: Context) {
             val manager = context.getSystemService(NotificationManager::class.java) ?: return
-            if (manager.getNotificationChannel(DONE_CHANNEL_ID) != null) return
+            val existing = manager.getNotificationChannel(DONE_CHANNEL_ID)
+            if (existing != null) {
+                val userDisabled = existing.importance == NotificationManager.IMPORTANCE_NONE
+                if (!userDisabled && existing.importance == NotificationManager.IMPORTANCE_HIGH) return
+                if (userDisabled) {
+                    // 用户在系统设置里关掉了它：尊重用户选择，不重建
+                    android.util.Log.i("XhsDownload", "下载完成渠道已被用户关闭，不再重建")
+                    return
+                }
+                android.util.Log.i(
+                    "XhsDownload",
+                    "下载完成渠道重要性偏低（${existing.importance}），删掉重建为 HIGH"
+                )
+                manager.deleteNotificationChannel(DONE_CHANNEL_ID)
+            }
             manager.createNotificationChannel(
                 NotificationChannel(
                     DONE_CHANNEL_ID,
                     DONE_CHANNEL_NAME,
+                    // HIGH = 系统横幅（heads-up）+ 系统提示音 + 系统振动，全部按系统默认
                     NotificationManager.IMPORTANCE_HIGH
                 ).apply {
-                    description = "下载完成后提醒（可单独关闭，不影响下载进度通知）"
-                    enableVibration(true)
+                    description = "下载完成后弹出横幅提醒（可单独关闭，不影响下载进度通知）"
                 }
             )
         }
@@ -165,12 +186,52 @@ class DownloadService : Service() {
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    /**
+     * 下载期间持有的 `PARTIAL_WAKE_LOCK`。
+     *
+     * 为什么必须有：大视频 media3 会落到**软件重编码**（实测 115 MB / 163 片的视频走
+     * `c2.android.avc.encoder`，耗时以分钟计）。此时若应用在后台、屏幕又灭了，CPU 会被挂起 ——
+     * 编码停滞或直接抛 muxer/codec 异常（用户 2026-10-17 报的"切后台合并 mp4 就 muxer error"）。
+     * 前台服务只保证进程不被杀，**不保证 CPU 不休眠**，所以还要一个唤醒锁。
+     * 锁随服务生命周期（`onDestroy` 释放），不做超时 —— 服务本来只在下完/全暂停时才退出。
+     */
+    private var wakeLock: PowerManager.WakeLock? = null
     private var foregroundStarted = false
+
+    /**
+     * 故意**不设超时**：下载本身可能持续几十分钟（大视频还要软件重编码），超时到点被系统释放会让
+     * 编码在后台再次被挂起 —— 这正是要修的 bug。锁的边界交给服务生命周期：`onDestroy` 释放，
+     * 而服务只在"没有未完成任务"时才退出。
+     */
+    @android.annotation.SuppressLint("WakelockTimeout")
+    private fun acquireWakeLock() {
+        if (wakeLock?.isHeld == true) return
+        runCatching {
+            val pm = getSystemService(PowerManager::class.java)
+            wakeLock = pm?.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "xhs:download"
+            )?.apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+            android.util.Log.i("XhsDownload", "已持有下载唤醒锁（避免后台重编码被挂起）")
+        }.onFailure { android.util.Log.w("XhsDownload", "获取唤醒锁失败：${it.message}") }
+    }
+
+    private fun releaseWakeLock() {
+        runCatching { if (wakeLock?.isHeld == true) wakeLock?.release() }
+        wakeLock = null
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
+        // 唤醒锁：前台服务只保证进程不被杀，**不保证 CPU 不休眠** ——
+        // 大视频的软件重编码在后台/息屏时会被挂起，表现为 muxer / codec 报错（用户 2026-10-17 反馈）
+        acquireWakeLock()
         createChannel()
         DownloadEngine.init(applicationContext)
         // **立刻进前台**：`startForegroundService` 之后系统只给 ~5 秒窗口，等状态收集器再提升会来不及
@@ -223,6 +284,7 @@ class DownloadService : Service() {
 
     override fun onDestroy() {
         scope.cancel()
+        releaseWakeLock()
         super.onDestroy()
     }
 

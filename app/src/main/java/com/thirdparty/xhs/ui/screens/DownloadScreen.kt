@@ -518,7 +518,14 @@ private fun GroupCard(
         ?.takeIf { !group.processing && group.video?.status == DownloadStatus.RUNNING }
         ?.let { com.thirdparty.xhs.download.DownloadSpeed.format(it) }
     val summary = group.statusSummary() +
-        if (group.processing) " · 已用 $ticker 秒" else (speedText?.let { " · $it" } ?: "")
+        // 处理阶段没有可数进度：给已用秒数；大视频 media3 会落到重编码、耗时以分钟计，
+        // 超过 30 秒再补一句"视频较大"，否则用户会以为卡死（2026-10-17 后台 muxer error 的排查结论）
+        if (group.processing) {
+            " · 已用 $ticker 秒" +
+                (DownloadStage.slowHint(group.video?.stage, ticker)?.let { "（$it）" } ?: "")
+        } else {
+            speedText?.let { " · $it" } ?: ""
+        }
 
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerLowest,
@@ -621,6 +628,7 @@ private fun GroupCard(
                     group.items.forEach { item ->
                         ItemRow(
                             task = item,
+                            elapsedSeconds = ticker,
                             onOpen = { onOpenItem(item) },
                             onCancel = { onCancelItem(item.id) },
                             onRetry = { onRetryItem(item.id) }
@@ -636,6 +644,8 @@ private fun GroupCard(
 @Composable
 private fun ItemRow(
     task: DownloadTaskEntity,
+    /** 处理阶段已用秒数（与组级同一个 ticker）：用于"视频较大，可能需要几分钟"的提示 */
+    elapsedSeconds: Int = 0,
     onOpen: () -> Unit,
     onCancel: () -> Unit,
     onRetry: () -> Unit
@@ -662,7 +672,7 @@ private fun ItemRow(
                 maxLines = 1
             )
             Text(
-                itemStatusLine(task),
+                itemStatusLine(task, elapsedSeconds),
                 style = MaterialTheme.typography.labelSmall,
                 color = if (task.status == DownloadStatus.FAILED) {
                     MaterialTheme.colorScheme.error
@@ -694,10 +704,14 @@ private fun ItemRow(
 }
 
 /** 单条的状态说明（与组级汇总同一套口径）。 */
-private fun itemStatusLine(task: DownloadTaskEntity): String = when (task.status) {
+private fun itemStatusLine(task: DownloadTaskEntity, elapsedSeconds: Int? = null): String = when (task.status) {
     DownloadStatus.QUEUED -> "排队中"
     DownloadStatus.RUNNING -> when {
-        DownloadStage.isProcessing(task.stage) -> (DownloadStage.label(task.stage) ?: "处理中") + "…"
+        DownloadStage.isProcessing(task.stage) ->
+            (DownloadStage.label(task.stage) ?: "处理中") + "…" +
+                (elapsedSeconds?.let { " · 已用 $it 秒" }.orEmpty()) +
+                (elapsedSeconds?.let { DownloadStage.slowHint(task.stage, it) }?.let { "（$it）" } ?: "")
+
         task.kind == DownloadKind.VIDEO && task.totalSegments > 0 ->
             "下载中 ${task.doneSegments}/${task.totalSegments} 片 · ${formatBytes(task.bytes)}"
 

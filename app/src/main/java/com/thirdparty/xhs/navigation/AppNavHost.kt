@@ -296,9 +296,15 @@ fun AppNavHost(
     }
 
     // 通知点进来的：直接进下载管理（消费一次，避免用户返回后又被弹回这一页）
+    //
+    // **已经在下载管理页时不再压一层**：用户 2026-10-17 反馈"当前界面是下载管理，点通知又新建了一个
+    // 下载管理界面"。`launchSingleTop` 只处理"栈顶就是它"的情况，所以这里再显式比一次当前路由
+    // （`Routes.DOWNLOADS` 是普通路由、不是模式串，可以直接比）。
     androidx.compose.runtime.LaunchedEffect(openDownloads) {
         if (openDownloads) {
-            nav.navigate(Routes.DOWNLOADS)
+            if (nav.currentBackStackEntry?.destination?.route != Routes.DOWNLOADS) {
+                nav.navigate(Routes.DOWNLOADS) { launchSingleTop = true }
+            }
             onOpenDownloadsConsumed()
         }
     }
