@@ -12,9 +12,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         SavedNoteEntity::class,
         HistoryEntity::class,
         FollowedEntity::class,
-        WatchLaterEntity::class
+        WatchLaterEntity::class,
+        DownloadTaskEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class XhsDatabase : RoomDatabase() {
@@ -22,6 +23,7 @@ abstract class XhsDatabase : RoomDatabase() {
     abstract fun historyDao(): HistoryDao
     abstract fun followDao(): FollowDao
     abstract fun watchLaterDao(): WatchLaterDao
+    abstract fun downloadTaskDao(): DownloadTaskDao
 
     companion object {
         @Volatile
@@ -99,6 +101,37 @@ abstract class XhsDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v3 → v4：只新增 `download_task`（下载任务表）。
+         *
+         * 与本文件其它迁移同样的理由：**必须真迁移**。用户手机上的收藏 / 浏览 / 关注 / 队列只有本机这一份，
+         * 而这次只是加一张全新的表，不能靠兜底清库（那个兜底本来就刻意没挂）。
+         * 建表语句必须与 [DownloadTaskEntity] 的列**逐字对应**（Room 打开库时会校验 schema），
+         * 可空列不能写成 NOT NULL。
+         */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `download_task` (" +
+                        "`id` INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, " +
+                        "`noteId` INTEGER NOT NULL, " +
+                        "`title` TEXT NOT NULL, " +
+                        "`kind` TEXT NOT NULL, " +
+                        "`sourceUrl` TEXT NOT NULL, " +
+                        "`imageIndex` INTEGER NOT NULL, " +
+                        "`status` TEXT NOT NULL, " +
+                        "`doneSegments` INTEGER NOT NULL, " +
+                        "`totalSegments` INTEGER NOT NULL, " +
+                        "`bytes` INTEGER NOT NULL, " +
+                        "`savedPath` TEXT, " +
+                        "`savedUri` TEXT, " +
+                        "`error` TEXT, " +
+                        "`createdAt` INTEGER NOT NULL, " +
+                        "`updatedAt` INTEGER NOT NULL)"
+                )
+            }
+        }
+
         fun get(context: Context): XhsDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -106,7 +139,7 @@ abstract class XhsDatabase : RoomDatabase() {
                     XhsDatabase::class.java,
                     "xhs_local.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     // **故意不挂 `fallbackToDestructiveMigration()`**：那会让"漏写迁移"的版本
                     // 静默清空用户的收藏 / 浏览 / 关注 / 队列。宁可启动就崩，也不能悄悄丢数据
                     // （见 docs/REVIEW.md P1-3 与附录C-P0-2；AGENTS 硬约束与 CONVENTIONS 都要求真迁移）。

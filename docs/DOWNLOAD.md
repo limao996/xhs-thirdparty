@@ -111,8 +111,13 @@ Room（任务表）、Android `MediaStore`（公共目录）。
   图片两张落进 `Pictures/小黄书/下载探针_999/01.jpg`、`02.jpg` 并入库；
   `ls /sdcard/Movies/小黄书/` 与 `/sdcard/Pictures/小黄书/` 双向确认存在。
   API 26–28 分支**未实测**（模拟器是 API 34），代码按版本分支写好，待真机/低版本验证。
-- [ ] **T4 任务持久化**：`data/DownloadTask.kt`（Room 实体）、DAO、`MIGRATION_3_4`、`download/DownloadRepository.kt`；
-  验收：升级安装后旧数据仍在；杀进程重开任务列表还在。
+- [x] **T4 任务持久化（表与迁移部分）—— 2026-10-17 通过**
+  文件：`data/DownloadTaskEntity.kt`（一行一个文件：视频 1 行、图片各 1 行，便于多选/并发/逐条重试）、
+  `data/DownloadTaskDao.kt`、`XhsDatabase.kt`（version 3→4 + `MIGRATION_3_4` 真迁移 + `downloadTaskDao()`）。
+  **实机证据（模拟器 API 34，覆盖安装带旧库）**：升级前 `user_version=3`、`history=17`、无 `download_task`；
+  升级后 `user_version=4`、`history=18`（**旧数据保留**，只是本次浏览 +1）、`download_task` 表存在（0 行）、
+  我的页正常、`crash: 0`（Room 打开时会校验 schema，能开起来即说明建表语句与实体一致）。
+  待办：`DownloadRepository` 与"杀进程重开任务列表还在"的验证放到 T5/T6。
 - [ ] **T5 前台服务 + 通知**：`download/DownloadService.kt` + 清单权限；
   验收：下载中按 Home 进度继续；通知可暂停/取消（截图）。
 - [ ] **T6 下载管理页**：`ui/screens/DownloadScreen.kt`、`ui/viewmodel/DownloadViewModel.kt`、`navigation/Routes.kt`、
