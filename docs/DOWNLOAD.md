@@ -91,10 +91,15 @@ Room（任务表）、Android `MediaStore`（公共目录）。
   （源为 6×10 s 切片，吻合），耗时 **3.75 s**（体积几乎不变 → 纯转封装、未重编码）；
   拉回本地解析：`ftyp isom` + `moov`（**2 个 `trak`**：视频 + 音频，`stbl` 含 stsd/stts/ctts/stsz/stsc/co64/stss）、
   `mvhd timescale=10000 duration=600800` → **60.08 s**。
-- [ ] **T2 下载内核（可单测部分优先）**
-  文件：`download/HlsPlaylist.kt`、`download/HlsDownloader.kt`、`download/Names.kt`；
-  验收：单测覆盖 m3u8 解析（含 `#EXT-X-KEY` 相对 URI、IV）与文件名清理/重名；
-  实机下载一个完整作品的视频 → 产出 mp4 且大小合理。
+- [x] **T2 下载内核（可单测部分优先）—— 2026-10-17 通过**
+  文件：`download/HlsPlaylist.kt`（解析，含相对/绝对地址、`#EXT-X-KEY` 的 URI 与 IV、
+  媒体序号兜底、`EXT-X-MAP`/`BYTERANGE` 明确报不支持）、`download/DownloadNames.kt`（目录/命名规则）、
+  `download/HlsDownloader.kt`（切片并行下载 + AES-128 解密 + 顺序流式合并，Semaphore 控并发）；
+  单测：`HlsPlaylistTest` 5 例、`DownloadNamesTest` 6 例，全绿（连原有 `UpdateCheckerTest` 共 22 例通过）。
+  **实机证据（模拟器 API 34，12 片 / 22 片）**：
+  并发 1 路 **25,982 ms** → 并发 4 路 **10,645 ms**（**提速 2.44×**）；两轮产物完全一致
+  （mp4 16,317,809 B、时长 120,040 ms，正好 12×10 s）。
+  **临时探针**：`download/DownloadProbe.kt` + `App.onCreate` 的 DEBUG 钩子（T7 做出正式 UI 后删除）。
 - [ ] **T3 公共目录落盘**：`download/MediaStoreWriter.kt`；
   验收：`content query` 能看到记录 + 相册/视频库可见（截图）。
 - [ ] **T4 任务持久化**：`data/DownloadTask.kt`（Room 实体）、DAO、`MIGRATION_3_4`、`download/DownloadRepository.kt`；

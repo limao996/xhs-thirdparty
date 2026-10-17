@@ -201,6 +201,8 @@ class App : Application() {
     )
 
     override fun onCreate() {
+        // DEBUG 专用：下载链路验证探针（见 download/DownloadProbe.kt，T7 做出正式 UI 后删除）
+        com.thirdparty.xhs.download.DownloadProbe.runIfRequested(this)
         super.onCreate()
         INSTANCE = this
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
