@@ -90,6 +90,8 @@ fun DownloadScreen(
     viewModel: DownloadViewModel = viewModel(factory = RepoViewModelFactory())
 ) {
     val state by viewModel.ui.collectAsStateWithLifecycle()
+    val scanning by viewModel.scanning.collectAsStateWithLifecycle()
+    val duplicates by viewModel.duplicates.collectAsStateWithLifecycle()
     val haptics = rememberHaptics()
     val context = LocalContext.current
     // 删除确认：null = 没弹；"clear" = 清空已完成；否则是要删的那条记录
@@ -219,6 +221,39 @@ fun DownloadScreen(
             downloadSection("进行中", state.active, "a")
             downloadSection("失败", state.failed, "x")
             downloadSection("已完成", state.finished, "f")
+
+            // 列表底部：检查"重复下载留下的多余文件"（先列清单，用户确认后才删）
+            item {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(Corners.small)
+                        .clickable {
+                            haptics.tick()
+                            viewModel.scanDuplicates(context)
+                        }
+                        .padding(vertical = Spacing.m, horizontal = Spacing.xs),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Filled.DeleteSweep,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.width(Spacing.s))
+                    Column {
+                        Text(
+                            if (scanning) "正在检查重复文件…" else "检查重复文件",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            "重复下载在加去重之前会留下多份文件，可以在这里清掉",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
         }
     }
 
@@ -241,6 +276,68 @@ fun DownloadScreen(
     }
 
     // 清空已结束（完成 + 失败）：同样让用户选是否连文件一起删
+    // 重复文件清单：先让用户看到"要删哪些、共多大"，确认后才删
+    duplicates?.let { report ->
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissDuplicates() },
+            title = {
+                Text(
+                    if (report.files.isEmpty()) "没有重复文件" else "发现 ${report.files.size} 个重复文件"
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        if (report.files.isEmpty()) {
+                            "公共目录里的下载文件都只有一份，无需清理。"
+                        } else {
+                            "这些文件是重复下载留下的（同一张图/同一个视频存了多份），" +
+                                "共 ${formatBytes(report.bytes)}。删除只影响这些多余文件，" +
+                                "下载记录与保留的那一份不受影响。此操作不可撤销。"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (report.files.isNotEmpty()) {
+                        Spacer(Modifier.height(Spacing.s))
+                        report.files.take(8).forEach { file ->
+                            Text(
+                                file.displayName,
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        if (report.files.size > 8) {
+                            Text(
+                                "…以及另外 ${report.files.size - 8} 个",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                if (report.files.isEmpty()) {
+                    TextButton(onClick = { viewModel.dismissDuplicates() }) { Text("知道了") }
+                } else {
+                    TextButton(onClick = {
+                        haptics.reject()
+                        viewModel.deleteDuplicates(context) { deleted ->
+                            Toast.makeText(context, "已删除 $deleted 个重复文件", Toast.LENGTH_SHORT).show()
+                        }
+                    }) {
+                        Text("删除这些文件", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            },
+            dismissButton = if (report.files.isEmpty()) null else {
+                { TextButton(onClick = { viewModel.dismissDuplicates() }) { Text("取消") } }
+            }
+        )
+    }
+
     if (pendingClear) {
         DeleteChoiceDialog(
             title = "清空已结束的记录？",

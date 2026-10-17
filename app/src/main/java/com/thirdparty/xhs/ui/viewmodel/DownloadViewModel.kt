@@ -7,6 +7,7 @@ import com.thirdparty.xhs.data.DownloadStatus
 import com.thirdparty.xhs.data.XhsRepository
 import com.thirdparty.xhs.data.groupDownloads
 import com.thirdparty.xhs.download.DownloadEngine
+import com.thirdparty.xhs.download.DuplicateCleaner
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -107,5 +108,40 @@ class DownloadViewModel(private val repo: XhsRepository) : ViewModel() {
      */
     fun clearFinished(alsoDeleteFiles: Boolean, onResult: (Int) -> Unit = {}) {
         viewModelScope.launch { onResult(DownloadEngine.clearFinished(alsoDeleteFiles)) }
+    }
+
+    // ---- 重复文件检查 --------------------------------------------------------
+
+    /** 检查结果：待删清单与总大小（null 表示还没查过）。 */
+    data class DupReport(val files: List<DuplicateCleaner.MediaFile>, val bytes: Long)
+
+    private val _duplicates = MutableStateFlow<DupReport?>(null)
+    val duplicates: StateFlow<DupReport?> = _duplicates.asStateFlow()
+
+    private val _scanning = MutableStateFlow(false)
+    val scanning: StateFlow<Boolean> = _scanning.asStateFlow()
+
+    /** 扫公共目录，列出「重复下载留下来的多余文件」（先给用户看，确认后才删）。 */
+    fun scanDuplicates(context: android.content.Context) {
+        if (_scanning.value) return
+        _scanning.value = true
+        viewModelScope.launch {
+            val files = DuplicateCleaner.scan(context)
+            val referenced = runCatching { repo.downloadSavedPaths() }.getOrDefault(emptySet())
+            val dups = DuplicateCleaner.duplicates(files, referenced)
+            _duplicates.value = DupReport(dups, dups.sumOf { it.sizeBytes })
+            _scanning.value = false
+        }
+    }
+
+    /** 删除清单里的文件（不动数据库记录）。 */
+    fun deleteDuplicates(context: android.content.Context, onResult: (Int) -> Unit = {}) {
+        val files = _duplicates.value?.files.orEmpty()
+        _duplicates.value = null
+        viewModelScope.launch { onResult(DuplicateCleaner.delete(context, files)) }
+    }
+
+    fun dismissDuplicates() {
+        _duplicates.value = null
     }
 }

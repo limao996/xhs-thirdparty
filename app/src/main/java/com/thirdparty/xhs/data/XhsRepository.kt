@@ -39,6 +39,11 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
     fun downloadTasks(): kotlinx.coroutines.flow.Flow<List<DownloadTaskEntity>> =
         downloadDao.observeAll()
 
+    /** 全部下载记录里已落盘的路径（重复文件检查用：判断某个文件是否还被记录引用）。 */
+    suspend fun downloadSavedPaths(): Set<String> = withContext(Dispatchers.IO) {
+        downloadDao.all().mapNotNull { it.savedPath?.takeIf { p -> p.isNotBlank() } }.toSet()
+    }
+
     /**
      * 某件作品的下载任务（下载对话框用：标记"已下载 / 下载中"并跳过重复项）。
      */
