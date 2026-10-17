@@ -303,24 +303,27 @@ object DownloadEngine {
         synchronized(lock) { jobs[task.id] = job }
     }
 
-    /** 记录上一批结束时的任务数，用来判断"这一批是不是刚收尾"。 */
-    private var lastReportedFinished = -1
+    /**
+     * **这一轮**（本进程内）完成与失败的任务数，只用于完成通知的文案。
+     *
+     * 不要拿"库里 DONE 的总数"来报：那会把历史所有下载都算进去，用户只下了 1 个作品却看到
+     * 「完成 17 项」（2026-10-17 实测发现）。报完清零；"这一轮什么都没跑完"时不发通知。
+     */
+    private val runOk = java.util.concurrent.atomic.AtomicInteger(0)
+    private val runFailed = java.util.concurrent.atomic.AtomicInteger(0)
 
     /**
      * 一批任务收尾时发一条完成通知（受设置里的「下载完成通知」控制，见 [DownloadService.notifyFinished]）。
      *
-     * 判据用**库**而不是内存计数：队列里没有未完成任务（含排队/暂停之外的全部结束）才叫收尾。
-     * 只在"上一批已经报过"到"这一批又结束"之间发一次，避免每次 schedule 都重复通知。
+     * 判据用**库**判"是否收尾"（没有未完成任务），数量用本进程的轮次计数
+     * （[runOk] / [runFailed]），与"历史一共完成了多少"无关。
      */
     private suspend fun maybeNotifyFinished() {
         if (!::appContext.isInitialized) return
-        val all = dao.all()
-        val unfinished = all.count { it.status in DownloadStatus.unfinished }
+        val unfinished = dao.unfinished().size
         if (unfinished > 0) return
-        if (all.size == lastReportedFinished) return
-        lastReportedFinished = all.size
-        val ok = all.count { it.status == DownloadStatus.DONE }
-        val failed = all.count { it.status == DownloadStatus.FAILED }
+        val ok = runOk.getAndSet(0)
+        val failed = runFailed.getAndSet(0)
         if (ok + failed == 0) return
         Log.i(TAG, "一批下载结束：成功 $ok，失败 $failed")
         DownloadService.notifyFinished(appContext, ok, failed)
@@ -373,6 +376,7 @@ object DownloadEngine {
         when (outcome) {
             is HlsDownloader.Outcome.Failed -> {
                 dao.setStatus(task.id, DownloadStatus.FAILED, outcome.reason, System.currentTimeMillis())
+                runFailed.incrementAndGet()
             }
 
             is HlsDownloader.Outcome.Ok -> {
@@ -382,11 +386,14 @@ object DownloadEngine {
                     DownloadNames.baseName(task.title, task.noteId), "mp4"
                 ) { candidate -> existsInVideoDir(candidate) }
                 when (val saved = MediaStoreWriter.saveVideo(appContext, outcome.mp4, name)) {
-                    is MediaStoreWriter.Result.Failed ->
+                    is MediaStoreWriter.Result.Failed -> {
                         dao.setStatus(task.id, DownloadStatus.FAILED, saved.reason, System.currentTimeMillis())
+                        runFailed.incrementAndGet()
+                    }
 
                     is MediaStoreWriter.Result.Ok -> {
                         dao.setDone(task.id, saved.displayPath, saved.uri.toString(), saved.bytes, System.currentTimeMillis())
+                        runOk.incrementAndGet()
                         Log.i(TAG, "视频完成：${saved.displayPath}（${saved.bytes} 字节，${outcome.durationMs}ms）")
                     }
                 }
@@ -403,8 +410,10 @@ object DownloadEngine {
         dao.setStage(task.id, DownloadStage.FETCHING, System.currentTimeMillis())
         refreshState()
         when (val outcome = downloader.saveToGallery(appContext, task.sourceUrl, relativeDir, name)) {
-            is ImageDownloader.Outcome.Failed ->
+            is ImageDownloader.Outcome.Failed -> {
                 dao.setStatus(task.id, DownloadStatus.FAILED, outcome.reason, System.currentTimeMillis())
+                runFailed.incrementAndGet()
+            }
 
             is ImageDownloader.Outcome.Ok -> {
                 // 单张图片的"保存"很短，但解码/解密大图时也会有一小段空窗，一并标出来
@@ -413,6 +422,7 @@ object DownloadEngine {
                 dao.setDone(
                     task.id, outcome.displayPath, outcome.uri, outcome.bytes, System.currentTimeMillis()
                 )
+                runOk.incrementAndGet()
             }
         }
     }

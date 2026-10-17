@@ -44,8 +44,21 @@ class DownloadService : Service() {
         const val ACTION_CANCEL = "com.thirdparty.xhs.download.CANCEL"
         const val EXTRA_TASK_ID = "taskId"
 
+        /** 常驻**进度**通知的渠道：低优先级（不响不弹，避免下载过程中反复打扰）。 */
         private const val CHANNEL_ID = "downloads"
-        private const val CHANNEL_NAME = "下载"
+        private const val CHANNEL_NAME = "下载进度"
+
+        /**
+         * **下载完成**通知的渠道：高优先级。
+         *
+         * 为什么必须单独一个渠道：Android 8+ 的通知渠道**创建后重要性不可修改**，
+         * 而低优先级（`IMPORTANCE_LOW`）的表现就是"不弹横幅、不出声、折叠进列表"——
+         * 用户反映"下载完成通知总是不弹出来"就是这个原因（2026-10-17）。
+         * 完成是用户想立刻知道的事，单独给它 `IMPORTANCE_HIGH`（弹横幅 + 声音 + 抬到最前）。
+         */
+        private const val DONE_CHANNEL_ID = "download_done"
+        private const val DONE_CHANNEL_NAME = "下载完成"
+
         private const val NOTIFICATION_ID = 4801
 
         /** 下载完成的一次性通知（与常驻进度通知分开 id，避免互相覆盖）。 */
@@ -61,7 +74,8 @@ class DownloadService : Service() {
          * 一批下载结束后发一条完成通知。
          *
          * 由 [DownloadEngine] 在"队列彻底没有未完成任务"时调用（= 一批任务收尾）。
-         * 受设置里的「下载完成通知」控制；权限被拒时静默跳过（下载本身已经完成，不该因此报错）。
+         * 走**高优先级**渠道 [DONE_CHANNEL_ID]（弹横幅 + 声音），所以用户能立刻看到；
+         * 受设置里的「下载完成通知」控制；通知权限被拒时静默跳过（下载本身已经完成，不该因此报错）。
          */
         fun notifyFinished(context: Context, okCount: Int, failedCount: Int) {
             if (!DownloadSettings.notifyOnFinish(context)) return
@@ -70,13 +84,18 @@ class DownloadService : Service() {
                     context, android.Manifest.permission.POST_NOTIFICATIONS
                 ) != android.content.pm.PackageManager.PERMISSION_GRANTED
             ) {
+                android.util.Log.i(
+                    "XhsDownload",
+                    "下载完成通知被跳过：没有 POST_NOTIFICATIONS 权限"
+                )
                 return
             }
+            ensureDoneChannel(context)
             val manager = NotificationManagerCompat.from(context)
             val text = when {
                 failedCount > 0 && okCount > 0 -> "完成 $okCount 项，失败 $failedCount 项"
-                failedCount > 0 -> "失败 $failedCount 项"
-                else -> "完成 $okCount 项"
+                failedCount > 0 -> "失败 $failedCount 项，点开可重试"
+                else -> "完成 $okCount 项，点开查看"
             }
             val open = PendingIntent.getActivity(
                 context,
@@ -87,15 +106,42 @@ class DownloadService : Service() {
             runCatching {
                 manager.notify(
                     FINISHED_NOTIFICATION_ID,
-                    NotificationCompat.Builder(context, CHANNEL_ID)
+                    NotificationCompat.Builder(context, DONE_CHANNEL_ID)
                         .setSmallIcon(R.drawable.ic_download)
-                        .setContentTitle("下载已结束")
+                        .setContentTitle(
+                            if (failedCount > 0 && okCount == 0) "下载失败" else "下载完成"
+                        )
                         .setContentText(text)
+                        .setPriority(NotificationCompat.PRIORITY_HIGH)
+                        .setCategory(NotificationCompat.CATEGORY_STATUS)
+                        .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
                         .setAutoCancel(true)
                         .setContentIntent(open)
                         .build()
                 )
             }
+            android.util.Log.i("XhsDownload", "已发下载完成通知（$text，渠道=$DONE_CHANNEL_ID）")
+        }
+
+        /**
+         * 确保"下载完成"渠道存在且为高优先级。
+         *
+         * 渠道创建后重要性改不了，所以这里只在不存在时创建；老版本装过的用户原来只有低优先级渠道，
+         * 新渠道会被单独创建出来（`download_done` 这个名字之前没用过）。
+         */
+        private fun ensureDoneChannel(context: Context) {
+            val manager = context.getSystemService(NotificationManager::class.java) ?: return
+            if (manager.getNotificationChannel(DONE_CHANNEL_ID) != null) return
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    DONE_CHANNEL_ID,
+                    DONE_CHANNEL_NAME,
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "下载完成后提醒（可单独关闭，不影响下载进度通知）"
+                    enableVibration(true)
+                }
+            )
         }
 
         /** 前台服务不再有活干时调用（例如全部任务都结束了）。 */
@@ -214,7 +260,7 @@ class DownloadService : Service() {
 
             snapshot.currentTitles.isNotEmpty() -> snapshot.currentTitles.joinToString("、")
             snapshot.queued > 0 -> "准备下载 ${snapshot.queued} 项"
-            else -> "下载完成"
+            else -> "下载任务已结束"
         }
         val text = buildString {
             append("已完成 $done / $total 项")
@@ -225,7 +271,7 @@ class DownloadService : Service() {
             }
         }
 
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_download)
             .setContentTitle(title)
             .setContentText(text)
@@ -239,9 +285,13 @@ class DownloadService : Service() {
             .setOnlyAlertOnce(true)
             .setContentIntent(open)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-            .addAction(0, "暂停全部", pause)
-            .addAction(0, "继续全部", resume)
-            .build()
+        // 只放"当前点得动"的那个动作：全都在暂停时不该出现「暂停全部」，反之亦然
+        if (snapshot.running > 0 || snapshot.queued > 0) {
+            builder.addAction(0, "暂停全部", pause)
+        } else {
+            builder.addAction(0, "继续全部", resume)
+        }
+        return builder.build()
     }
 
     /** 库里还有没有未完成的任务（停止服务的判据以库为准，避免内存摘要滞后导致误停）。 */

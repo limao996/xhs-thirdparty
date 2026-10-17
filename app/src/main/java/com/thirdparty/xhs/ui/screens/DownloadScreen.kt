@@ -447,9 +447,10 @@ private fun GroupCard(
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (group.settled) {
-                        // 没有可打开的文件时（整组失败、或记录里的 uri 已失效）不摆「打开」按钮，
-                        // 否则点下去只会得到一句"还没有可打开的文件"
-                        if (group.firstOpenable() != null) {
+                        // 展开后每条都有自己的「打开」，组级那个就多余了（用户 2026-10-17 要求隐藏）。
+                        // 另外：没有可打开的文件时（整组失败、或记录里的 uri 已失效）也不摆，
+                        // 否则点下去只会得到一句"还没有可打开的文件"。
+                        if (!expanded && group.firstOpenable() != null) {
                             IconButton(onClick = { haptics.tick(); onOpenGroup() }) {
                                 Icon(Icons.Filled.PlayCircleOutline, contentDescription = "打开")
                             }

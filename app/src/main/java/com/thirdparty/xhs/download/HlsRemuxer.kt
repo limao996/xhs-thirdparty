@@ -59,7 +59,7 @@ object HlsRemuxer {
                     exportResult: ExportResult,
                     exportException: androidx.media3.transformer.ExportException
                 ) {
-                    result.set(Outcome.Failed(exportException.message ?: "Transformer 失败"))
+                    result.set(Outcome.Failed(exportException.message ?: "转换失败，请重试"))
                     latch.countDown()
                 }
             })
@@ -73,13 +73,13 @@ object HlsRemuxer {
         val finished = withContext(Dispatchers.IO) { latch.await(TIMEOUT_SECONDS, TimeUnit.SECONDS) }
         if (!finished) {
             transformer.cancel()
-            Outcome.Failed("转封装超时")
+            Outcome.Failed("转换超时，请重试")
         } else {
-            val outcome = result.get() ?: return@withContext Outcome.Failed("转封装没有回调")
+            val outcome = result.get() ?: return@withContext Outcome.Failed("转换失败，请重试")
             // 自检：0 字节或时长为 0 一律当失败，绝不把空文件当成功交给用户
             if (outcome is Outcome.Ok && (outcome.bytes == 0L || outcome.durationMs <= 0L)) {
                 mp4.delete()
-                return@withContext Outcome.Failed("转封装结果不完整")
+                return@withContext Outcome.Failed("转换结果不完整，请重试")
             }
             outcome
         }

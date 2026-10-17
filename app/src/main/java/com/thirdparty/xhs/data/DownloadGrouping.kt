@@ -104,11 +104,8 @@ data class DownloadGroup(
             }
         }
         if (images.isNotEmpty()) {
-            parts += when {
-                doneImages == images.size -> "图片 已全部完成"
-                images.all { it.status == DownloadStatus.FAILED } -> "图片 全部失败"
-                else -> "图片 $doneImages/${images.size} 张"
-            }
+            // 统一用计数式：同一行里的各段读起来一致（不要这里"已全部完成"、那里"1/3 张"）
+            parts += "图片 $doneImages/${images.size} 张"
         }
         return parts.joinToString(" · ").ifEmpty { "排队中" }
     }

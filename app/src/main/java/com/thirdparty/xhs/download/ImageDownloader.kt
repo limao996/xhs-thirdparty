@@ -34,7 +34,7 @@ class ImageDownloader(private val client: OkHttpClient) {
                 if (!resp.isSuccessful) throw IllegalStateException("HTTP ${resp.code}")
                 resp.body!!.bytes()
             }
-            if (raw.isEmpty()) throw IllegalStateException("下载内容为空")
+            if (raw.isEmpty()) throw IllegalStateException("下载内容为空，请稍后重试")
             return if (url.contains(COD_STATIC)) XhsCrypto.zdecrypt(raw) else raw
         }
     }

@@ -90,7 +90,7 @@ object MediaStoreWriter {
         publicDir: String,
         displayName: String
     ): Result {
-        if (!source.exists()) return Result.Failed("源文件不存在")
+        if (!source.exists()) return Result.Failed("文件已不存在，请重新下载")
         val targetDir = "$publicDir/$relativeDir"
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
@@ -103,23 +103,23 @@ object MediaStoreWriter {
                     Environment.getExternalStoragePublicDirectory(publicDir),
                     relativeDir
                 )
-                if (!dir.exists() && !dir.mkdirs()) return Result.Failed("无法创建目录：${dir.absolutePath}")
+                if (!dir.exists() && !dir.mkdirs()) return Result.Failed("无法创建保存目录，请检查存储空间")
                 put(MediaStore.MediaColumns.DATA, File(dir, displayName).absolutePath)
             }
         }
 
         val resolver = context.contentResolver
         val uri = runCatching { resolver.insert(collection, values) }.getOrNull()
-            ?: return Result.Failed("系统拒绝写入（MediaStore 插入失败）")
+            ?: return Result.Failed("系统拒绝写入，请检查存储空间后重试")
 
         val written = runCatching {
             resolver.openOutputStream(uri)?.use { out: OutputStream ->
                 source.inputStream().use { it.copyTo(out, 256 * 1024) }
-            } ?: return Result.Failed("无法打开输出流")
+            } ?: return Result.Failed("无法写入文件，请检查存储空间")
             source.length()
         }.getOrElse { e ->
             runCatching { resolver.delete(uri, null, null) }
-            return Result.Failed("写入失败：${e.message}")
+            return Result.Failed("写入文件失败，请检查存储空间后重试")
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

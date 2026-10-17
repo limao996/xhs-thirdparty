@@ -98,6 +98,21 @@ class HlsDownloader(
     ): Merged = withContext(Dispatchers.IO) {
         workDir.mkdirs()
         onStage(DownloadStage.FETCHING)
+
+        // 若上次已经把切片合并完整（`merged.ts` 是合并写完才改名的，见下），直接复用它：
+        // 暂停/被杀如果落在"合并/转封装"这几段，重来时不必把整个视频再下一遍。
+        val mergedFile = File(workDir, "merged.ts")
+        if (mergedFile.length() > 0 && File(workDir, "merged.ts.part").length() == 0L) {
+            val playlist = runCatching { HlsPlaylist.parse(fetchText(playlistUrl), playlistUrl) }
+                .getOrNull()
+            val segCount = playlist?.segments?.size ?: 0
+            Log.i(TAG, "复用已合并的 merged.ts（${mergedFile.length()} 字节），跳过切片下载与合并")
+            onProgress(Progress(segCount, segCount, mergedFile.length()))
+            return@withContext Merged.Ok(mergedFile, mergedFile.length(), segCount)
+        }
+        // 上次合并没写完的残留，清掉重来
+        File(workDir, "merged.ts.part").takeIf { it.exists() }?.delete()
+
         val playlist = try {
             HlsPlaylist.parse(fetchText(playlistUrl), playlistUrl)
         } catch (e: Exception) {
@@ -154,19 +169,24 @@ class HlsDownloader(
 
         // 合并阶段：这一步在大文件上要几秒到几十秒（顺序复制 + 删切片），
         // 期间给界面报阶段与字节进度，别让用户以为卡在 22/22。
+        //
+        // 写临时名再改名：这样"`merged.ts` 存在"就一定意味着合并**完整**了 ——
+        // 暂停/被杀如果发生在合并中途，下次重来可以直接续（见上面的 already 逻辑与 remuxToMp4）。
         onStage(DownloadStage.MERGING)
         val out = File(workDir, "merged.ts")
+        val partial = File(workDir, "merged.ts.part")
         val mergedBytes = AtomicLong(0)
-        FileOutputStream(out).use { sink ->
+        FileOutputStream(partial).use { sink ->
             wanted.indices.forEach { index ->
                 val f = File(segFile(workDir, index))
-                if (!f.exists()) return@withContext Merged.Failed("切片 $index 缺失")
+                if (!f.exists()) return@withContext Merged.Failed("下载内容不完整，请重试")
                 f.inputStream().use { it.copyTo(sink, 256 * 1024) }
                 mergedBytes.addAndGet(f.length())
                 onProgress(Progress(wanted.size, wanted.size, mergedBytes.get()))
                 f.delete()
             }
         }
+        if (!partial.renameTo(out)) return@withContext Merged.Failed("下载内容合并失败，请重试")
         Log.i(TAG, "合并完成：${out.length()} 字节（$bytes）")
         Merged.Ok(out, out.length(), wanted.size)
     }
