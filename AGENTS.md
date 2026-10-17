@@ -39,6 +39,9 @@
 | 27 | **界面文案按「应用文案」写：书面、简洁、中性。** 按钮 / 标签用动词或名词短语（打开、取消、重试、清空、前往发布页），不要语气词（吧 / 呢 / 试试 / 看看 / 就）和聊天口吻；说明句写清「会发生什么」，例如「将删除全部 N 条记录，此操作不可撤销。」而不是「删掉就找不回来了」；失败提示写「发生了什么 + 怎么办」，例如「网络连接失败，网络恢复后将自动重试」；同一个动作在不同页面用同一个词（重试 / 取消 / 关闭 / 清空） | 2026-10-09 我按「去 AI 味」改文案时把界面写成了口语（「打开看看？」「删掉就找不回来了」），用户当即驳回：「这是 App 的文案，不是小红书文案」。文档可以放松，界面不可以 |
 | 28 | **发布正式包必须按这个顺序：① 先改版本号（`app/build.gradle` 的 `appVersionName`）→ ② 构建正式包（`assembleRelease`）→ ③ 本机实测确认没问题（覆盖安装、冒烟、验签）→ ④ 最后才 `git push` 与创建 Release。发布批次开始后的代码提交先留在本地，验证通过后再一次性推送。** 不许"先推送/先发布、再补验证" | 用户 2026-10-10 明确要求：「以后发布正式包要先改版本号构建正式包，确定没问题了再推送并发布」。先推后验一旦发现正式包有问题，远端就已经有坏版本了，撤回要动 tag、还得再发一版；版本号先改也是同理：改完才知道这版叫什么、Release 资产名（`xhs-thirdparty-<版本>-release.apk`）与 tag 都从它推导 |
 | 29 | **`loading` / `checking` 这类"显示态"只能用于渲染，绝不能当"要不要发起"的判据或重入锁。** 防重入必须用独立字段（`private var inFlight` / `private var loading`，见 Author/Search/UserList/VideoFeed/Update/Discover 的私有变量）。凡是 `if (_ui.value.xxxLoading) return`、`if (state.xxxLoading && …) load()` 这类写法都是错的 | 同一个错误已经犯过两次：① 推荐页把 `firstLoading` 初值改成 true 之后，屏幕侧 `if (items.isEmpty() && !firstLoading) loadMore()` 永远不成立 → "推荐页一直 loading"；② `UpdateUiState.checking` 初值改成 true 之后，`check()` 的 `if (_ui.value.checking) return` 直接挡掉首次请求 → "检查更新一直停在正在检查"，而且**发进了 v1.3.2 正式包**。两者都是"显示态初值为 true 时把自己锁死"。验证方法见 `docs/ai/GOTCHAS.md` H28 |
+| 30 | **下载状态只以 Room 的 `download_task` 表为准**：UI（下载管理页）与服务（前台服务 + `DownloadEngine`）都从库里读，不在内存里维护第二份任务状态；"该不该停服务"也用库判据。改这张表必须写真迁移（现存 `MIGRATION_1_2` / `MIGRATION_2_3` / `MIGRATION_3_4`） | 2026-10-17 实测：服务若按内存计数判断"没活干"就 `stopSelf()`，会错过 `startForegroundService` 的 5 秒窗口、被系统直接干掉（`ForegroundServiceDidNotStartInTimeException`，见 GOTCHAS H30）；反过来进程被杀时库里留着的 `RUNNING` 任务也必须在启动时重排（H31） |
+| 31 | **HLS 转 mp4 用 media3 的 `Transformer`，不要自己驱动 `TsExtractor` + `Mp4Muxer`**；视频一律**转封装不重编码**（成品体积应与源 TS 接近）。落盘：视频进 `Movies/小黄书/<标题>_<noteId>.mp4`、图片进 `Pictures/小黄书/<标题>_<noteId>/NN.jpg`（29+ 走 MediaStore 无需权限，26–28 需要运行时 `WRITE_EXTERNAL_STORAGE`）；图片 URL 含 `codstatic` 的**必须先 `XhsCrypto.zdecrypt`** 再存 | 手写驱动时 extractor 会在"跳到尾部读时长"与"回到开头"之间来回请求 `RESULT_SEEK`，mp4 产出 0 字节（GOTCHAS H29）；图片不解密就存盘，用户拿到的是一堆乱码 |
+| 32 | **设置里的开关必须真的连到行为**：新增开关时，同一次改动里就把"读它的那条行为"实现并实测，不允许先落一个只写偏好的空开关；"等待网络/仅 Wi-Fi"这类开关还要连带"网络恢复后自动继续"（对应硬约束 25 的口径） | 2026-10-17 自己踩到：先把「下载完成通知」的偏好写好却忘了发通知，等于给用户一个假开关；「仅 Wi-Fi」若不自动恢复，用户开了它回到 Wi-Fi 还得手动点一次继续 |
 
 ## 1. 项目一句话
 
@@ -57,9 +60,9 @@
 | 路径 | 职责 | 改动注意 |
 | --- | --- | --- |
 | `app/build.gradle` | 版本号、签名、`buildConfigField`、依赖矩阵 | 版本号规则见 `docs/BUILD.md` |
-| `app/src/main/AndroidManifest.xml` | 权限、Activity、深链 `xhstp://note`、`launchMode="singleTask"`（深链复用同一实例，避免第二个界面/第二个小窗）、`supportsPictureInPicture`、`usesCleartextTraffic`（只为局域网 http WebDAV） | 新增权限要在 `docs/BUILD.md` 的权限清单与 `docs/PROTOCOL.md` 里同步（README 是用户向介绍，不放权限表）（清单里只声明 INTERNET / ACCESS_NETWORK_STATE / WAKE_LOCK；合并后的 APK 还会带 biometric 库的 USE_BIOMETRIC / USE_FINGERPRINT 与 androidx 的 DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION） |
+| `app/src/main/AndroidManifest.xml` | 权限、Activity、深链 `xhstp://note`、`launchMode="singleTask"`（深链复用同一实例，避免第二个界面/第二个小窗）、`supportsPictureInPicture`、`usesCleartextTraffic`（只为局域网 http WebDAV） | 新增权限要在 `docs/BUILD.md` 的权限清单与 `docs/PROTOCOL.md` 里同步（README 是用户向介绍，不放权限表）（清单里声明 INTERNET / ACCESS_NETWORK_STATE / WAKE_LOCK / REQUEST_INSTALL_PACKAGES，以及下载用的 FOREGROUND_SERVICE / FOREGROUND_SERVICE_DATA_SYNC / POST_NOTIFICATIONS / WRITE_EXTERNAL_STORAGE（`maxSdkVersion="28"`）；合并后的 APK 还会带 biometric 库的 USE_BIOMETRIC / USE_FINGERPRINT 与 androidx 的 DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION） |
 | `data/XhsRepository.kt` | **单一数据源**，所有网络读写都在这里 | 新接口先加在这里，不要在 UI 直接调 `XhsApi` |
-| `data/XhsDatabase.kt` | Room 数据库 `xhs_local.db`（v3：saved / history / followed / watch_later） | 改 schema 必须 bump version **并加真迁移**，`addMigrations` 要成对维护：现存 `MIGRATION_1_2`（v1 从未发布，这条**刻意 DROP 重建**三张缓存表）与 `MIGRATION_2_3`（只 `CREATE TABLE watch_later`）；**不要**再挂 `fallbackToDestructiveMigration()` |
+| `data/XhsDatabase.kt` | Room 数据库 `xhs_local.db`（v4：saved / history / followed / watch_later / **download_task**） | 改 schema 必须 bump version **并加真迁移**，`addMigrations` 要成对维护：现存 `MIGRATION_1_2`（v1 从未发布，这条**刻意 DROP 重建**三张缓存表）、`MIGRATION_2_3`（只 `CREATE TABLE watch_later`）、`MIGRATION_3_4`（只 `CREATE TABLE download_task`）；**不要**再挂 `fallbackToDestructiveMigration()` |
 | `data/BackupManager.kt` | 备份/恢复内容与格式 | 改字段要同步 `docs/ai/CONTEXT.md` 的备份清单 |
 | `net/XhsApi.kt` | 请求封装、重试、会话自愈 | 重试次数/退避在这里（`NETWORK_ATTEMPTS` / `RETRY_BACKOFF_MS`） |
 | `net/XhsCrypto.kt` | AES/CBC 加解密 + CDN 图片 AES/ECB | 参数见 `docs/PROTOCOL.md`，不要"顺手"改 |
@@ -67,13 +70,14 @@
 | `net/UpdateChecker.kt` + `net/UpdateDownloader.kt` | 检查更新（**atom feed 优先**，API 兜底）与应用内下载安装包 | 必须用**独立的 OkHttpClient**（共用的带 64 MB 磁盘缓存会把应答/APK 缓存住），且必须带 `User-Agent`（否则 GitHub 403）；见 `docs/ai/GOTCHAS.md` G1/G6。入口：`App.checkUpdateOnLaunch()` 每次进前台查一次 → `App.pendingUpdate` → `MainActivity` 弹 `ui/components/UpdateAvailableDialog.kt`（**应用内下载** / 浏览器打开 / 以后再说 / 跳过这个版本）；下载器要校验**包名与本应用一致**才允许交给安装器 |
 | `data/AppCaches.kt` | 可清理缓存的枚举、逐项体积与清理（含顶层 `formatBytes`） | 每种缓存**各自一个 `CacheKind`、各自一个勾选框**，清理必须一一对应（硬约束 13）；`IMAGE_DISK` 走 `XhsRepository.clearHttpCache()`，`IMAGE_MEMORY` 走 `ui/components/XhsAsyncImage.kt` 的 `clearImageMemoryCache()`；`TEMP_FILES` 只含 `cache/` 下除 `http_cache/` 与 `*.lck`（SQLite 锁文件，实现按后缀判断）之外的文件（`isClearableTemp`） |
 | `ui/components/PipController.kt` + `ui/components/WatchLaterFab.kt` / `WatchLaterBar.kt` + `ui/screens/WatchLaterScreen.kt` | 画中画小窗的持有者（会话 / 控制栏 `RemoteAction` / 展开与关闭）与稍后观看队列的三种入口 | 画中画的播放器所有权见硬约束 17 与 `docs/ai/GOTCHAS.md` H 节；队列按加入时间排列、不提供排序（硬约束 20） |
+| `download/` | 下载子系统：`DownloadEngine.kt`（队列 / 并发 / 暂停 / 断点 / 落盘，状态真相在 Room）、`DownloadService.kt`（前台服务 + 进度通知 + 完成通知）、`HlsPlaylist.kt`、`HlsDownloader.kt`（切片并行下载 + AES-128 解密 + 顺序合并）、`HlsRemuxer.kt`（`Transformer` 转封装 mp4）、`ImageDownloader.kt`、`MediaStoreWriter.kt`、`DownloadNames.kt`、`DownloadSettings.kt` | 见硬约束 30–32 与 `docs/DOWNLOAD.md`；**转封装不要自己驱动 extractor**（31）；图片含 `codstatic` 必须先解密；改落盘规则要同步 `docs/DOWNLOAD.md` |
 | `navigation/AppNavHost.kt` + `Routes.kt` | 唯一路由注册处 | 新页面必须同时登记 `Routes` 常量与 `HomeTab`（如属底部页） |
 | `ui/screens/*.kt` | 页面级组合函数 | 每个 screen 对应一个 `ui/viewmodel/`；子 tab 内容要包 `rememberSaveableStateHolder()`，列表滚动状态要按 `resetKey` 分组（`key(resetKey) { … }`），身份位同名却是新列表时必须单调递增（GOTCHAS C2/C8） |
 | `ui/components/*.kt` | 可复用组件（瀑布流/播放器/画廊/对话框/水印状态…） | 组件不要直接访问 Room |
 | `ui/viewmodel/*.kt` | 状态与业务编排 | 用 `RepoViewModelFactory` 注入仓库 |
 | `ui/theme/Theme.kt`, `ui/theme/Tokens.kt` | M3 Expressive 主题、间距/圆角/`Scrim` 令牌 | 新颜色优先用 `MaterialTheme.colorScheme`，scrim 只用于媒体之上 |
 | `tools/verify.ps1` | 设备验证函数库（解锁、启动、dump、点击、截图、崩溃计数） | 是 PowerShell，改动后要真跑一次；**入库**，只有 `tools/out/` 与截图不入库 |
-| `app/src/test/` | 单元测试（目前只有 `net/UpdateCheckerTest`） | `gradlew.bat testDebugUnitTest`；改了版本比较 / GitHub 应答解析就跑 |
+| `app/src/test/` | 单元测试（`net/UpdateCheckerTest`、`download/HlsPlaylistTest`、`download/DownloadNamesTest`） | `gradlew.bat testDebugUnitTest`；改了版本比较 / GitHub 应答解析 / 播放列表解析 / 命名规则就跑。**注意 JVM 测试里 `android.net.Uri` 等类是空壳**，下载的下载器与转封装只能在真机验证（见 GOTCHAS H29） |
 | `tools/fixtures/` · `tools/probes/` · `tools/webdav_server.py` | 测试用 SharedPreferences fixture、探针、本机 WebDAV 服务 | fixture 里有真实会话凭据（审查 P0-13，用户明确暂不处理）；fixture 不得被应用运行期引用 |
 | `docs/` | 项目文档 | 结构变更同步 `docs/README.md` |
 | `docs/ai/` | **AI 档案本体** | 见下节 |

@@ -203,8 +203,16 @@ Room（任务表）、Android `MediaStore`（公共目录）。
   ③ 同一任务可能被重复启动（排期 / 网络恢复 / 用户点继续多路径同时到达）→ `startTask` 加"已在跑则跳过"。
   说明：模拟器只有 Wi-Fi 一种上网方式（`Transports: WIFI`、蜂窝无网），所以"仅 Wi-Fi"的隔离验证是
   用**关闭 Wi-Fi**（无可用网络）触发的同一条分支；真机上移动网络下的表现仍未实测。
-- [ ] **T9 文档与档案**：本文件定稿、`AGENTS.md`（仓库表 + 新硬约束：下载/公共目录/权限）、
-  `docs/ai/GOTCHAS.md`（`RESULT_SEEK` 坑、MediaStore 版本差异）、`docs/CHANGELOG.md`、`README.md` 功能列表。
+- [x] **T9 文档与档案 —— 2026-10-17 完成**
+  本文件（设计 / 事实 / 任务 / 缺口 / 验收）、`AGENTS.md`（仓库地图新增 `download/` 与 Room v4、
+  权限清单更新、硬约束 **30/31/32**、单元测试清单）、`CLAUDE.md`（条目 14/15 + 总数 32）、
+  `docs/ai/GOTCHAS.md`（H29–H33）、`docs/CHANGELOG.md`（阶段五十三）、
+  `README.md`（功能列表 + **已知限制改写**：原文"不做下载 / 视频不落盘"已不成立）、
+  `docs/ARCHITECTURE.md`（Room v4 + 下载子系统 + 新路由）、`docs/PROTOCOL.md`（HLS / AES-128 与落盘事实）、
+  `docs/ai/CONTEXT.md`（代码地图与本地数据表）。
+  **临时探针已全部删除**：`DownloadProbe.kt`、`DownloadEnqueueProbe.kt`、`DownloadService` 的 DEBUG `DUMP` 动作
+  与 `App.onCreate` 的两个钩子；删除后 `assembleDebug + testDebugUnitTest + lintDebug` 全绿（lint 9），
+  并重新走了一遍"详情页菜单 → 下载对话框 → 下载管理"的真实路径（见下方验收清单）。
 
 ## 7. 已知缺口（如实记录）
 

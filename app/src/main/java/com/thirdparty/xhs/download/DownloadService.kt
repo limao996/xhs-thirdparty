@@ -41,9 +41,6 @@ class DownloadService : Service() {
         const val ACTION_PAUSE_ALL = "com.thirdparty.xhs.download.PAUSE_ALL"
         const val ACTION_RESUME_ALL = "com.thirdparty.xhs.download.RESUME_ALL"
         const val ACTION_CANCEL = "com.thirdparty.xhs.download.CANCEL"
-
-        /** DEBUG 专用：把任务表打到日志里（验证用，见 DownloadEnqueueProbe；T7 后连同探针一起删）。 */
-        const val ACTION_DUMP = "com.thirdparty.xhs.download.DUMP"
         const val EXTRA_TASK_ID = "taskId"
 
         private const val CHANNEL_ID = "downloads"
@@ -160,7 +157,6 @@ class DownloadService : Service() {
         when (intent?.action) {
             ACTION_PAUSE_ALL -> DownloadEngine.pauseAll()
             ACTION_RESUME_ALL -> DownloadEngine.resumeAll()
-            ACTION_DUMP -> scope.launch { dumpTasks() }
             ACTION_CANCEL -> intent.getLongExtra(EXTRA_TASK_ID, -1L)
                 .takeIf { it > 0 }?.let { DownloadEngine.cancel(it) }
             // 只有显式 START 动作才排一次队（onStartCommand 可能被系统重放，不能每次都排）
@@ -228,21 +224,6 @@ class DownloadService : Service() {
             .addAction(0, "暂停全部", pause)
             .addAction(0, "继续全部", resume)
             .build()
-    }
-
-    /** DEBUG 专用：打印任务表（不依赖 adb 拉 sqlite 文件）。 */
-    private suspend fun dumpTasks() {
-        if (!com.thirdparty.xhs.BuildConfig.DEBUG) return
-        val dao = XhsDatabase.get(this).downloadTaskDao()
-        val rows = dao.all()
-        android.util.Log.i("XhsProbe", "任务表共 ${rows.size} 行")
-        rows.forEach { t ->
-            android.util.Log.i(
-                "XhsProbe",
-                "  行 id=${t.id} kind=${t.kind} status=${t.status} 切片=${t.doneSegments}/${t.totalSegments} " +
-                    "bytes=${t.bytes} path=${t.savedPath} err=${t.error}"
-            )
-        }
     }
 
     /** 库里还有没有未完成的任务（停止服务的判据以库为准，避免内存摘要滞后导致误停）。 */

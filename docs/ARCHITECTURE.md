@@ -37,9 +37,11 @@ app/src/main/java/com/thirdparty/xhs/
 ├── common/RepoViewModelFactory.kt  所有 ViewModel 的构造入口
 ├── data/
 │   ├── XhsRepository.kt          ★ 全部接口调用、缓存写入、DTO→UI 模型映射
-│   ├── XhsDatabase.kt            Room 数据库（xhs_local.db，version 3）
+│   ├── XhsDatabase.kt            Room 数据库（xhs_local.db，version 4）
 │   ├── XhsEntity.kt              收藏 / 历史的实体
 │   ├── XhsDao.kt / FollowDao.kt  各表 DAO
+│   ├── DownloadTaskEntity.kt     下载任务实体 + DownloadKind / DownloadStatus 常量
+│   ├── DownloadTaskDao.kt        下载任务 DAO（状态流转集中在这里）
 │   ├── Models.kt / NoteItem.kt   DTO 与 UI 模型
 │   ├── ShareText.kt              分享口令文本构造/解析
 │   ├── BackupManager.kt          备份与恢复（本地文件 / WebDAV）
@@ -52,13 +54,23 @@ app/src/main/java/com/thirdparty/xhs/
 │   ├── IdentityGuess.kt          设备身份（MAC）生成与猜测试探
 │   ├── WebDavClient.kt           WebDAV（PUT / GET / MKCOL）
 │   └── UpdateChecker.kt          检查更新（GitHub Releases；全应用唯一不经 AES 的请求，自带独立 OkHttpClient）
+├── download/                     下载子系统（见 docs/DOWNLOAD.md）
+│   ├── DownloadEngine.kt         队列调度 / 并发 / 暂停取消重试 / 断点恢复 / 落盘（状态真相在 Room）
+│   ├── DownloadService.kt        前台服务 + 进度通知 + 完成通知（常驻与完成后各一个 id）
+│   ├── HlsPlaylist.kt            m3u8 解析（相对地址、EXT-X-KEY 的 URI 与 IV）
+│   ├── HlsDownloader.kt          切片并行下载 + AES-128 解密 + 顺序流式合并 + 切片级断点
+│   ├── HlsRemuxer.kt             TS → MP4 转封装（media3 Transformer，不重编码）
+│   ├── ImageDownloader.kt        图片下载 + CDN 图解密（codstatic → XhsCrypto.zdecrypt）
+│   ├── MediaStoreWriter.kt       公共目录落盘（29+ MediaStore；26–28 自建目录 + DATA）
+│   ├── DownloadNames.kt          目录 / 文件命名规则（纯逻辑，带单测）
+│   └── DownloadSettings.kt       四项下载偏好（并发 / 并行切片 / 仅 Wi-Fi / 完成通知）
 ├── navigation/
 │   ├── Routes.kt                 路由常量 + HomeTab 枚举
 │   └── AppNavHost.kt             唯一 NavHost 注册处
 ├── ui/
 │   ├── screens/                  Home / DiscoverTab / Detail / VideoFeed / Search /
 │   │                             Author / Followed / UserList / LocalList / Profile /
-│   │                             Backup / Settings / About / Update / Cache / WatchLater
+│   │                             Backup / Settings / About / Update / Cache / WatchLater / Download
 │   ├── components/               XhsWaterfall（真实比例瀑布流）/ VideoPlayer / VideoSurface /
 │   │                             ImageGallery / FullscreenImageViewer / BufferedSlider /
 │   │                             CommentRepliesDialog / ConfirmActionDialog / EmptyState /
@@ -131,7 +143,7 @@ app/src/main/java/com/thirdparty/xhs/
 
 ## 4. 持久化
 
-Room 数据库 `xhs_local.db`，`@Database(version = 3)`，实体四张：
+Room 数据库 `xhs_local.db`，`@Database(version = 4)`，实体五张：
 
 | 实体 | 表用途 | 相关 DAO |
 | --- | --- | --- |
@@ -139,10 +151,14 @@ Room 数据库 `xhs_local.db`，`@Database(version = 3)`，实体四张：
 | `HistoryEntity` | 最近浏览（不记录未观看的视频） | `HistoryDao`（`historyDao()`） |
 | `FollowedEntity` | 我关注的作者 | `FollowDao`（`followDao()`） |
 | `WatchLaterEntity` | 稍后观看队列（`position` 从 0 起，顺序就是队列顺序） | `WatchLaterDao`（`watchLaterDao()`） |
+| `DownloadTaskEntity` | 下载任务（**一行一个文件**：视频 1 行、图片各 1 行；`kind`/`status` 存字符串） | `DownloadTaskDao`（`downloadTaskDao()`） |
 
-- **迁移**：`2 → 3` 是**真迁移**（`MIGRATION_2_3` 只 `CREATE TABLE watch_later`）。已发布版本上的
+- **迁移**：`2 → 3`、`3 → 4` 都是**真迁移**（`MIGRATION_2_3` 只 `CREATE TABLE watch_later`，
+  `MIGRATION_3_4` 只 `CREATE TABLE download_task`）。已发布版本上的
   收藏 / 最近浏览 / 关注只有本机一份，靠 `fallbackToDestructiveMigration()` 兜底等于升级时删用户数据；
-  **刻意不再挂 `fallbackToDestructiveMigration()`**：漏写迁移时宁可启动就报错，也不能静默清空用户的收藏 / 浏览 / 关注 / 队列。跨版本一律写真迁移（现存 `MIGRATION_1_2`、`MIGRATION_2_3`）。
+  **刻意不再挂 `fallbackToDestructiveMigration()`**：漏写迁移时宁可启动就报错，也不能静默清空用户的收藏 / 浏览 / 关注 / 队列。跨版本一律写真迁移（现存 `MIGRATION_1_2`、`MIGRATION_2_3`、`MIGRATION_3_4`）。
+- 下载任务表是**下载子系统唯一的状态真相**：前台服务与下载管理页都从它读，不各自维护内存状态
+  （硬约束 30；理由与踩过的坑见 `docs/DOWNLOAD.md` 与 GOTCHAS H30/H31）。
 - 队列顺序只由 `position` 表达：**不提供排序**（按加入时间），增删之后 `renumberWatchLater()`
   压紧，不留空洞：队列只有几十条，比维护链表/浮点 position 简单且不会积累误差。
 - 备份内容：收藏、最近浏览、关注、**稍后观看队列**、设置项（主题 / 历史上限 / 应用锁 / 自动换号）、搜索记录、WebDAV 配置（**含 URL、用户名与密码**，JSON 明文；备份文件本身要放好）。**不包含账号凭据**（identity / token / user_hash / VIP 窗口都不导出），且**不恢复** `vipEnd`。
@@ -153,7 +169,8 @@ Room 数据库 `xhs_local.db`，`@Database(version = 3)`，实体四张：
 - `Routes.kt` 是唯一路由常量表：`home`、`detail/{noteId}`、`search`、`author/{userId}`、
 
   `saved`、`history`、`followed`、`following`（关注，走 `member/follow-list`）、`fans`（粉丝，走 `member/fun-list`）、
-  `backup`、`settings`、`cache`（清除缓存）、`about`（关于）、`update`（检查更新）、`watch_later`（稍后观看队列）；
+  `backup`、`settings`、`cache`（清除缓存）、`about`（关于）、`update`（检查更新）、`watch_later`（稍后观看队列）、
+  `downloads`（下载管理，入口在「我的」）；
   辅助构造函数 `detail(noteId)` / `author(userId)`。
   关于与检查更新是**两个独立页面**，入口都在「我的 → 其他」；设置页只放偏好项与数据相关入口（备份与恢复、清除缓存）。
   稍后观看队列没有独立入口图标：队列非空且不在画中画小窗时，**推荐页**在视频信息栏上方显示一条信息条

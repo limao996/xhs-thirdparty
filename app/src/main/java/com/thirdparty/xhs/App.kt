@@ -201,13 +201,13 @@ class App : Application() {
     )
 
     override fun onCreate() {
-        // DEBUG 专用：下载链路验证探针（见 download/DownloadProbe.kt，T7 做出正式 UI 后删除）
-        com.thirdparty.xhs.download.DownloadProbe.runIfRequested(this)
-        com.thirdparty.xhs.download.DownloadEnqueueProbe.runIfRequested(this)
-        // 下载引擎：读取上次未完成的任务并接着跑（状态真相在 Room）
-        com.thirdparty.xhs.download.DownloadEngine.init(this)
         super.onCreate()
         INSTANCE = this
+        // 下载引擎：读取上次未完成的任务并接着跑（状态真相在 Room）。
+        // **必须放在 `INSTANCE = this` 之后**：引擎会观察 `App.INSTANCE.networkEpoch`
+        // （网络恢复后自动继续"等待 Wi-Fi"的任务），放在前面会偶发
+        // `lateinit property INSTANCE has not been initialized` 崩在启动路径上（2026-10-17 实测踩到）。
+        com.thirdparty.xhs.download.DownloadEngine.init(this)
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: android.app.Activity) {
                 val wasBackground = startedActivities == 0

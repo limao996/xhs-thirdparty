@@ -69,9 +69,14 @@ object DownloadEngine {
         client = OkHttpClient.Builder().build()
         // 应用启动时把上次没跑完的任务接着跑（用户强停/系统杀进程后）
         scope.launch { resumeUnfinished() }
-        // 网络恢复（开 Wi-Fi / 连上线路）后，把"等待 Wi-Fi"而暂停的任务自动接上
+        // 网络恢复（开 Wi-Fi / 连上线路）后，把"等待 Wi-Fi"而暂停的任务自动接上。
+        // 取 `App.INSTANCE` 用 runCatching 兜一下：它由 `App.onCreate` 里的 `INSTANCE = this` 赋值，
+        // 而引擎可能在 Application 尚未走完初始化时就被初始化（这条协程立刻会读一次初值）。
+        // 真正的修法是把 `DownloadEngine.init` 放在 `INSTANCE = this` 之后（见 App.kt），这里再防一手。
         scope.launch {
-            com.thirdparty.xhs.App.INSTANCE.networkEpoch.collect { epoch ->
+            val epochFlow = runCatching { com.thirdparty.xhs.App.INSTANCE.networkEpoch }.getOrNull()
+                ?: return@launch
+            epochFlow.collect { epoch ->
                 if (epoch > 0) resumeWaitingWifi()
             }
         }

@@ -144,6 +144,22 @@ HTTP 层面：**4xx 不重试**（`HttpStatusException`，重发只会再烧一�
   排查时先确认解析结果，再怀疑代码。
 - 客户端对失败的处理：有界重试 + 网络恢复后自动重试，且**不清空已缓存内容**。
 
+## 7.1 视频源的形态（下载功能依赖，2026-10-17 实测）
+
+- **没有 mp4 直链**：作品的 `note_media_url` 全部是 **HLS** 播放列表（`.../p.m3u8`），
+  切片形如 `.../localhost.tN.ts`（`Content-Type: video/mp2t`，单片约 1.3–1.5 MB，支持 `Accept-Ranges`）。
+- **切片是加密的**：播放列表里带
+  `#EXT-X-KEY:METHOD=AES-128,URI="/static/m3u8/enc.key",IV=0x…`；
+  密钥文件是 **16 字节裸密钥**，`IV` 写在播放列表里（没有 `IV` 时按 RFC 8216 用**媒体序号**兜底）。
+  解密方式：`AES/CBC/PKCS5Padding`，逐切片解密。
+- **解密后是标准 MPEG-TS**：`0x47` 同步字节、188 字节包长、含 PAT / PMT（PID 4096）、
+  视频 PID 256、音频 PID 257（实测 6 片合并 8,370,888 字节逐包校验通过）。
+- **转封装**：TS 用 media3 的 `Transformer` 转成 mp4（**不重编码**，实测体积 8,370,888 → 8,358,452、
+  时长 60,040 ms）；自己驱动 `TsExtractor` + `Mp4Muxer` 会在 `RESULT_SEEK` 上来回请求、产出 0 字节（GOTCHAS H29）。
+- **图片**：URL 里含 `codstatic` 的图片，CDN 返回的是 **AES/ECB/NoPadding** 加密字节（同一个密钥），
+  必须先 `XhsCrypto.zdecrypt` 再解码/落盘（§2）。
+- 落盘位置与命名见 `docs/DOWNLOAD.md`（`Movies/小黄书/…mp4`、`Pictures/小黄书/<作品>/NN.jpg`）。
+
 ## 8. 可复现性边界
 
 - 本文只描述**格式**（头、算法、参数名），不含任何内容数据、账号或 token。

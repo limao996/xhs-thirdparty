@@ -14,8 +14,10 @@
 8. 不得移除或绕开"游客账号轮换续 VIP"链路（`v2/app/init` → `login-with-guest` → 校验 `isVip`）；文档里也不要写与之相反的"不破解付费"声明。
 9. 菜单 / 弹窗只用原生 `material3.AlertDialog`（不要 `DropdownMenu`、不要自绘外壳）；触感只用系统 API 且屏幕上自己画的按钮都要有；稍后观看队列不提供排序；分享走系统分享面板。
 10. 画中画：进小窗不要退出详情页，`inPip` 只由 `handBackForDetail()` / `closeAndRelease()` 翻转，播放器归属判据只认小窗会话。
-11. `minSdk` 保持 26；改 Room schema 必须写真迁移（现存 `MIGRATION_1_2` / `MIGRATION_2_3`），不要挂 `fallbackToDestructiveMigration()`。
+11. `minSdk` 保持 26；改 Room schema 必须写真迁移（现存 `MIGRATION_1_2` / `MIGRATION_2_3` / `MIGRATION_3_4`），不要挂 `fallbackToDestructiveMigration()`。
 12. **发布正式包按顺序来**：先改版本号 → 构建正式包 → 本机实测确认 → 最后才推送并发布 Release；发布批次的代码提交先留在本地。
 13. **`loading`/`checking` 这类显示态只用于渲染**，不能当"要不要发起请求"的判据或重入锁；防重入用独立的私有字段（硬约束 29）。
+14. 下载：状态只以 Room 的 `download_task` 为准（UI 与服务都从库读）；HLS 转 mp4 用 media3 `Transformer`（不要自己驱动 extractor）、转封装不重编码；图片 URL 含 `codstatic` 必须先 `XhsCrypto.zdecrypt` 再存（硬约束 30/31，细节见 [docs/DOWNLOAD.md](docs/DOWNLOAD.md)）。
+15. 设置里的开关必须真的连到行为（同一次改动里实现并实测），不允许只写偏好的空开关（硬约束 32）。
 
-完整条目（29 条，另含 5b / 17b 两条细分）见 [AGENTS.md](AGENTS.md) §0。
+完整条目（32 条，另含 5b / 17b 两条细分）见 [AGENTS.md](AGENTS.md) §0。
