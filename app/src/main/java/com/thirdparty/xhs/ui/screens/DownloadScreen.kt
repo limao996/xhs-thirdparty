@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -136,19 +137,19 @@ fun DownloadScreen(
                             }) { Text("全部暂停") }
                         }
                     }
-                    if (state.finished.isNotEmpty()) {
+                    if (state.settled.isNotEmpty()) {
                         IconButton(onClick = {
                             haptics.tick()
                             pendingClear = true
                         }) {
-                            Icon(Icons.Filled.DeleteSweep, contentDescription = "清空已完成")
+                            Icon(Icons.Filled.DeleteSweep, contentDescription = "清空已结束")
                         }
                     }
                 }
             )
         }
     ) { pad ->
-        if (state.active.isEmpty() && state.finished.isEmpty()) {
+        if (state.active.isEmpty() && state.settled.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(pad), contentAlignment = Alignment.Center) {
                 EmptyState(
                     title = if (state.loading) "正在读取下载任务…" else "还没有下载任务",
@@ -159,6 +160,55 @@ fun DownloadScreen(
             return@Scaffold
         }
 
+        // 失败的作品默认展开：失败原因与"重试"要一眼看到，不该藏在折叠里
+        LaunchedEffect(state.failed.map { it.noteId }) {
+            expanded = expanded + state.failed.map { it.noteId }
+        }
+
+        /** 渲染一个分组（进行中 / 失败 / 已完成），三处的行控件完全一致。 */
+        fun LazyListScope.downloadSection(
+            label: String,
+            groups: List<DownloadGroup>,
+            keyPrefix: String
+        ) {
+            if (groups.isEmpty()) return
+            item { GroupLabel("$label · ${groups.size} 件作品") }
+            items(groups, key = { keyPrefix + it.noteId }) { group ->
+                GroupCard(
+                    group = group,
+                    expanded = group.noteId in expanded,
+                    onToggleExpand = {
+                        expanded = if (group.noteId in expanded) {
+                            expanded - group.noteId
+                        } else {
+                            expanded + group.noteId
+                        }
+                    },
+                    onPauseGroup = { viewModel.pauseGroup(group) },
+                    onResumeGroup = { viewModel.resumeGroup(group) },
+                    onRetryGroup = { viewModel.retryGroup(group) },
+                    onOpenItem = ::open,
+                    onCancelItem = { id ->
+                        val item = group.items.firstOrNull { it.id == id }
+                        // 未完成的条目：取消下载，公共目录里还没有文件，直接取消即可；
+                        // 已完成/失败的条目：先问清楚"只删记录"还是"连文件一起删"
+                        if (item != null && item.status != DownloadStatus.DONE &&
+                            item.status != DownloadStatus.FAILED
+                        ) {
+                            viewModel.cancel(id)
+                        } else {
+                            pendingDelete = item
+                        }
+                    },
+                    onRetryItem = { viewModel.retry(it) },
+                    onOpenGroup = {
+                        group.firstOpenable()?.let(::open)
+                            ?: Toast.makeText(context, "还没有可打开的文件", Toast.LENGTH_SHORT).show()
+                    }
+                )
+            }
+        }
+
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(pad),
             contentPadding = PaddingValues(
@@ -166,80 +216,9 @@ fun DownloadScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(Spacing.xs)
         ) {
-            if (state.active.isNotEmpty()) {
-                item { GroupLabel("进行中 · ${state.active.size} 件作品") }
-                items(state.active, key = { "a${it.noteId}" }) { group ->
-                    GroupCard(
-                        group = group,
-                        expanded = group.noteId in expanded,
-                        onToggleExpand = {
-                            expanded = if (group.noteId in expanded) {
-                                expanded - group.noteId
-                            } else {
-                                expanded + group.noteId
-                            }
-                        },
-                        onPauseGroup = { viewModel.pauseGroup(group) },
-                        onResumeGroup = { viewModel.resumeGroup(group) },
-                        onRetryGroup = { viewModel.retryGroup(group) },
-                        onOpenItem = ::open,
-                        onCancelItem = { id ->
-                            val item = group.items.firstOrNull { it.id == id }
-                            // 未完成的条目：取消下载，公共目录里还没有文件，直接取消即可；
-                            // 已完成/失败的条目：先问清楚"只删记录"还是"连文件一起删"
-                            if (item != null && item.status != DownloadStatus.DONE &&
-                                item.status != DownloadStatus.FAILED
-                            ) {
-                                viewModel.cancel(id)
-                            } else {
-                                pendingDelete = item
-                            }
-                        },
-                        onRetryItem = { viewModel.retry(it) },
-                        onOpenGroup = {
-                            group.firstOpenable()?.let(::open)
-                                ?: Toast.makeText(context, "还没有可打开的文件", Toast.LENGTH_SHORT).show()
-                        }
-                    )
-                }
-            }
-            if (state.finished.isNotEmpty()) {
-                item { GroupLabel("已完成 · ${state.finished.size} 件作品") }
-                items(state.finished, key = { "f${it.noteId}" }) { group ->
-                    GroupCard(
-                        group = group,
-                        expanded = group.noteId in expanded,
-                        onToggleExpand = {
-                            expanded = if (group.noteId in expanded) {
-                                expanded - group.noteId
-                            } else {
-                                expanded + group.noteId
-                            }
-                        },
-                        onPauseGroup = {},
-                        onResumeGroup = {},
-                        onRetryGroup = { viewModel.retryGroup(group) },
-                        onOpenItem = ::open,
-                        onCancelItem = { id ->
-                            val item = group.items.firstOrNull { it.id == id }
-                            // 未完成的条目：取消下载，公共目录里还没有文件，直接取消即可；
-                            // 已完成/失败的条目：先问清楚"只删记录"还是"连文件一起删"
-                            if (item != null && item.status != DownloadStatus.DONE &&
-                                item.status != DownloadStatus.FAILED
-                            ) {
-                                viewModel.cancel(id)
-                            } else {
-                                pendingDelete = item
-                            }
-                        },
-                        onRetryItem = { viewModel.retry(it) },
-                        onOpenGroup = {
-                            group.firstOpenable()?.let(::open)
-                                ?: Toast.makeText(context, "还没有可打开的文件", Toast.LENGTH_SHORT).show()
-                        }
-                    )
-                }
-            }
+            downloadSection("进行中", state.active, "a")
+            downloadSection("失败", state.failed, "x")
+            downloadSection("已完成", state.finished, "f")
         }
     }
 
@@ -261,12 +240,12 @@ fun DownloadScreen(
         )
     }
 
-    // 清空已完成：同样让用户选是否连文件一起删
+    // 清空已结束（完成 + 失败）：同样让用户选是否连文件一起删
     if (pendingClear) {
         DeleteChoiceDialog(
-            title = "清空已完成？",
-            recordText = "将移除 ${state.finished.size} 件作品的下载记录",
-            hasFile = state.finished.any { it.items.any { item -> item.savedUri != null } },
+            title = "清空已结束的记录？",
+            recordText = "将移除 ${state.settled.size} 件作品的下载记录（已完成 / 失败）",
+            hasFile = state.settled.any { it.items.any { item -> item.savedUri != null } },
             onDeleteRecord = {
                 pendingClear = false
                 viewModel.clearFinished(alsoDeleteFiles = false)
@@ -468,8 +447,12 @@ private fun GroupCard(
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (group.settled) {
-                        IconButton(onClick = { haptics.tick(); onOpenGroup() }) {
-                            Icon(Icons.Filled.PlayCircleOutline, contentDescription = "打开")
+                        // 没有可打开的文件时（整组失败、或记录里的 uri 已失效）不摆「打开」按钮，
+                        // 否则点下去只会得到一句"还没有可打开的文件"
+                        if (group.firstOpenable() != null) {
+                            IconButton(onClick = { haptics.tick(); onOpenGroup() }) {
+                                Icon(Icons.Filled.PlayCircleOutline, contentDescription = "打开")
+                            }
                         }
                         if (group.failedCount > 0) {
                             IconButton(onClick = { haptics.tick(); onRetryGroup() }) {

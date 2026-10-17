@@ -25,12 +25,17 @@ import kotlinx.coroutines.launch
  */
 data class DownloadUiState(
     val active: List<DownloadGroup> = emptyList(),
+    /** 整组完成（没有失败项） */
     val finished: List<DownloadGroup> = emptyList(),
+    /** 整组结束但有失败项：单独成组，方便一眼看到并重试 */
+    val failed: List<DownloadGroup> = emptyList(),
     val loading: Boolean = true
 ) {
     val hasActive: Boolean get() = active.isNotEmpty()
     val runningCount: Int get() = active.count { it.queuedOrRunning > 0 }
     val pausedCount: Int get() = active.count { it.queuedOrRunning == 0 && it.pausedCount > 0 }
+    /** 所有已结束的作品（清空用） */
+    val settled: List<DownloadGroup> get() = finished + failed
 }
 
 class DownloadViewModel(private val repo: XhsRepository) : ViewModel() {
@@ -46,7 +51,8 @@ class DownloadViewModel(private val repo: XhsRepository) : ViewModel() {
                     val groups = groupDownloads(tasks)
                     _ui.value = DownloadUiState(
                         active = groups.filter { !it.settled },
-                        finished = groups.filter { it.settled },
+                        finished = groups.filter { it.settled && !it.failed },
+                        failed = groups.filter { it.failed },
                         loading = false
                     )
                 }

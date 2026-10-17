@@ -101,11 +101,28 @@ class DownloadGroupingTest {
             listOf(task(1, 100), task(2, 100), task(3, 100, kind = DownloadKind.VIDEO))
         ).first()
         assertEquals("已完成 · 视频 + 2 张图片", done.statusSummary())
+        assertTrue(!done.failed)
 
+        // 整组结束但有失败：单独成"失败"组（UI 里不再挂到「已完成」下面），文案直说哪一类失败
         val failed = groupDownloads(
             listOf(task(1, 100, status = DownloadStatus.FAILED), task(2, 100, status = DownloadStatus.DONE))
         ).first()
-        assertEquals("失败 1 项 · 2 张图片", failed.statusSummary())
+        assertEquals("1 项失败 · 2 张图片", failed.statusSummary())
+        assertTrue(failed.failed)
+
+        val failedVideoOnly = groupDownloads(
+            listOf(task(1, 100, kind = DownloadKind.VIDEO, status = DownloadStatus.FAILED))
+        ).first()
+        assertEquals("视频 下载失败", failedVideoOnly.statusSummary())
+        assertTrue(failedVideoOnly.failed)
+
+        val failedImagesOnly = groupDownloads(
+            listOf(
+                task(1, 100, imageIndex = 0, status = DownloadStatus.FAILED),
+                task(2, 100, imageIndex = 1, status = DownloadStatus.FAILED)
+            )
+        ).first()
+        assertEquals("2 张图片下载失败", failedImagesOnly.statusSummary())
     }
 
     @Test

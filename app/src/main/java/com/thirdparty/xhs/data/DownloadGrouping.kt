@@ -27,8 +27,11 @@ data class DownloadGroup(
         it.status == DownloadStatus.RUNNING || it.status == DownloadStatus.QUEUED
     }
 
-    /** 整组都结束了（完成或失败）——决定它落在「进行中」还是「已完成」。 */
+    /** 整组都结束了（完成或失败）——决定它落在哪个分组。 */
     val settled: Boolean get() = unfinishedCount == 0
+
+    /** 整组结束**且有失败**：这些要单独放「失败」组（可重试），不能混进「已完成」。 */
+    val failed: Boolean get() = settled && failedCount > 0
 
     /** 组内是否正在做"没有可数进度"的处理（合并 / 转封装 / 保存）。 */
     val processing: Boolean get() = items.any {
@@ -65,13 +68,21 @@ data class DownloadGroup(
 
     /**
      * 组级状态说明（应用文案，书面中性）：
-     * - 整组结束 → 「已完成 · 1 个视频 + 43 张图片」/「失败 2 项 · 1 个视频 + 43 张图片」
+     * - 整组完成 → 「已完成 · 1 个视频 + 43 张图片」
+     * - 整组结束但有失败 → 「视频 下载失败」/「失败 2 项 · 1 个视频 + 43 张图片」
+     *   （这类会单独落在「失败」组，见 [failed]）
      * - 只有图片在跑 → 「图片 12/43 张」；视频与图片同时在跑则两段都写。
      */
     fun statusSummary(): String {
         if (settled) {
-            if (failedCount > 0) return "失败 $failedCount 项 · ${itemPart()}"
-            return "已完成 · ${itemPart()}"
+            if (failedCount == 0) return "已完成 · ${itemPart()}"
+            // 失败项要尽量说清"哪一类失败了"：只有视频就直说视频，否则给个数
+            val onlyVideoFailed = video != null && failedCount == 1 && video.status == DownloadStatus.FAILED
+            if (onlyVideoFailed) return "视频 下载失败"
+            if (images.isNotEmpty() && images.all { it.status == DownloadStatus.FAILED } && video == null) {
+                return "${images.size} 张图片下载失败"
+            }
+            return "$failedCount 项失败 · ${itemPart()}"
         }
         if (pausedCount > 0 && queuedOrRunning == 0) {
             return "已暂停 $pausedCount 项 · $doneCount/$total 已完成"

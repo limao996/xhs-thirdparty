@@ -143,7 +143,7 @@ class HlsDownloader(
                             bytes.addAndGet(plain.size.toLong())
                             onProgress(Progress(done.incrementAndGet(), wanted.size, bytes.get()))
                         } catch (e: Exception) {
-                            failure = "切片 $index 下载失败：${e.message}"
+                            failure = humanError(e, "切片 ${index + 1} 下载失败")
                         }
                     }
                 }
