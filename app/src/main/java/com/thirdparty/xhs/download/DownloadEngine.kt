@@ -4,6 +4,8 @@ import android.content.Context
 import android.util.Log
 import androidx.core.net.toUri
 import com.thirdparty.xhs.data.DownloadDedupe
+import com.thirdparty.xhs.data.DownloadGroups
+import com.thirdparty.xhs.data.DownloadUnit
 import com.thirdparty.xhs.data.DownloadKind
 import com.thirdparty.xhs.data.DownloadStage
 import com.thirdparty.xhs.data.DownloadStatus
@@ -18,6 +20,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
@@ -43,7 +46,8 @@ object DownloadEngine {
     private const val TAG = "XhsDownload"
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val jobs = mutableMapOf<Long, Job>()
+    /** 正在跑的**执行单元**：键 = [DownloadUnit.key]（一个视频 / 一个图集各一份）。 */
+    private val jobs = mutableMapOf<String, Job>()
     private val lock = Any()
 
     /** `schedule()` 的串行锁（见该函数注释：并发排期会突破并发上限）。 */
@@ -93,7 +97,14 @@ object DownloadEngine {
         val doneBytes: Long = 0,
         val currentTitles: List<String> = emptyList(),
         /** 正在跑的任务所处阶段（`DownloadStage`），供通知显示"合并中 / 转换为 mp4 / 保存中"。 */
-        val currentStage: String = ""
+        val currentStage: String = "",
+        /** 当前作品的进度行（与下载管理页同一套 [DownloadGroups] 口径）。 */
+        val currentDetail: String = "",
+        /** 当前作品的标题（通知标题用）。 */
+        val currentTitle: String = "",
+        /** 作品总数 / 已完成作品数（通知的"已完成 x / y 件作品"）。 */
+        val worksTotal: Int = 0,
+        val worksDone: Int = 0
     )
 
     private val _state = MutableStateFlow(Snapshot())
@@ -199,13 +210,16 @@ object DownloadEngine {
     }
 
     fun pauseAll() = scope.launch {
-        val ids = synchronized(lock) { jobs.keys.toList() }
-        Log.i(TAG, "暂停全部：${ids.size} 个在跑的任务")
-        ids.forEach { id ->
-            jobs[id]?.cancel()
-            jobs.remove(id)
-            dao.setStatus(id, DownloadStatus.PAUSED, null, System.currentTimeMillis())
-        }
+        val keys = synchronized(lock) { jobs.keys.toList() }
+        Log.i(TAG, "暂停全部：${keys.size} 个在跑的执行单元")
+        keys.forEach { key -> synchronized(lock) { jobs.remove(key) }?.cancel() }
+        // 单元被取消后，把库里所有还在 RUNNING 的都落成 PAUSED（单元内并行的那几张也要落）
+        dao.unfinished()
+            .filter { it.status == DownloadStatus.RUNNING }
+            .forEach {
+                dao.setStatus(it.id, DownloadStatus.PAUSED, null, System.currentTimeMillis())
+                forgetSpeed(it.id)
+            }
         refreshState()
     }
 
@@ -219,8 +233,20 @@ object DownloadEngine {
     }
 
     fun pause(id: Long) = scope.launch {
-        jobs[id]?.cancel()
-        jobs.remove(id)
+        // 一个图集是一个单元：暂停任意一张都要把整个单元停下来，并把单元里其它在跑的任务一起标 PAUSED
+        // （否则它们会以 RUNNING 卡住 —— 协程已经随单元被取消，不会再有人写它们的收尾状态）
+        val task = dao.byId(id)
+        val key = task?.let { DownloadUnit.keyOf(it) }
+        if (key != null) {
+            synchronized(lock) { jobs[key] }?.cancel()
+            synchronized(lock) { jobs.remove(key) }
+            dao.unfinished()
+                .filter { DownloadUnit.keyOf(it) == key && it.status == DownloadStatus.RUNNING }
+                .forEach {
+                    dao.setStatus(it.id, DownloadStatus.PAUSED, null, System.currentTimeMillis())
+                    forgetSpeed(it.id)
+                }
+        }
         dao.setStatus(id, DownloadStatus.PAUSED, null, System.currentTimeMillis())
         forgetSpeed(id)
         refreshState()
@@ -233,11 +259,24 @@ object DownloadEngine {
     }
 
     fun cancel(id: Long) = scope.launch {
-        jobs[id]?.cancel()
-        jobs.remove(id)
-        dao.byId(id)?.let { deleteTemp(it.id) }
+        val task = dao.byId(id)
+        val key = task?.let { DownloadUnit.keyOf(it) }
+        if (key != null) {
+            synchronized(lock) { jobs[key] }?.cancel()
+            synchronized(lock) { jobs.remove(key) }
+            // 用户取消的是**这一张**：单元里其它还在跑的图回到排队，等下次排期继续
+            dao.unfinished()
+                .filter { DownloadUnit.keyOf(it) == key && it.id != id }
+                .forEach {
+                    if (it.status == DownloadStatus.RUNNING) {
+                        dao.setStatus(it.id, DownloadStatus.QUEUED, null, System.currentTimeMillis())
+                    }
+                }
+        }
+        task?.let { deleteTemp(it.id) }
         dao.delete(id)
         refreshState()
+        schedule()
     }
 
     /**
@@ -248,8 +287,10 @@ object DownloadEngine {
      * 本应用是这些文件的创建者（`MediaStoreWriter`），29+ 不需要额外权限，26–28 有 `WRITE_EXTERNAL_STORAGE`。
      */
     fun delete(id: Long, alsoDeleteFile: Boolean) = scope.launch {
-        jobs[id]?.cancel()
-        jobs.remove(id)
+        val running = dao.byId(id)?.let { DownloadUnit.keyOf(it) }
+        if (running != null) {
+            synchronized(lock) { jobs.remove(running) }?.cancel()
+        }
         val task = dao.byId(id)
         task?.let { deleteTemp(it.id) }
         if (alsoDeleteFile) task?.let { deleteSavedFile(it) }
@@ -300,45 +341,80 @@ object DownloadEngine {
         scheduleMutex.withLock {
             val concurrent = DownloadSettings.concurrentTasks(appContext)
             val queued = dao.unfinished().filter { it.status == DownloadStatus.QUEUED }
+            // 名额按**执行单元**算：一个视频一个、一个图集一个（一张图不算一个名额）
+            val units = DownloadUnit.of(queued)
             val capacity = concurrent - synchronized(lock) { jobs.size }
             if (capacity <= 0) return@withLock
-            queued.take(capacity).forEach { task -> startTask(task) }
+            units.take(capacity).forEach { unit -> startUnit(unit) }
             refreshState()
         }
     }
 
-    private fun startTask(task: DownloadTaskEntity) {
-        // 同一个任务只允许有一个在跑：多路径（排期 / 网络恢复 / 用户点继续）可能同时到达，
+    /**
+     * 排一个**执行单元**（见 [DownloadUnit]）。
+     *
+     * 视频 = 一个单元（内部按"并发数"并行拉切片）；**一个作品的全部图片 = 一个单元**
+     * （内部同样按"并发数"并行拉图）—— 用户 2026-10-17 要求"一张图片不能当成一个任务"。
+     * 单元是并发名额的计量单位，`jobs` 也只按单元记一份。
+     */
+    private fun startUnit(unit: DownloadUnit) {
+        // 同一个单元只允许有一个在跑：多路径（排期 / 网络恢复 / 用户点继续）可能同时到达，
         // 重复启动会让同一个文件被下载两遍，并让并发名额算错
-        val alreadyRunning = synchronized(lock) { jobs.containsKey(task.id) }
+        val alreadyRunning = synchronized(lock) { jobs.containsKey(unit.key) }
         if (alreadyRunning) {
-            Log.i(TAG, "任务 ${task.id} 已在跑，跳过重复启动")
+            Log.i(TAG, "单元 ${unit.key} 已在跑，跳过重复启动")
             return
         }
         val job = scope.launch {
-            dao.setStatus(task.id, DownloadStatus.RUNNING, null, System.currentTimeMillis())
-            Log.i(TAG, "开始任务 ${task.id}（${task.kind} ${task.title}）")
-            refreshState()
-            runCatching { execute(task) }
-                .onFailure { e ->
-                    if (e is kotlinx.coroutines.CancellationException) {
-                    Log.i(TAG, "任务 ${task.id} 已取消/暂停")
-                    throw e
+            if (unit.isImageSet) {
+                Log.i(TAG, "开始图集 ${unit.key}（${unit.images.size} 张，并发=$unitParallel）")
+                val semaphore = Semaphore(unitParallel.coerceAtLeast(1))
+                // 单元内部并行：每张图仍是一条任务行（进度/失败/断点各自独立）
+                unit.images.map { image ->
+                    launch {
+                        semaphore.withPermit {
+                            if (dao.byId(image.id)?.status == DownloadStatus.QUEUED) {
+                                runTask(image)
+                            }
+                        }
+                    }
+                }.joinAll()
+            } else {
+                unit.video?.let { video ->
+                    Log.i(TAG, "开始任务 ${video.id}（${video.kind} ${video.title}）")
+                    runTask(video)
                 }
-                    Log.e(TAG, "任务 ${task.id} 失败：${e.message}", e)
-                    dao.setStatus(
-                        task.id, DownloadStatus.FAILED,
-                        friendlyReason(e), System.currentTimeMillis()
-                    )
-                }
-            synchronized(lock) { jobs.remove(task.id) }
+            }
+            synchronized(lock) { jobs.remove(unit.key) }
             refreshState()
             // 空出名额后继续排下一个
             schedule()
             maybeNotifyFinished()
         }
-        synchronized(lock) { jobs[task.id] = job }
+        synchronized(lock) { jobs[unit.key] = job }
     }
+
+    /** 单个任务的一次执行：置 RUNNING → 跑 → 收尾（失败/取消都要留下正确的状态）。 */
+    private suspend fun runTask(task: DownloadTaskEntity) {
+        dao.setStatus(task.id, DownloadStatus.RUNNING, null, System.currentTimeMillis())
+        refreshState()
+        runCatching { execute(task) }
+            .onFailure { e ->
+                if (e is kotlinx.coroutines.CancellationException) {
+                    Log.i(TAG, "任务 ${task.id} 已取消/暂停")
+                    throw e
+                }
+                Log.e(TAG, "任务 ${task.id} 失败：${e.message}", e)
+                dao.setStatus(
+                    task.id, DownloadStatus.FAILED,
+                    friendlyReason(e), System.currentTimeMillis()
+                )
+            }
+    }
+
+    /** 单元内的并行度：与视频分片用同一档设置（用户要求"图集按视频分片的标准来"）。 */
+    private val unitParallel: Int
+        get() = if (::appContext.isInitialized) DownloadSettings.parallelSegments(appContext) else 4
 
     /**
      * **这一轮**（本进程内）完成与失败的任务数，只用于完成通知的文案。
@@ -346,8 +422,10 @@ object DownloadEngine {
      * 不要拿"库里 DONE 的总数"来报：那会把历史所有下载都算进去，用户只下了 1 个作品却看到
      * 「完成 17 项」（2026-10-17 实测发现）。报完清零；"这一轮什么都没跑完"时不发通知。
      */
-    private val runOk = java.util.concurrent.atomic.AtomicInteger(0)
-    private val runFailed = java.util.concurrent.atomic.AtomicInteger(0)
+    private val runOkVideo = java.util.concurrent.atomic.AtomicInteger(0)
+    private val runOkImage = java.util.concurrent.atomic.AtomicInteger(0)
+    private val runFailedVideo = java.util.concurrent.atomic.AtomicInteger(0)
+    private val runFailedImage = java.util.concurrent.atomic.AtomicInteger(0)
 
     /**
      * 一批任务收尾时发一条完成通知（受设置里的「下载完成通知」控制，见 [DownloadService.notifyFinished]）。
@@ -359,11 +437,16 @@ object DownloadEngine {
         if (!::appContext.isInitialized) return
         val unfinished = dao.unfinished().size
         if (unfinished > 0) return
-        val ok = runOk.getAndSet(0)
-        val failed = runFailed.getAndSet(0)
-        if (ok + failed == 0) return
-        Log.i(TAG, "一批下载结束：成功 $ok，失败 $failed")
-        DownloadService.notifyFinished(appContext, ok, failed)
+        val okVideo = runOkVideo.getAndSet(0)
+        val okImage = runOkImage.getAndSet(0)
+        val failedVideo = runFailedVideo.getAndSet(0)
+        val failedImage = runFailedImage.getAndSet(0)
+        if (okVideo + okImage + failedVideo + failedImage == 0) return
+        Log.i(
+            TAG,
+            "一批下载结束：成功 ${okVideo} 个视频 / ${okImage} 张图片，失败 ${failedVideo} / ${failedImage}"
+        )
+        DownloadService.notifyFinished(appContext, okVideo, okImage, failedVideo, failedImage)
     }
 
     private suspend fun execute(task: DownloadTaskEntity) {
@@ -415,7 +498,7 @@ object DownloadEngine {
         when (outcome) {
             is HlsDownloader.Outcome.Failed -> {
                 dao.setStatus(task.id, DownloadStatus.FAILED, outcome.reason, System.currentTimeMillis())
-                runFailed.incrementAndGet()
+                runFailedVideo.incrementAndGet()
                 forgetSpeed(task.id)
             }
 
@@ -428,14 +511,14 @@ object DownloadEngine {
                 when (val saved = MediaStoreWriter.saveVideo(appContext, outcome.mp4, name)) {
                     is MediaStoreWriter.Result.Failed -> {
                         dao.setStatus(task.id, DownloadStatus.FAILED, saved.reason, System.currentTimeMillis())
-                        runFailed.incrementAndGet()
+                        runFailedVideo.incrementAndGet()
                         forgetSpeed(task.id)
                     }
 
                     is MediaStoreWriter.Result.Ok -> {
                         dao.setDone(task.id, saved.displayPath, saved.uri.toString(), saved.bytes, System.currentTimeMillis())
                         forgetSpeed(task.id)
-                        runOk.incrementAndGet()
+                        runOkVideo.incrementAndGet()
                         Log.i(TAG, "视频完成：${saved.displayPath}（${saved.bytes} 字节，${outcome.durationMs}ms）")
                     }
                 }
@@ -459,7 +542,7 @@ object DownloadEngine {
         ) {
             is ImageDownloader.Outcome.Failed -> {
                 dao.setStatus(task.id, DownloadStatus.FAILED, outcome.reason, System.currentTimeMillis())
-                runFailed.incrementAndGet()
+                runFailedImage.incrementAndGet()
                 forgetSpeed(task.id)
             }
 
@@ -471,7 +554,7 @@ object DownloadEngine {
                     task.id, outcome.displayPath, outcome.uri, outcome.bytes, System.currentTimeMillis()
                 )
                 forgetSpeed(task.id)
-                runOk.incrementAndGet()
+                runOkImage.incrementAndGet()
             }
         }
     }
@@ -504,8 +587,12 @@ object DownloadEngine {
 
     private suspend fun refreshState() {
         val all = dao.all()
+        // 名额按执行单元算（一个视频 / 一个图集各一个），所以 running 用 jobs.size 就是"在跑的作品数"
         val running = synchronized(lock) { jobs.size }
         val active = all.filter { it.status == DownloadStatus.RUNNING }
+        // 作品维度：通知文案统一用"作品"，不再混着数图片张数（用户 2026-10-17：通知文案太乱）
+        val groups = DownloadGroups.of(all)
+        val activeGroup = groups.firstOrNull { !it.settled }
         _state.value = Snapshot(
             running = running,
             queued = all.count { it.status == DownloadStatus.QUEUED },
@@ -515,7 +602,12 @@ object DownloadEngine {
             // 多个任务同时在跑时取"处理阶段"优先的那个：合并/转封装/保存比拉切片更值得说
             currentStage = active.map { it.stage }
                 .firstOrNull { DownloadStage.isProcessing(it) }
-                ?: active.firstOrNull()?.stage.orEmpty()
+                ?: active.firstOrNull()?.stage.orEmpty(),
+            // 当前这件作品的进度行（与下载管理页同一套口径，通知不再另写一份）
+            currentDetail = activeGroup?.statusSummary().orEmpty(),
+            currentTitle = activeGroup?.title.orEmpty(),
+            worksTotal = groups.size,
+            worksDone = groups.count { it.settled }
         )
     }
 

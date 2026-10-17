@@ -17,6 +17,7 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.thirdparty.xhs.MainActivity
 import com.thirdparty.xhs.R
+import com.thirdparty.xhs.data.DownloadCopy
 import com.thirdparty.xhs.data.DownloadStage
 import com.thirdparty.xhs.data.XhsDatabase
 import kotlinx.coroutines.CoroutineScope
@@ -85,7 +86,13 @@ class DownloadService : Service() {
          * 走**高优先级**渠道 [DONE_CHANNEL_ID]（弹横幅 + 声音），所以用户能立刻看到；
          * 受设置里的「下载完成通知」控制；通知权限被拒时静默跳过（下载本身已经完成，不该因此报错）。
          */
-        fun notifyFinished(context: Context, okCount: Int, failedCount: Int) {
+        fun notifyFinished(
+            context: Context,
+            okVideo: Int,
+            okImage: Int,
+            failedVideo: Int,
+            failedImage: Int
+        ) {
             if (!DownloadSettings.notifyOnFinish(context)) return
             if (android.os.Build.VERSION.SDK_INT >= 33 &&
                 ContextCompat.checkSelfPermission(
@@ -100,11 +107,10 @@ class DownloadService : Service() {
             }
             ensureDoneChannel(context)
             val manager = NotificationManagerCompat.from(context)
-            val text = when {
-                failedCount > 0 && okCount > 0 -> "完成 $okCount 项，失败 $failedCount 项"
-                failedCount > 0 -> "失败 $failedCount 项，点开可重试"
-                else -> "完成 $okCount 项，点开查看"
-            }
+            val okCount = okVideo + okImage
+            val failedCount = failedVideo + failedImage
+            // 按类型说清楚（"完成 1 个视频、20 张图片"），不要再含糊地写"N 项"（用户要求优化文案）
+            val text = DownloadCopy.finishedText(okVideo, okImage, failedVideo, failedImage)
             val open = PendingIntent.getActivity(
                 context,
                 0,
@@ -323,24 +329,29 @@ class DownloadService : Service() {
         val done = snapshot.doneBytes.toInt()
         val total = maxOf(snapshot.totalBytes.toInt(), 1)
         val stageLabel = DownloadStage.label(snapshot.currentStage)
-        val title = when {
-            snapshot.currentTitles.isNotEmpty() && stageLabel != null ->
-                // 有阶段时优先说"现在在干什么"：切片下完之后的 合并 / 转封装 / 保存
-                // 都没有可数进度，只显示"22/22 片"会让人以为卡住
-                "$stageLabel · ${snapshot.currentTitles.first()}"
+        val processing = DownloadStage.isProcessing(snapshot.currentStage)
+        val running = snapshot.running > 0 || snapshot.queued > 0
 
-            snapshot.currentTitles.isNotEmpty() -> snapshot.currentTitles.joinToString("、")
-            snapshot.queued > 0 -> "准备下载 ${snapshot.queued} 项"
+        // 文案统一成"作品"口径（用户 2026-10-17：原来的通知太乱）：
+        //   标题 = 状态 + 在做哪件作品；正文 = 这件作品的进度行（与下载管理页同一套口径）；副标题 = 作品数
+        val title = when {
+            running -> DownloadCopy.runningTitle(snapshot.currentTitle, snapshot.running)
+            snapshot.worksTotal > 0 -> "下载已暂停"
             else -> "下载任务已结束"
         }
-        val text = buildString {
-            append("已完成 $done / $total 项")
-            if (snapshot.running > 0) append("（同时下载 ${snapshot.running} 个）")
-            if (DownloadStage.isProcessing(snapshot.currentStage)) {
-                // 处理阶段没有进度，明确说明"完成后会继续"，避免看起来停住
-                append(" · 正在处理，完成后自动保存")
-            }
+        val text = if (running) {
+            // 处理阶段没有可数进度：用"已用 N 秒"和"视频较大"提示，而不是干杵着
+            DownloadCopy.runningText(
+                currentDetail = snapshot.currentDetail,
+                // 只在"没有可数进度"的处理阶段才贴阶段标签：拉切片/拉图时进度行本身已经说明在干什么，
+                // 再补一个「· 下载中」只是噪音（标题里已经有「下载中」了）
+                stageLabel = stageLabel?.takeIf { processing },
+                slowHint = DownloadStage.slowHint(snapshot.currentStage, 0)
+            )
+        } else {
+            "点开可继续未完成的作品"
         }
+        val subText = DownloadCopy.worksSubText(snapshot.worksDone, snapshot.worksTotal)
 
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_download)
@@ -350,12 +361,13 @@ class DownloadService : Service() {
             .setProgress(
                 total,
                 done,
-                snapshot.running == 0 || DownloadStage.isProcessing(snapshot.currentStage)
+                !running || processing
             )
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setContentIntent(open)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+        subText?.let { builder.setSubText(it) }
         // 只放"当前点得动"的那个动作：全都在暂停时不该出现「暂停全部」，反之亦然
         if (snapshot.running > 0 || snapshot.queued > 0) {
             builder.addAction(0, "暂停全部", pause)

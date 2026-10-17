@@ -199,16 +199,24 @@ fun SettingsScreen(
 
             SettingsGroup("下载") {
                 ListItem(
-                    headlineContent = { Text("同时下载任务数") },
-                    supportingContent = { Text("当前 ${dl.concurrentTasks} 个，超出的排队等待") },
+                    headlineContent = { Text("同时下载作品数") },
+                    supportingContent = {
+                        Text(
+                            "当前 ${dl.concurrentTasks} 件；一个视频或一个作品的全部图片各占一件，" +
+                                "超出的排队等待"
+                        )
+                    },
                     leadingContent = { Icon(Icons.Filled.Download, null, tint = MaterialTheme.colorScheme.primary) },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     modifier = Modifier.clickable { haptics.tick(); pickConcurrent = true }
                 )
                 ListItem(
-                    headlineContent = { Text("单个视频并行切片") },
+                    headlineContent = { Text("单件作品内并发数") },
                     supportingContent = {
-                        Text("当前 ${dl.parallelSegments} 路；越大越快，也越吃网络与电量")
+                        Text(
+                            "当前 ${dl.parallelSegments} 路：同一作品的图片、同一视频的分片都按这个数并行；" +
+                                "越大越快，也越吃网络与电量"
+                        )
                     },
                     leadingContent = { Icon(Icons.Filled.Speed, null, tint = MaterialTheme.colorScheme.primary) },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),

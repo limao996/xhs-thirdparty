@@ -131,11 +131,13 @@ data class DownloadGroup(
 }
 
 /**
- * 按作品聚合（顺序 = 输入里首次出现的顺序；DAO 已按"最新在前"排好）。
+ * 按作品聚合：顺序 = 输入里首次出现的顺序（DAO 已按"最新在前"排好）；
+ * 同一作品的视频与图片合成一组，视频在前、图片按 `imageIndex`。
  *
- * 同一作品的视频与图片会被合成一组：视频排在前面，图片按 `imageIndex` 排。
+ * 收敛成一个入口（原来叫 `groupDownloads` 顶层函数）：UI、通知、引擎都从这里拿作品维度。
  */
-fun groupDownloads(tasks: List<DownloadTaskEntity>): List<DownloadGroup> {
+object DownloadGroups {
+    fun of(tasks: List<DownloadTaskEntity>): List<DownloadGroup> {
     val order = LinkedHashMap<Long, MutableList<DownloadTaskEntity>>()
     tasks.forEach { task ->
         order.getOrPut(task.noteId) { mutableListOf() }.add(task)
@@ -156,4 +158,5 @@ fun groupDownloads(tasks: List<DownloadTaskEntity>): List<DownloadGroup> {
             items = ordered
         )
     }
+}
 }

@@ -5,7 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.thirdparty.xhs.data.DownloadGroup
 import com.thirdparty.xhs.data.DownloadStatus
 import com.thirdparty.xhs.data.XhsRepository
-import com.thirdparty.xhs.data.groupDownloads
+import com.thirdparty.xhs.data.DownloadGroups
 import com.thirdparty.xhs.download.DownloadEngine
 import com.thirdparty.xhs.download.DuplicateCleaner
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -49,7 +49,7 @@ class DownloadViewModel(private val repo: XhsRepository) : ViewModel() {
             repo.downloadTasks()
                 .catch { _ui.value = DownloadUiState(loading = false) }
                 .collect { tasks ->
-                    val groups = groupDownloads(tasks)
+                    val groups = DownloadGroups.of(tasks)
                     _ui.value = DownloadUiState(
                         active = groups.filter { !it.settled },
                         finished = groups.filter { it.settled && !it.failed },

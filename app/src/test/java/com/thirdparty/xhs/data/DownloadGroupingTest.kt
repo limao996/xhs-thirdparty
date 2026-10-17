@@ -42,7 +42,7 @@ class DownloadGroupingTest {
 
     @Test
     fun groups_by_note_and_keeps_video_first_then_images_in_order() {
-        val groups = groupDownloads(
+        val groups = DownloadGroups.of(
             listOf(
                 task(1, noteId = 100, kind = DownloadKind.VIDEO, totalSegments = 6, doneSegments = 6),
                 task(2, noteId = 200, imageIndex = 1),
@@ -63,7 +63,7 @@ class DownloadGroupingTest {
 
     @Test
     fun settled_only_when_nothing_unfinished() {
-        val running = groupDownloads(
+        val running = DownloadGroups.of(
             listOf(
                 task(1, 100, status = DownloadStatus.DONE),
                 task(2, 100, kind = DownloadKind.VIDEO, status = DownloadStatus.RUNNING, totalSegments = 6, doneSegments = 3)
@@ -73,7 +73,7 @@ class DownloadGroupingTest {
         assertEquals(1, running.doneCount)
         assertEquals(1, running.unfinishedCount)
 
-        val settled = groupDownloads(
+        val settled = DownloadGroups.of(
             listOf(
                 task(1, 100, status = DownloadStatus.DONE),
                 task(2, 100, status = DownloadStatus.FAILED)
@@ -85,7 +85,7 @@ class DownloadGroupingTest {
 
     @Test
     fun summary_text_covers_running_paused_and_done() {
-        val running = groupDownloads(
+        val running = DownloadGroups.of(
             listOf(
                 task(1, 100, imageIndex = 0),
                 task(2, 100, imageIndex = 1),
@@ -95,31 +95,31 @@ class DownloadGroupingTest {
         ).first()
         assertEquals("视频 4/6 片 · 图片 2/3 张", running.statusSummary())
 
-        val paused = groupDownloads(
+        val paused = DownloadGroups.of(
             listOf(task(1, 100, status = DownloadStatus.PAUSED), task(2, 100, status = DownloadStatus.PAUSED))
         ).first()
         assertEquals("已暂停 2 项 · 0/2 已完成", paused.statusSummary())
 
-        val done = groupDownloads(
+        val done = DownloadGroups.of(
             listOf(task(1, 100), task(2, 100), task(3, 100, kind = DownloadKind.VIDEO))
         ).first()
         assertEquals("已完成 · 视频 + 2 张图片", done.statusSummary())
         assertTrue(!done.failed)
 
         // 整组结束但有失败：单独成"失败"组（UI 里不再挂到「已完成」下面），文案直说哪一类失败
-        val failed = groupDownloads(
+        val failed = DownloadGroups.of(
             listOf(task(1, 100, status = DownloadStatus.FAILED), task(2, 100, status = DownloadStatus.DONE))
         ).first()
         assertEquals("1 项失败 · 2 张图片", failed.statusSummary())
         assertTrue(failed.failed)
 
-        val failedVideoOnly = groupDownloads(
+        val failedVideoOnly = DownloadGroups.of(
             listOf(task(1, 100, kind = DownloadKind.VIDEO, status = DownloadStatus.FAILED))
         ).first()
         assertEquals("视频 下载失败", failedVideoOnly.statusSummary())
         assertTrue(failedVideoOnly.failed)
 
-        val failedImagesOnly = groupDownloads(
+        val failedImagesOnly = DownloadGroups.of(
             listOf(
                 task(1, 100, imageIndex = 0, status = DownloadStatus.FAILED),
                 task(2, 100, imageIndex = 1, status = DownloadStatus.FAILED)
@@ -131,7 +131,7 @@ class DownloadGroupingTest {
     @Test
     fun paused_group_shows_why_it_is_paused() {
         // 仅 Wi-Fi 把任务挡下时，库里写了原因；界面必须显示出来，否则用户不知道是自己按的还是被设置挡住的
-        val g = groupDownloads(
+        val g = DownloadGroups.of(
             listOf(
                 task(1, 100, status = DownloadStatus.PAUSED, error = DownloadEngine.WAITING_WIFI_REASON),
                 task(2, 100, imageIndex = 1, status = DownloadStatus.PAUSED)
@@ -142,7 +142,7 @@ class DownloadGroupingTest {
         assertEquals("已暂停 2 项（等待 Wi-Fi） · 0/2 已完成", g.statusSummary())
 
         // 用户自己按的暂停（没有原因）不该显示括号
-        val manual = groupDownloads(
+        val manual = DownloadGroups.of(
             listOf(task(1, 100, status = DownloadStatus.PAUSED))
         ).first()
         assertNull(manual.pauseReason)
@@ -151,7 +151,7 @@ class DownloadGroupingTest {
 
     @Test
     fun processing_stage_makes_progress_indeterminate() {
-        val merging = groupDownloads(
+        val merging = DownloadGroups.of(
             listOf(
                 task(1, 100, kind = DownloadKind.VIDEO, status = DownloadStatus.RUNNING,
                     totalSegments = 6, doneSegments = 6, stage = DownloadStage.MERGING)
@@ -161,7 +161,7 @@ class DownloadGroupingTest {
         assertNull("处理阶段没有可数进度", merging.progressFraction())
         assertEquals("合并中…", merging.statusSummary())
 
-        val fetching = groupDownloads(
+        val fetching = DownloadGroups.of(
             listOf(
                 task(1, 100, kind = DownloadKind.VIDEO, status = DownloadStatus.RUNNING,
                     totalSegments = 6, doneSegments = 3, stage = DownloadStage.FETCHING)
@@ -173,7 +173,7 @@ class DownloadGroupingTest {
 
     @Test
     fun images_group_progress_counts_items() {
-        val g = groupDownloads(
+        val g = DownloadGroups.of(
             listOf(
                 task(1, 100, imageIndex = 0, status = DownloadStatus.DONE),
                 task(2, 100, imageIndex = 1, status = DownloadStatus.RUNNING)
@@ -184,7 +184,7 @@ class DownloadGroupingTest {
 
     @Test
     fun first_openable_prefers_video_then_first_finished_image() {
-        val withVideo = groupDownloads(
+        val withVideo = DownloadGroups.of(
             listOf(
                 task(1, 100, imageIndex = 0),
                 task(2, 100, kind = DownloadKind.VIDEO, uri = "content://media/external/video/media/2")
@@ -192,7 +192,7 @@ class DownloadGroupingTest {
         ).first()
         assertEquals(2L, withVideo.firstOpenable()?.id)
 
-        val noVideo = groupDownloads(
+        val noVideo = DownloadGroups.of(
             listOf(
                 task(1, 100, imageIndex = 0, uri = null),
                 task(2, 100, imageIndex = 1)
@@ -200,7 +200,7 @@ class DownloadGroupingTest {
         ).first()
         assertEquals(2L, noVideo.firstOpenable()?.id)
 
-        val nothing = groupDownloads(listOf(task(1, 100, uri = null))).first()
+        val nothing = DownloadGroups.of(listOf(task(1, 100, uri = null))).first()
         assertNull(nothing.firstOpenable())
     }
 }
