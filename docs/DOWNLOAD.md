@@ -100,8 +100,17 @@ Room（任务表）、Android `MediaStore`（公共目录）。
   并发 1 路 **25,982 ms** → 并发 4 路 **10,645 ms**（**提速 2.44×**）；两轮产物完全一致
   （mp4 16,317,809 B、时长 120,040 ms，正好 12×10 s）。
   **临时探针**：`download/DownloadProbe.kt` + `App.onCreate` 的 DEBUG 钩子（T7 做出正式 UI 后删除）。
-- [ ] **T3 公共目录落盘**：`download/MediaStoreWriter.kt`；
-  验收：`content query` 能看到记录 + 相册/视频库可见（截图）。
+- [x] **T3 公共目录落盘 —— 2026-10-17 通过**
+  文件：`download/MediaStoreWriter.kt`（API 29+ 走 `RELATIVE_PATH`+`IS_PENDING` 无需权限；
+  API 26–28 自建目录 + `DATA` 插入并需要运行时 `WRITE_EXTERNAL_STORAGE`，清单里用
+  `maxSdkVersion="28"` 限定）、`AndroidManifest.xml`（新增该权限）。
+  **实机证据（模拟器 API 34）**：转封装好的 mp4 落盘 → `Movies/小黄书/下载探针_999.mp4`
+  （16,317,809 B，`content://media/external_primary/video/media/1000000028`）；
+  `content query --uri content://media/external/video/media` 显示
+  `_display_name=下载探针_999.mp4  relative_path=Movies/小黄书/  _size=16317809`；
+  图片两张落进 `Pictures/小黄书/下载探针_999/01.jpg`、`02.jpg` 并入库；
+  `ls /sdcard/Movies/小黄书/` 与 `/sdcard/Pictures/小黄书/` 双向确认存在。
+  API 26–28 分支**未实测**（模拟器是 API 34），代码按版本分支写好，待真机/低版本验证。
 - [ ] **T4 任务持久化**：`data/DownloadTask.kt`（Room 实体）、DAO、`MIGRATION_3_4`、`download/DownloadRepository.kt`；
   验收：升级安装后旧数据仍在；杀进程重开任务列表还在。
 - [ ] **T5 前台服务 + 通知**：`download/DownloadService.kt` + 清单权限；

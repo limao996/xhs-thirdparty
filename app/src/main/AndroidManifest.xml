@@ -9,6 +9,12 @@
          并且首次还要用户在系统设置里允许"安装未知应用"（见 UpdateDownloader）。 -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- 下载功能：API 26–28 写公共目录（Movies / Pictures）需要它；29+ 走 MediaStore 不需要权限，
+         所以用 maxSdkVersion 限定，避免在 29+ 上多要一个敏感权限。 -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+
     <!-- A personal WebDAV drive may be plain http:// on the LAN; Android
          denies cleartext by default from API 28, which would make those
          servers unreachable. API traffic itself stays HTTPS. -->

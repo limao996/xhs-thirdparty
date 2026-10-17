@@ -69,6 +69,29 @@ object DownloadProbe {
                             "时长=${outcome.durationMs}ms 总耗时=${ms}ms（$LIMIT 片）"
                     )
             }
+            // T3 验证：把转封装结果落进公共视频目录，并回读 MediaStore 记录
+            if (outcome is HlsDownloader.Outcome.Ok && parallel == 4) {
+                val name = DownloadNames.videoRelativePath("下载探针", 999L).substringAfterLast('/')
+                when (val saved = MediaStoreWriter.saveVideo(context, outcome.mp4, name)) {
+                    is MediaStoreWriter.Result.Failed ->
+                        Log.e(TAG, "落盘失败：${saved.reason}")
+                    is MediaStoreWriter.Result.Ok -> {
+                        Log.i(TAG, "落盘成功 -> ${saved.displayPath}（${saved.bytes} 字节）uri=${saved.uri}")
+                        // 图片落盘同样验一遍（两张，进 Pictures/小黄书/下载探针_999/）
+                        val dir = DownloadNames.imageRelativeDir("下载探针", 999L)
+                        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xD9.toByte())
+                        repeat(2) { i ->
+                            val r = MediaStoreWriter.saveImage(
+                                context, jpeg, dir, DownloadNames.imageFileName(i)
+                            )
+                            Log.i(TAG, "图片 ${DownloadNames.imageFileName(i)} -> " + when (r) {
+                                is MediaStoreWriter.Result.Ok -> r.displayPath
+                                is MediaStoreWriter.Result.Failed -> "失败：" + r.reason
+                            })
+                        }
+                    }
+                }
+            }
             work.deleteRecursively()
         }
         Log.i(TAG, "探针结束")
