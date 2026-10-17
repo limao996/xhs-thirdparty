@@ -347,8 +347,9 @@ object DownloadEngine {
             is ImageDownloader.Outcome.Ok -> {
                 // 单张图片的"保存"很短，但解码/解密大图时也会有一小段空窗，一并标出来
                 dao.setStage(task.id, DownloadStage.SAVING, System.currentTimeMillis())
+                // 存 MediaStore 的 uri：下载管理页要靠它预览/打开这张图（早期传 null 导致点开报"找不到文件记录"）
                 dao.setDone(
-                    task.id, outcome.displayPath, null, outcome.bytes, System.currentTimeMillis()
+                    task.id, outcome.displayPath, outcome.uri, outcome.bytes, System.currentTimeMillis()
                 )
             }
         }

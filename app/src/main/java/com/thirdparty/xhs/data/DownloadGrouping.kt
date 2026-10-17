@@ -1,0 +1,137 @@
+package com.thirdparty.xhs.data
+
+/**
+ * 把下载任务按**作品**聚合成一行（纯逻辑，可单测）。
+ *
+ * 为什么要有它：一个作品可能同时有 1 个视频 + 几十张图片，一行一个文件会让列表被同一个作品的
+ * 图片刷屏，用户反而找不到作品（2026-10-17 用户反馈）。所以列表按作品成行，
+ * 行内再给出"视频 / 图片 各进行到哪一步"的汇总；需要看单张时再展开。
+ */
+data class DownloadGroup(
+    val noteId: Long,
+    val title: String,
+    val cover: String,
+    /** 作品里的视频任务（没有视频时是 null） */
+    val video: DownloadTaskEntity?,
+    /** 作品里的图片任务，按作品内序号排列 */
+    val images: List<DownloadTaskEntity>,
+    /** 全部条目：视频在前、图片按序号 */
+    val items: List<DownloadTaskEntity>
+) {
+    val total: Int get() = items.size
+    val doneCount: Int get() = items.count { it.status == DownloadStatus.DONE }
+    val failedCount: Int get() = items.count { it.status == DownloadStatus.FAILED }
+    val unfinishedCount: Int get() = items.count { it.status in DownloadStatus.unfinished }
+    val pausedCount: Int get() = items.count { it.status == DownloadStatus.PAUSED }
+    val queuedOrRunning: Int get() = items.count {
+        it.status == DownloadStatus.RUNNING || it.status == DownloadStatus.QUEUED
+    }
+
+    /** 整组都结束了（完成或失败）——决定它落在「进行中」还是「已完成」。 */
+    val settled: Boolean get() = unfinishedCount == 0
+
+    /** 组内是否正在做"没有可数进度"的处理（合并 / 转封装 / 保存）。 */
+    val processing: Boolean get() = items.any {
+        it.status == DownloadStatus.RUNNING && DownloadStage.isProcessing(it.stage)
+    }
+
+    /** 已完成的图片张数（列表里显示「图片 12/43 张」用）。 */
+    val doneImages: Int get() = images.count { it.status == DownloadStatus.DONE }
+
+    val bytes: Long get() = items.sumOf { it.bytes }
+
+    /**
+     * 组级进度（0f–1f）；**null 表示不确定**（有处理阶段，或只有视频且切片总数未知）。
+     *
+     * 有图片时按"条目数"算（视频算 1 项、每张图算 1 项），只看视频时按切片算 —— 两种粒度
+     * 分开，用户看到的都是"这一组还剩多少"。
+     */
+    fun progressFraction(): Float? {
+        if (processing) return null
+        if (images.isNotEmpty()) {
+            if (total == 0) return null
+            return doneCount.toFloat() / total.toFloat()
+        }
+        val v = video ?: return null
+        if (v.totalSegments <= 0) return null
+        return (v.doneSegments.toFloat() / v.totalSegments.toFloat()).coerceIn(0f, 1f)
+    }
+
+    /** 自报作品里有哪几类内容，如「1 个视频 + 43 张图片」。 */
+    fun itemPart(): String = buildList {
+        if (video != null) add("视频")
+        if (images.isNotEmpty()) add("${images.size} 张图片")
+    }.joinToString(" + ").ifEmpty { "0 项" }
+
+    /**
+     * 组级状态说明（应用文案，书面中性）：
+     * - 整组结束 → 「已完成 · 1 个视频 + 43 张图片」/「失败 2 项 · 1 个视频 + 43 张图片」
+     * - 只有图片在跑 → 「图片 12/43 张」；视频与图片同时在跑则两段都写。
+     */
+    fun statusSummary(): String {
+        if (settled) {
+            if (failedCount > 0) return "失败 $failedCount 项 · ${itemPart()}"
+            return "已完成 · ${itemPart()}"
+        }
+        if (pausedCount > 0 && queuedOrRunning == 0) {
+            return "已暂停 $pausedCount 项 · $doneCount/$total 已完成"
+        }
+        val parts = mutableListOf<String>()
+        video?.let { v ->
+            parts += when (v.status) {
+                DownloadStatus.DONE -> "视频 已完成"
+                DownloadStatus.FAILED -> "视频 失败"
+                DownloadStatus.PAUSED -> "视频 已暂停"
+                DownloadStatus.QUEUED -> "视频 排队中"
+                else -> if (DownloadStage.isProcessing(v.stage)) {
+                    (DownloadStage.label(v.stage) ?: "处理中") + "…"
+                } else if (v.totalSegments > 0) {
+                    "视频 ${v.doneSegments}/${v.totalSegments} 片"
+                } else {
+                    "视频 下载中"
+                }
+            }
+        }
+        if (images.isNotEmpty()) {
+            parts += when {
+                doneImages == images.size -> "图片 已全部完成"
+                images.all { it.status == DownloadStatus.FAILED } -> "图片 全部失败"
+                else -> "图片 $doneImages/${images.size} 张"
+            }
+        }
+        return parts.joinToString(" · ").ifEmpty { "排队中" }
+    }
+
+    /** 组内第一条"可打开"的条目：优先视频，其次第一张已完成的图片。 */
+    fun firstOpenable(): DownloadTaskEntity? =
+        video?.takeIf { it.status == DownloadStatus.DONE && it.savedUri != null }
+            ?: images.firstOrNull { it.status == DownloadStatus.DONE && it.savedUri != null }
+}
+
+/**
+ * 按作品聚合（顺序 = 输入里首次出现的顺序；DAO 已按"最新在前"排好）。
+ *
+ * 同一作品的视频与图片会被合成一组：视频排在前面，图片按 `imageIndex` 排。
+ */
+fun groupDownloads(tasks: List<DownloadTaskEntity>): List<DownloadGroup> {
+    val order = LinkedHashMap<Long, MutableList<DownloadTaskEntity>>()
+    tasks.forEach { task ->
+        order.getOrPut(task.noteId) { mutableListOf() }.add(task)
+    }
+    return order.map { (noteId, items) ->
+        val video = items.firstOrNull { it.kind == DownloadKind.VIDEO }
+        val images = items.filter { it.kind == DownloadKind.IMAGE }.sortedBy { it.imageIndex }
+        val ordered = buildList {
+            video?.let { add(it) }
+            addAll(images)
+        }
+        DownloadGroup(
+            noteId = noteId,
+            title = items.first().title,
+            cover = items.first().cover,
+            video = video,
+            images = images,
+            items = ordered
+        )
+    }
+}

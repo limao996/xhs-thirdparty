@@ -3,9 +3,12 @@ package com.thirdparty.xhs.ui.screens
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,6 +24,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Pause
@@ -54,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.thirdparty.xhs.common.RepoViewModelFactory
+import com.thirdparty.xhs.data.DownloadGroup
 import com.thirdparty.xhs.data.DownloadKind
 import com.thirdparty.xhs.data.DownloadStage
 import com.thirdparty.xhs.data.DownloadStatus
@@ -68,11 +74,12 @@ import com.thirdparty.xhs.ui.theme.Spacing
 import com.thirdparty.xhs.ui.viewmodel.DownloadViewModel
 
 /**
- * 下载管理：进行中 / 已完成两组，逐条 暂停 / 继续 / 取消 / 重试 / 打开 / 删除。
+ * 下载管理：**按作品一行**，行内汇总"视频 / 图片"各自的进度；点一行展开看单条（视频、每张图片）。
  *
- * 入口在「我的」页（`ProfileScreen` 的「其他」分组）。
- * 页面上**不画进度动画**，进度只来自库里那两个数字（`doneSegments/totalSegments`），
- * 服务那边每完成一片写一次库，列表就跟着动。
+ * 为什么按作品成行：一个作品可能有 1 个视频 + 几十张图片，一行一个文件会把列表刷屏、用户找不到作品
+ * （2026-10-17 用户反馈）。需要逐张操作时再展开，展开里每张图片都能单独「打开」预览。
+ *
+ * 进行中的作品在「进行中」组，整组结束（全部完成或有失败）后落到「已完成」组。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -84,6 +91,23 @@ fun DownloadScreen(
     val haptics = rememberHaptics()
     val context = LocalContext.current
     var confirmClear by remember { mutableStateOf(false) }
+    // 展开的作品（默认折叠：列表要一眼看清有哪些作品）
+    var expanded by remember { mutableStateOf(setOf<Long>()) }
+
+    /** 打开一个条目（视频或图片）：用 MediaStore 的 uri 交给系统相册/播放器。 */
+    fun open(item: DownloadTaskEntity) {
+        val uri = item.savedUri?.let(Uri::parse)
+        if (uri == null) {
+            Toast.makeText(context, "找不到文件记录，可能已被删除", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, if (item.kind == DownloadKind.VIDEO) "video/*" else "image/*")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        runCatching { context.startActivity(intent) }
+            .onFailure { Toast.makeText(context, "没有可打开该文件的应用", Toast.LENGTH_SHORT).show() }
+    }
 
     Scaffold(
         topBar = {
@@ -102,7 +126,7 @@ fun DownloadScreen(
                                 viewModel.resumeAll()
                             }) { Text("全部继续") }
                         }
-                        if (state.activeCount > 0) {
+                        if (state.runningCount > 0) {
                             TextButton(onClick = {
                                 haptics.tick()
                                 viewModel.pauseAll()
@@ -134,48 +158,60 @@ fun DownloadScreen(
 
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(pad),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                start = Spacing.s, end = Spacing.s, top = Spacing.s,
-                bottom = Spacing.xxl
+            contentPadding = PaddingValues(
+                start = Spacing.s, end = Spacing.s, top = Spacing.s, bottom = Spacing.xxl
             ),
             verticalArrangement = Arrangement.spacedBy(Spacing.xs)
         ) {
             if (state.active.isNotEmpty()) {
-                item { GroupLabel("进行中 · ${state.active.size} 项") }
-                items(state.active, key = { it.id }) { task ->
-                    DownloadRow(
-                        task = task,
-                        onPause = { viewModel.pause(task.id) },
-                        onResume = { viewModel.resume(task.id) },
-                        onCancel = { viewModel.cancel(task.id) }
+                item { GroupLabel("进行中 · ${state.active.size} 件作品") }
+                items(state.active, key = { "a${it.noteId}" }) { group ->
+                    GroupCard(
+                        group = group,
+                        expanded = group.noteId in expanded,
+                        onToggleExpand = {
+                            expanded = if (group.noteId in expanded) {
+                                expanded - group.noteId
+                            } else {
+                                expanded + group.noteId
+                            }
+                        },
+                        onPauseGroup = { viewModel.pauseGroup(group) },
+                        onResumeGroup = { viewModel.resumeGroup(group) },
+                        onRetryGroup = { viewModel.retryGroup(group) },
+                        onOpenItem = ::open,
+                        onCancelItem = { viewModel.cancel(it) },
+                        onRetryItem = { viewModel.retry(it) },
+                        onOpenGroup = {
+                            group.firstOpenable()?.let(::open)
+                                ?: Toast.makeText(context, "还没有可打开的文件", Toast.LENGTH_SHORT).show()
+                        }
                     )
                 }
             }
             if (state.finished.isNotEmpty()) {
-                item { GroupLabel("已完成 · ${state.finished.size} 项") }
-                items(state.finished, key = { it.id }) { task ->
-                    DownloadRow(
-                        task = task,
-                        onOpen = {
-                            val uri = task.savedUri?.let(Uri::parse)
-                            if (uri == null) {
-                                Toast.makeText(context, "找不到文件记录，可能已被删除", Toast.LENGTH_SHORT).show()
+                item { GroupLabel("已完成 · ${state.finished.size} 件作品") }
+                items(state.finished, key = { "f${it.noteId}" }) { group ->
+                    GroupCard(
+                        group = group,
+                        expanded = group.noteId in expanded,
+                        onToggleExpand = {
+                            expanded = if (group.noteId in expanded) {
+                                expanded - group.noteId
                             } else {
-                                val intent = Intent(Intent.ACTION_VIEW).apply {
-                                    setDataAndType(
-                                        uri,
-                                        if (task.kind == DownloadKind.VIDEO) "video/*" else "image/*"
-                                    )
-                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                }
-                                runCatching { context.startActivity(intent) }
-                                    .onFailure {
-                                        Toast.makeText(context, "没有可打开该文件的应用", Toast.LENGTH_SHORT).show()
-                                    }
+                                expanded + group.noteId
                             }
                         },
-                        onRetry = { viewModel.retry(task.id) },
-                        onCancel = { viewModel.cancel(task.id) }
+                        onPauseGroup = {},
+                        onResumeGroup = {},
+                        onRetryGroup = { viewModel.retryGroup(group) },
+                        onOpenItem = ::open,
+                        onCancelItem = { viewModel.cancel(it) },
+                        onRetryItem = { viewModel.retry(it) },
+                        onOpenGroup = {
+                            group.firstOpenable()?.let(::open)
+                                ?: Toast.makeText(context, "还没有可打开的文件", Toast.LENGTH_SHORT).show()
+                        }
                     )
                 }
             }
@@ -185,7 +221,7 @@ fun DownloadScreen(
     if (confirmClear) {
         ConfirmActionDialog(
             title = "清空已完成？",
-            text = "将移除 ${state.finished.size} 条已完成 / 失败的记录。已保存到相册或视频库的文件不会删除。",
+            text = "将移除 ${state.finished.size} 件作品的下载记录。已保存到相册或视频库的文件不会删除。",
             confirmText = "清空",
             onConfirm = {
                 confirmClear = false
@@ -206,151 +242,213 @@ private fun GroupLabel(text: String) {
     )
 }
 
+/** 作品一行：封面 + 标题 + 汇总状态 + 组级操作；展开后是这一件的每条（视频 / 每张图片）。 */
 @Composable
-private fun DownloadRow(
-    task: DownloadTaskEntity,
-    onPause: () -> Unit = {},
-    onResume: () -> Unit = {},
-    onRetry: () -> Unit = {},
-    onCancel: () -> Unit = {},
-    onOpen: (() -> Unit)? = null
+private fun GroupCard(
+    group: DownloadGroup,
+    expanded: Boolean,
+    onToggleExpand: () -> Unit,
+    onPauseGroup: () -> Unit,
+    onResumeGroup: () -> Unit,
+    onRetryGroup: () -> Unit,
+    onOpenGroup: () -> Unit,
+    onOpenItem: (DownloadTaskEntity) -> Unit,
+    onCancelItem: (Long) -> Unit,
+    onRetryItem: (Long) -> Unit
 ) {
     val haptics = rememberHaptics()
-    // 合并 / 转封装 / 保存这几段没有可数进度，用"已用秒数"当"还在动"的信号：
-    // 只在处理阶段心跳（每秒一次），拉切片阶段不必要地重组
-    val isProcessing = task.status == DownloadStatus.RUNNING && DownloadStage.isProcessing(task.stage)
-    var ticker by remember(task.id, isProcessing) {
-        androidx.compose.runtime.mutableIntStateOf(0)
-    }
-    if (isProcessing) {
-        LaunchedEffect(task.id) {
+    // 处理阶段没有可数进度：用秒数心跳表示"还在动"
+    var ticker by remember(group.noteId) { mutableIntStateOf(0) }
+    if (group.processing) {
+        LaunchedEffect(group.noteId) {
             while (true) {
                 kotlinx.coroutines.delay(1000)
                 ticker += 1
             }
         }
     }
+    val fraction = group.progressFraction()
+    val summary = group.statusSummary() +
+        if (group.processing) " · 已用 $ticker 秒" else ""
 
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerLowest,
         modifier = Modifier.fillMaxWidth().clip(Corners.large)
     ) {
-        Row(
-            Modifier.padding(start = Spacing.s, end = Spacing.xs, top = Spacing.s, bottom = Spacing.s),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(Modifier.size(width = 36.dp, height = 48.dp), contentAlignment = Alignment.Center) {
-                if (task.cover.isNotEmpty()) {
-                    XhsAsyncImage(
-                        url = task.cover,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize().clip(Corners.small)
-                    )
-                } else {
-                    Icon(
-                        if (task.kind == DownloadKind.VIDEO) Icons.Filled.Movie else Icons.Filled.Image,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            Spacer(Modifier.width(Spacing.m))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    task.title.ifEmpty { "(无标题)" },
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    statusLine(task, elapsedSeconds = if (isProcessing) ticker else null),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (task.status == DownloadStatus.FAILED) {
-                        MaterialTheme.colorScheme.error
+        Column {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { haptics.tick(); onToggleExpand() }
+                    .padding(start = Spacing.s, end = Spacing.xs, top = Spacing.s, bottom = Spacing.s),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(Modifier.size(width = 36.dp, height = 48.dp), contentAlignment = Alignment.Center) {
+                    if (group.cover.isNotEmpty()) {
+                        XhsAsyncImage(
+                            url = group.cover,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize().clip(Corners.small)
+                        )
                     } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (task.status == DownloadStatus.RUNNING) {
-                    if (isProcessing) {
-                        // 合并 / 转封装 / 保存**没有可数进度**：给不确定进度条，
-                        // "动着的条 + 已用秒数"就是"还在干活"的信号
+                        Icon(
+                            if (group.images.isEmpty()) Icons.Filled.Movie else Icons.Filled.Image,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Spacer(Modifier.width(Spacing.m))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        group.title.ifEmpty { "(无标题)" },
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        summary,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (group.failedCount > 0 && group.settled) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (!group.settled) {
                         Spacer(Modifier.height(Spacing.xs))
-                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                    } else if (task.totalSegments > 1) {
-                        Spacer(Modifier.height(Spacing.xs))
-                        LinearProgressIndicator(
-                            progress = { task.doneSegments.toFloat() / task.totalSegments.toFloat() },
-                            modifier = Modifier.fillMaxWidth()
+                        if (fraction == null) {
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        } else {
+                            LinearProgressIndicator(
+                                progress = { fraction },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (group.settled) {
+                        IconButton(onClick = { haptics.tick(); onOpenGroup() }) {
+                            Icon(Icons.Filled.PlayCircleOutline, contentDescription = "打开")
+                        }
+                        if (group.failedCount > 0) {
+                            IconButton(onClick = { haptics.tick(); onRetryGroup() }) {
+                                Icon(Icons.Filled.Refresh, contentDescription = "重试失败项")
+                            }
+                        }
+                    } else if (group.queuedOrRunning > 0) {
+                        IconButton(onClick = { haptics.tick(); onPauseGroup() }) {
+                            Icon(Icons.Filled.Pause, contentDescription = "暂停全部")
+                        }
+                    } else if (group.pausedCount > 0) {
+                        IconButton(onClick = { haptics.tick(); onResumeGroup() }) {
+                            Icon(Icons.Filled.PlayArrow, contentDescription = "继续全部")
+                        }
+                    }
+                    IconButton(onClick = { haptics.tick(); onToggleExpand() }) {
+                        Icon(
+                            if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                            contentDescription = if (expanded) "收起" else "展开"
                         )
                     }
                 }
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                when (task.status) {
-                    DownloadStatus.RUNNING, DownloadStatus.QUEUED -> IconButton(onClick = {
-                        haptics.tick(); onPause()
-                    }) { Icon(Icons.Filled.Pause, contentDescription = "暂停") }
 
-                    DownloadStatus.PAUSED -> IconButton(onClick = {
-                        haptics.tick(); onResume()
-                    }) { Icon(Icons.Filled.PlayArrow, contentDescription = "继续") }
-
-                    DownloadStatus.FAILED -> IconButton(onClick = {
-                        haptics.tick(); onRetry()
-                    }) { Icon(Icons.Filled.Refresh, contentDescription = "重试") }
-
-                    DownloadStatus.DONE -> if (onOpen != null) {
-                        IconButton(onClick = { haptics.tick(); onOpen() }) {
-                            Icon(Icons.Filled.PlayCircleOutline, contentDescription = "打开")
-                        }
+            AnimatedVisibility(visible = expanded) {
+                Column(Modifier.padding(start = Spacing.s, end = Spacing.xs, bottom = Spacing.s)) {
+                    group.items.forEach { item ->
+                        ItemRow(
+                            task = item,
+                            onOpen = { onOpenItem(item) },
+                            onCancel = { onCancelItem(item.id) },
+                            onRetry = { onRetryItem(item.id) }
+                        )
                     }
-                }
-                IconButton(onClick = {
-                    haptics.reject()
-                    onCancel()
-                }) {
-                    Icon(
-                        Icons.Filled.DeleteOutline,
-                        contentDescription = if (task.status == DownloadStatus.DONE) "删除记录" else "取消下载"
-                    )
                 }
             }
         }
     }
 }
 
-/**
- * 任务行的状态说明（文案按应用口吻：说明发生了什么 + 进度数字）。
- *
- * 进行中要区分"拉切片"与"合并 / 转封装 / 保存"：后三段没有可数进度，
- * 只说"下载中 22/22 片"会让用户以为卡住（2026-10-17 用户反馈）。
- * [elapsedSeconds] 非空时给出已用秒数，进一步证明"还在动"。
- */
-private fun statusLine(task: DownloadTaskEntity, elapsedSeconds: Int? = null): String = when (task.status) {
-    DownloadStatus.QUEUED -> "排队中"
-    DownloadStatus.RUNNING -> {
-        val stage = DownloadStage.label(task.stage)
-        val suffix = elapsedSeconds?.let { " · 已用 $it 秒" }.orEmpty()
-        when {
-            DownloadStage.isProcessing(task.stage) ->
-                (stage ?: "处理中") + "…" + suffix
-
-            task.kind == DownloadKind.VIDEO && task.totalSegments > 0 ->
-                "下载中 ${task.doneSegments}/${task.totalSegments} 片 · ${formatBytes(task.bytes)}"
-
-            else -> "下载中 · ${formatBytes(task.bytes)}"
+/** 展开后的单条：视频 / 某一张图片。 */
+@Composable
+private fun ItemRow(
+    task: DownloadTaskEntity,
+    onOpen: () -> Unit,
+    onCancel: () -> Unit,
+    onRetry: () -> Unit
+) {
+    val haptics = rememberHaptics()
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(enabled = task.status == DownloadStatus.DONE) { haptics.tick(); onOpen() }
+            .padding(vertical = Spacing.xs),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            if (task.kind == DownloadKind.VIDEO) Icons.Filled.Movie else Icons.Filled.Image,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.width(Spacing.s))
+        Column(Modifier.weight(1f)) {
+            Text(
+                if (task.kind == DownloadKind.VIDEO) "视频" else "图片 ${"%02d".format(task.imageIndex + 1)}",
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1
+            )
+            Text(
+                itemStatusLine(task),
+                style = MaterialTheme.typography.labelSmall,
+                color = if (task.status == DownloadStatus.FAILED) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
+        when (task.status) {
+            DownloadStatus.DONE -> IconButton(onClick = { haptics.tick(); onOpen() }) {
+                Icon(Icons.Filled.PlayCircleOutline, contentDescription = "打开")
+            }
+
+            DownloadStatus.FAILED -> IconButton(onClick = { haptics.tick(); onRetry() }) {
+                Icon(Icons.Filled.Refresh, contentDescription = "重试")
+            }
+
+            else -> Unit
+        }
+        IconButton(onClick = { haptics.reject(); onCancel() }) {
+            Icon(
+                Icons.Filled.DeleteOutline,
+                contentDescription = if (task.status == DownloadStatus.DONE) "删除记录" else "取消下载"
+            )
+        }
+    }
+}
+
+/** 单条的状态说明（与组级汇总同一套口径）。 */
+private fun itemStatusLine(task: DownloadTaskEntity): String = when (task.status) {
+    DownloadStatus.QUEUED -> "排队中"
+    DownloadStatus.RUNNING -> when {
+        DownloadStage.isProcessing(task.stage) -> (DownloadStage.label(task.stage) ?: "处理中") + "…"
+        task.kind == DownloadKind.VIDEO && task.totalSegments > 0 ->
+            "下载中 ${task.doneSegments}/${task.totalSegments} 片 · ${formatBytes(task.bytes)}"
+
+        else -> "下载中 · ${formatBytes(task.bytes)}"
     }
 
     DownloadStatus.PAUSED -> "已暂停 · ${formatBytes(task.bytes)}"
-    DownloadStatus.DONE -> "已完成 · ${formatBytes(task.bytes)}" +
-        (task.savedPath?.let { " · $it" } ?: "")
-
+    DownloadStatus.DONE -> "已完成 · ${formatBytes(task.bytes)}"
     DownloadStatus.FAILED -> "失败：${task.error ?: "未知原因"}"
     else -> task.status
 }

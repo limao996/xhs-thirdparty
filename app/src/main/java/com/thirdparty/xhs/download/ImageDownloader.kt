@@ -15,7 +15,11 @@ import okhttp3.Request
 class ImageDownloader(private val client: OkHttpClient) {
 
     sealed interface Outcome {
-        data class Ok(val bytes: Long, val displayPath: String) : Outcome
+        /**
+         * [uri] 是 MediaStore 里的行 uri，**必须往库里存**：下载管理页的「打开/预览」靠它
+         * （早期版本这里传了 null，结果图片行点打开只会提示"找不到文件记录"，2026-10-17 用户反馈）。
+         */
+        data class Ok(val bytes: Long, val displayPath: String, val uri: String?) : Outcome
         data class Failed(val reason: String) : Outcome
     }
 
@@ -46,8 +50,8 @@ class ImageDownloader(private val client: OkHttpClient) {
         Log.i(TAG, "图片解密后 ${bytes.size} 字节：$displayName")
         when (val saved = MediaStoreWriter.saveImage(context, bytes, relativeDir, displayName)) {
             is MediaStoreWriter.Result.Failed -> Outcome.Failed(saved.reason)
-            // 带上公共目录前缀（Pictures/…），与视频行显示的路径格式保持一致
-            is MediaStoreWriter.Result.Ok -> Outcome.Ok(saved.bytes, saved.displayPath)
+            // 带上公共目录前缀（Pictures/…）与 MediaStore uri：前者用于显示，后者用于预览/打开
+            is MediaStoreWriter.Result.Ok -> Outcome.Ok(saved.bytes, saved.displayPath, saved.uri.toString())
         }
     } catch (e: Exception) {
         Outcome.Failed(humanError(e))
