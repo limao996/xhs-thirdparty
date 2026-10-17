@@ -2,6 +2,8 @@ package com.thirdparty.xhs.download
 
 import android.content.Context
 import android.util.Log
+import androidx.core.net.toUri
+import com.thirdparty.xhs.data.DownloadDedupe
 import com.thirdparty.xhs.data.DownloadKind
 import com.thirdparty.xhs.data.DownloadStage
 import com.thirdparty.xhs.data.DownloadStatus
@@ -114,12 +116,31 @@ object DownloadEngine {
         schedule()
     }
 
-    /** 入队（由下载对话框调用）并启动前台服务。 */
-    suspend fun enqueue(tasks: List<DownloadTaskEntity>) {
-        tasks.forEach { dao.insert(it) }
-        Log.i(TAG, "入队 ${tasks.size} 个任务")
+    /**
+     * 入队（由下载对话框调用）并启动前台服务。
+     *
+     * **顺手去重**：用户反复点「下载」是常见操作，同一条内容（作品 + 类型 + 序号）库里同时只留一条
+     * 有效任务 —— 已下载/在下载中的直接跳过（返回给调用方去提示），旧的失败行先删再建
+     * （失败重试是正当需求，但同一内容不留两条）。判定逻辑在 `data/DownloadDedupe.kt`（带单测）。
+     *
+     * @return 入队计划（新建了哪些、跳过了哪些），供界面提示"已跳过 N 项"
+     */
+    suspend fun enqueue(tasks: List<DownloadTaskEntity>): DownloadDedupe.EnqueuePlan {
+        val noteIds = tasks.map { it.noteId }.distinct()
+        val existing = noteIds.flatMap { dao.byNote(it) }
+        val plan = DownloadDedupe.planEnqueue(tasks, existing)
+
+        plan.superseded.forEach { dao.delete(it.id) }
+        plan.added.forEach { dao.insert(it) }
+        Log.i(
+            TAG,
+            "入队 ${plan.added.size} 个任务" +
+                if (plan.skippedCount > 0) "（跳过已下载/在下载中的 ${plan.skippedCount} 项）" else ""
+        )
+        if (plan.added.isEmpty()) return plan
         DownloadService.start(appContext)
         schedule()
+        return plan
     }
 
     /**
@@ -182,10 +203,51 @@ object DownloadEngine {
         refreshState()
     }
 
-    fun clearFinished() = scope.launch {
-        dao.finished().forEach { deleteTemp(it.id) }
+    /**
+     * 删除一条记录；[alsoDeleteFile] 为真时**连公共目录里的源文件一起删**。
+     *
+     * 默认只删记录（用户可能只是想把列表清干净，文件还要留在相册里看）；
+     * 要删文件时通过 `ContentResolver` 删 MediaStore 的行 —— 那同时会把文件删掉，
+     * 本应用是这些文件的创建者（`MediaStoreWriter`），29+ 不需要额外权限，26–28 有 `WRITE_EXTERNAL_STORAGE`。
+     */
+    fun delete(id: Long, alsoDeleteFile: Boolean) = scope.launch {
+        jobs[id]?.cancel()
+        jobs.remove(id)
+        val task = dao.byId(id)
+        task?.let { deleteTemp(it.id) }
+        if (alsoDeleteFile) task?.let { deleteSavedFile(it) }
+        dao.delete(id)
+        refreshState()
+    }
+
+    /**
+     * 清空已完成 / 失败的记录；[alsoDeleteFiles] 为真时连文件一起删。
+     *
+     * @return 实际删掉的文件数（给界面提示用）
+     */
+    suspend fun clearFinished(alsoDeleteFiles: Boolean): Int {
+        val rows = dao.finished()
+        var deletedFiles = 0
+        rows.forEach { task ->
+            deleteTemp(task.id)
+            if (alsoDeleteFiles && deleteSavedFile(task)) deletedFiles++
+        }
         dao.clearFinished()
         refreshState()
+        return deletedFiles
+    }
+
+    /** 删掉公共目录里的源文件（按 MediaStore 的 uri）。返回是否真的删了。 */
+    private fun deleteSavedFile(task: DownloadTaskEntity): Boolean {
+        val uri = task.savedUri?.takeIf { it.isNotBlank() } ?: return false
+        return runCatching {
+            val removed = appContext.contentResolver.delete(uri.toUri(), null, null)
+            Log.i(TAG, "删除源文件 ${task.savedPath ?: uri}（结果=$removed）")
+            removed > 0
+        }.getOrElse { e ->
+            Log.w(TAG, "删除源文件失败：${task.savedPath ?: uri}（${e.message}）")
+            false
+        }
     }
 
     /**

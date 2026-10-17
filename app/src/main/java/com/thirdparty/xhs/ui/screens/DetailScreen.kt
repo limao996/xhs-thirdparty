@@ -2,6 +2,7 @@
 
 package com.thirdparty.xhs.ui.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
@@ -133,6 +134,8 @@ fun DetailScreen(
     // 标题栏「⋮」菜单与下载对话框（用户要求：分享 / 全屏 收进菜单，收藏右侧是菜单按钮）
     var menuOpen by rememberSaveable { mutableStateOf(false) }
     var downloadPickerOpen by rememberSaveable { mutableStateOf(false) }
+    /** 这件作品已有的下载任务（打开对话框时读一次，用于标记"已下载 / 下载中"并去重） */
+    var noteDownloadTasks by remember { mutableStateOf<List<DownloadTaskEntity>>(emptyList()) }
     val scope = rememberCoroutineScope()
     // API 33+ 的通知权限：只在用户真的确认下载时申请一次（被拒也不影响下载，只是没有进度通知）
     val notificationPermission = rememberLauncherForActivityResult(
@@ -545,12 +548,22 @@ fun DetailScreen(
     }
 
     // 下载对话框：多选要保存的内容（视频 + 图片），确认后建任务并跳下载管理
+    // 打开下载对话框前先读这件作品已有的下载任务：对话框据此标记「已下载 / 下载中」并禁止重复选择
+    LaunchedEffect(downloadPickerOpen) {
+        if (downloadPickerOpen) {
+            noteDownloadTasks = runCatching { App.repo.downloadTasksForNote(noteId) }
+                .getOrDefault(emptyList())
+        }
+    }
+
     if (downloadPickerOpen) {
         val item = state.item
         DownloadPickerDialog(
             title = item?.title.orEmpty().ifBlank { "作品" },
             videoUrl = item?.mediaUrl?.takeIf { it.isNotBlank() },
             imageUrls = item?.images?.map { it.url }.orEmpty(),
+            existingTasks = noteDownloadTasks,
+            noteId = noteId,
             onConfirm = { wantVideo, imageIndices ->
                 downloadPickerOpen = false
                 val note = state.item ?: return@DownloadPickerDialog
@@ -592,11 +605,21 @@ fun DetailScreen(
                             )
                         }
                     }
-                    if (tasks.isNotEmpty()) {
-                        com.thirdparty.xhs.download.DownloadEngine.init(context)
-                        com.thirdparty.xhs.download.DownloadEngine.enqueue(tasks)
-                        onOpenDownloads()
+                    if (tasks.isEmpty()) return@launch
+                    com.thirdparty.xhs.download.DownloadEngine.init(context)
+                    // 引擎内部会去重：同一作品同一条内容只留一条有效任务（用户可能反复点下载）
+                    val plan = com.thirdparty.xhs.download.DownloadEngine.enqueue(tasks)
+                    val message = buildString {
+                        if (plan.added.isNotEmpty()) append("已开始下载 ${plan.added.size} 项")
+                        if (plan.skippedCount > 0) {
+                            if (isNotEmpty()) append("，")
+                            append("已跳过 ${plan.skippedCount} 项（已下载或在下载中）")
+                        }
+                        if (isEmpty()) append("没有需要下载的内容")
                     }
+                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                    // 全部被跳过时不用跳页：留在详情页，用户看到提示就够了
+                    if (plan.added.isNotEmpty()) onOpenDownloads()
                 }
             },
             onDismiss = { downloadPickerOpen = false }

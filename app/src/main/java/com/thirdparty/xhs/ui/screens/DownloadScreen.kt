@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlayCircleOutline
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -90,7 +91,9 @@ fun DownloadScreen(
     val state by viewModel.ui.collectAsStateWithLifecycle()
     val haptics = rememberHaptics()
     val context = LocalContext.current
-    var confirmClear by remember { mutableStateOf(false) }
+    // 删除确认：null = 没弹；"clear" = 清空已完成；否则是要删的那条记录
+    var pendingDelete by remember { mutableStateOf<DownloadTaskEntity?>(null) }
+    var pendingClear by remember { mutableStateOf(false) }
     // 展开的作品（默认折叠：列表要一眼看清有哪些作品）
     var expanded by remember { mutableStateOf(setOf<Long>()) }
 
@@ -136,7 +139,7 @@ fun DownloadScreen(
                     if (state.finished.isNotEmpty()) {
                         IconButton(onClick = {
                             haptics.tick()
-                            confirmClear = true
+                            pendingClear = true
                         }) {
                             Icon(Icons.Filled.DeleteSweep, contentDescription = "清空已完成")
                         }
@@ -180,7 +183,18 @@ fun DownloadScreen(
                         onResumeGroup = { viewModel.resumeGroup(group) },
                         onRetryGroup = { viewModel.retryGroup(group) },
                         onOpenItem = ::open,
-                        onCancelItem = { viewModel.cancel(it) },
+                        onCancelItem = { id ->
+                            val item = group.items.firstOrNull { it.id == id }
+                            // 未完成的条目：取消下载，公共目录里还没有文件，直接取消即可；
+                            // 已完成/失败的条目：先问清楚"只删记录"还是"连文件一起删"
+                            if (item != null && item.status != DownloadStatus.DONE &&
+                                item.status != DownloadStatus.FAILED
+                            ) {
+                                viewModel.cancel(id)
+                            } else {
+                                pendingDelete = item
+                            }
+                        },
                         onRetryItem = { viewModel.retry(it) },
                         onOpenGroup = {
                             group.firstOpenable()?.let(::open)
@@ -206,7 +220,18 @@ fun DownloadScreen(
                         onResumeGroup = {},
                         onRetryGroup = { viewModel.retryGroup(group) },
                         onOpenItem = ::open,
-                        onCancelItem = { viewModel.cancel(it) },
+                        onCancelItem = { id ->
+                            val item = group.items.firstOrNull { it.id == id }
+                            // 未完成的条目：取消下载，公共目录里还没有文件，直接取消即可；
+                            // 已完成/失败的条目：先问清楚"只删记录"还是"连文件一起删"
+                            if (item != null && item.status != DownloadStatus.DONE &&
+                                item.status != DownloadStatus.FAILED
+                            ) {
+                                viewModel.cancel(id)
+                            } else {
+                                pendingDelete = item
+                            }
+                        },
                         onRetryItem = { viewModel.retry(it) },
                         onOpenGroup = {
                             group.firstOpenable()?.let(::open)
@@ -218,18 +243,128 @@ fun DownloadScreen(
         }
     }
 
-    if (confirmClear) {
-        ConfirmActionDialog(
-            title = "清空已完成？",
-            text = "将移除 ${state.finished.size} 件作品的下载记录。已保存到相册或视频库的文件不会删除。",
-            confirmText = "清空",
-            onConfirm = {
-                confirmClear = false
-                viewModel.clearFinished()
+    // 删除一条：让用户选"只删记录"还是"连文件一起删"（用户 2026-10-17 要求）
+    pendingDelete?.let { target ->
+        DeleteChoiceDialog(
+            title = "删除这条下载？",
+            recordText = target.savedPath?.ifBlank { null } ?: "（还没有落盘文件）",
+            hasFile = target.savedUri != null,
+            onDeleteRecord = {
+                pendingDelete = null
+                viewModel.delete(target.id, alsoDeleteFile = false)
             },
-            onDismiss = { confirmClear = false }
+            onDeleteBoth = {
+                pendingDelete = null
+                viewModel.delete(target.id, alsoDeleteFile = true)
+            },
+            onDismiss = { pendingDelete = null }
         )
     }
+
+    // 清空已完成：同样让用户选是否连文件一起删
+    if (pendingClear) {
+        DeleteChoiceDialog(
+            title = "清空已完成？",
+            recordText = "将移除 ${state.finished.size} 件作品的下载记录",
+            hasFile = state.finished.any { it.items.any { item -> item.savedUri != null } },
+            onDeleteRecord = {
+                pendingClear = false
+                viewModel.clearFinished(alsoDeleteFiles = false)
+            },
+            onDeleteBoth = {
+                pendingClear = false
+                viewModel.clearFinished(alsoDeleteFiles = true) { deleted ->
+                    Toast.makeText(context, "已删除 $deleted 个文件", Toast.LENGTH_SHORT).show()
+                }
+            },
+            onDismiss = { pendingClear = false }
+        )
+    }
+}
+
+/**
+ * 删除确认：两个选项 —— **只删记录**（文件留在相册/视频库）或 **记录 + 源文件一起删**。
+ *
+ * 用户要求"删除和清空要能选择删除源文件"（2026-10-17）。默认落在"只删记录"上：
+ * 删文件是不可撤销的，误删掉相册里的东西比留一条记录糟得多。
+ */
+@Composable
+private fun DeleteChoiceDialog(
+    title: String,
+    recordText: String,
+    hasFile: Boolean,
+    onDeleteRecord: () -> Unit,
+    onDeleteBoth: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val haptics = rememberHaptics()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column {
+                Text(
+                    recordText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(Spacing.s))
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(Corners.small)
+                        .clickable { haptics.tick(); onDeleteRecord() }
+                        .padding(vertical = Spacing.m),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.DeleteOutline, contentDescription = null)
+                    Spacer(Modifier.width(Spacing.m))
+                    Column {
+                        Text("仅删除记录", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            "相册 / 视频库里的文件会保留",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                if (hasFile) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(Corners.small)
+                            .clickable { haptics.reject(); onDeleteBoth() }
+                            .padding(vertical = Spacing.m),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Filled.DeleteOutline,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(Modifier.width(Spacing.m))
+                        Column {
+                            Text(
+                                "删除记录和文件",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Text(
+                                "同时从相册 / 视频库里删掉源文件，不可撤销",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { haptics.click(onDismiss); onDismiss() }) { Text("取消") }
+        }
+    )
 }
 
 @Composable

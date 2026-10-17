@@ -39,6 +39,12 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
     fun downloadTasks(): kotlinx.coroutines.flow.Flow<List<DownloadTaskEntity>> =
         downloadDao.observeAll()
 
+    /**
+     * 某件作品的下载任务（下载对话框用：标记"已下载 / 下载中"并跳过重复项）。
+     */
+    suspend fun downloadTasksForNote(noteId: Long): List<DownloadTaskEntity> =
+        withContext(Dispatchers.IO) { downloadDao.byNote(noteId) }
+
     /** Feed page (discover). Throws on network/API error; caller handles state. */
     suspend fun discoverPage(categoryId: Int, groupId: Int, page: Int): List<NoteItem> =
         withContext(Dispatchers.IO) {

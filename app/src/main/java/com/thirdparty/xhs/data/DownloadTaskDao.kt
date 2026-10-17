@@ -28,11 +28,16 @@ interface DownloadTaskDao {
     )
     suspend fun unfinished(): List<DownloadTaskEntity>
 
-    @Query("SELECT * FROM download_task WHERE status = 'DONE' ORDER BY updatedAt DESC")
+    /** 已结束的任务：完成或失败（与下载页「清空已完成」的文案一致）。 */
+    @Query("SELECT * FROM download_task WHERE status IN ('DONE', 'FAILED') ORDER BY updatedAt DESC")
     suspend fun finished(): List<DownloadTaskEntity>
 
     @Query("SELECT * FROM download_task WHERE id = :id")
     suspend fun byId(id: Long): DownloadTaskEntity?
+
+    /** 某件作品的全部任务（去重与"已下载"标记要用）。 */
+    @Query("SELECT * FROM download_task WHERE noteId = :noteId ORDER BY kind DESC, imageIndex ASC")
+    suspend fun byNote(noteId: Long): List<DownloadTaskEntity>
 
     @Query("SELECT COUNT(*) FROM download_task WHERE status IN ('QUEUED', 'RUNNING', 'PAUSED')")
     fun observeUnfinishedCount(): Flow<Int>
@@ -83,9 +88,9 @@ interface DownloadTaskDao {
     @Query("DELETE FROM download_task WHERE id = :id")
     suspend fun delete(id: Long)
 
-    @Query("DELETE FROM download_task WHERE status = 'DONE'")
+    /** 清掉已结束的记录（完成 **与** 失败，与界面文案一致）。 */
+    @Query("DELETE FROM download_task WHERE status IN ('DONE', 'FAILED')")
     suspend fun clearFinished(): Int
-
     @Query("DELETE FROM download_task")
     suspend fun clearAll()
 }

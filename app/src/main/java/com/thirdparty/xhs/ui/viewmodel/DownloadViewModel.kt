@@ -82,11 +82,24 @@ class DownloadViewModel(private val repo: XhsRepository) : ViewModel() {
 
     fun retry(id: Long) = DownloadEngine.retry(id)
 
+    /**
+     * 删除一条记录；[alsoDeleteFile] 为真时连公共目录里的源文件一起删。
+     * （用户要的是"能选"：默认只删记录，避免误删相册里的文件。）
+     */
+    fun delete(id: Long, alsoDeleteFile: Boolean) = DownloadEngine.delete(id, alsoDeleteFile)
+
     // ---- 全局 ---------------------------------------------------------------
 
     fun pauseAll() = DownloadEngine.pauseAll()
 
     fun resumeAll() = DownloadEngine.resumeAll()
 
-    fun clearFinished() = DownloadEngine.clearFinished()
+    /**
+     * 清空已完成 / 失败的记录；[alsoDeleteFiles] 为真时连文件一起删。
+     *
+     * @param onResult 回调实际删掉的文件数（界面提示用）
+     */
+    fun clearFinished(alsoDeleteFiles: Boolean, onResult: (Int) -> Unit = {}) {
+        viewModelScope.launch { onResult(DownloadEngine.clearFinished(alsoDeleteFiles)) }
+    }
 }
