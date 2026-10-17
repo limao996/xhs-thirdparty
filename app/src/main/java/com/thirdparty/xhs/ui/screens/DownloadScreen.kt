@@ -132,20 +132,8 @@ fun DownloadScreen(
                     }
                 },
                 actions = {
-                    if (state.hasActive) {
-                        if (state.pausedCount > 0) {
-                            TextButton(onClick = {
-                                haptics.tick()
-                                viewModel.resumeAll()
-                            }) { Text("全部继续") }
-                        }
-                        if (state.runningCount > 0) {
-                            TextButton(onClick = {
-                                haptics.tick()
-                                viewModel.pauseAll()
-                            }) { Text("全部暂停") }
-                        }
-                    }
+                    // 顶栏只留「清空已结束」：暂停/继续改到每个作品自己的行上（用户 2026-10-17
+                    // 要求去掉标题栏的「全部继续 / 全部暂停」—— 全局按钮和"一行一个作品"的结构本来也不搭）
                     if (state.settled.isNotEmpty()) {
                         IconButton(onClick = {
                             haptics.tick()
@@ -607,11 +595,11 @@ private fun GroupCard(
                         }
                     } else if (group.queuedOrRunning > 0) {
                         IconButton(onClick = { haptics.tick(); onPauseGroup() }) {
-                            Icon(Icons.Filled.Pause, contentDescription = "暂停全部")
+                            Icon(Icons.Filled.Pause, contentDescription = "暂停这件作品")
                         }
                     } else if (group.pausedCount > 0) {
                         IconButton(onClick = { haptics.tick(); onResumeGroup() }) {
-                            Icon(Icons.Filled.PlayArrow, contentDescription = "继续全部")
+                            Icon(Icons.Filled.PlayArrow, contentDescription = "继续这件作品")
                         }
                     }
                     IconButton(onClick = { haptics.tick(); onToggleExpand() }) {

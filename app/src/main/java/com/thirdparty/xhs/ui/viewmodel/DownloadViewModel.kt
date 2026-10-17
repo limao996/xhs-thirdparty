@@ -32,9 +32,6 @@ data class DownloadUiState(
     val failed: List<DownloadGroup> = emptyList(),
     val loading: Boolean = true
 ) {
-    val hasActive: Boolean get() = active.isNotEmpty()
-    val runningCount: Int get() = active.count { it.queuedOrRunning > 0 }
-    val pausedCount: Int get() = active.count { it.queuedOrRunning == 0 && it.pausedCount > 0 }
     /** 所有已结束的作品（清空用） */
     val settled: List<DownloadGroup> get() = finished + failed
 }
@@ -96,10 +93,6 @@ class DownloadViewModel(private val repo: XhsRepository) : ViewModel() {
     fun delete(id: Long, alsoDeleteFile: Boolean) = DownloadEngine.delete(id, alsoDeleteFile)
 
     // ---- 全局 ---------------------------------------------------------------
-
-    fun pauseAll() = DownloadEngine.pauseAll()
-
-    fun resumeAll() = DownloadEngine.resumeAll()
 
     /**
      * 清空已完成 / 失败的记录；[alsoDeleteFiles] 为真时连文件一起删。
