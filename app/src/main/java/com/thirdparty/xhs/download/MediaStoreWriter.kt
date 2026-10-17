@@ -118,7 +118,10 @@ object MediaStoreWriter {
             } ?: return Result.Failed("无法写入文件，请检查存储空间")
             source.length()
         }.getOrElse { e ->
+            // 协程被取消（用户暂停 / 取消）时**不能**当成写入失败：先清掉刚插入的那一行，再把取消抛回去，
+            // 否则任务会被判成 FAILED，而且可能留下一条 IS_PENDING=1 的隐形行（2026-10-17 审查发现）
             runCatching { resolver.delete(uri, null, null) }
+            if (e is kotlinx.coroutines.CancellationException) throw e
             return Result.Failed("写入文件失败，请检查存储空间后重试")
         }
 

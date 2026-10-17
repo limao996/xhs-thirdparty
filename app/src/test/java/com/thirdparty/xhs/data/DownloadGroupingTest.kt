@@ -1,5 +1,6 @@
 package com.thirdparty.xhs.data
 
+import com.thirdparty.xhs.download.DownloadEngine
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -17,6 +18,7 @@ class DownloadGroupingTest {
         stage: String = "",
         doneSegments: Int = 0,
         totalSegments: Int = 0,
+        error: String? = null,
         title: String = "作品$noteId",
         uri: String? = "content://media/external/images/media/$id"
     ) = DownloadTaskEntity(
@@ -29,6 +31,7 @@ class DownloadGroupingTest {
         imageIndex = imageIndex,
         status = status,
         stage = stage,
+        error = error,
         doneSegments = doneSegments,
         totalSegments = totalSegments,
         bytes = 1000,
@@ -123,6 +126,27 @@ class DownloadGroupingTest {
             )
         ).first()
         assertEquals("2 张图片下载失败", failedImagesOnly.statusSummary())
+    }
+
+    @Test
+    fun paused_group_shows_why_it_is_paused() {
+        // 仅 Wi-Fi 把任务挡下时，库里写了原因；界面必须显示出来，否则用户不知道是自己按的还是被设置挡住的
+        val g = groupDownloads(
+            listOf(
+                task(1, 100, status = DownloadStatus.PAUSED, error = DownloadEngine.WAITING_WIFI_REASON),
+                task(2, 100, imageIndex = 1, status = DownloadStatus.PAUSED)
+            )
+        ).first()
+        assertEquals("等待 Wi-Fi（仅 Wi-Fi 下载已开启）", g.pauseReason)
+        assertEquals("等待 Wi-Fi", g.pauseReasonShort)
+        assertEquals("已暂停 2 项（等待 Wi-Fi） · 0/2 已完成", g.statusSummary())
+
+        // 用户自己按的暂停（没有原因）不该显示括号
+        val manual = groupDownloads(
+            listOf(task(1, 100, status = DownloadStatus.PAUSED))
+        ).first()
+        assertNull(manual.pauseReason)
+        assertEquals("已暂停 1 项 · 0/1 已完成", manual.statusSummary())
     }
 
     @Test

@@ -233,7 +233,14 @@ fun AppNavHost(
     nav: NavHostController,
     /** a note id arriving from a share link; consumed once */
     deepLinkNoteId: Long? = null,
-    onDeepLinkConsumed: () -> Unit = {}
+    onDeepLinkConsumed: () -> Unit = {},
+    /**
+     * 由"下载完成通知"点进来的标记；消费一次后打开下载管理页。
+     *
+     * 以前通知点开只到首页，用户还得自己找入口（2026-10-17 审查发现）。
+     */
+    openDownloads: Boolean = false,
+    onOpenDownloadsConsumed: () -> Unit = {}
 ) {
     // Single owner of the system-bar appearance.
     //
@@ -285,6 +292,14 @@ fun AppNavHost(
         deepLinkNoteId?.let {
             nav.navigate(Routes.detail(it))
             onDeepLinkConsumed()
+        }
+    }
+
+    // 通知点进来的：直接进下载管理（消费一次，避免用户返回后又被弹回这一页）
+    androidx.compose.runtime.LaunchedEffect(openDownloads) {
+        if (openDownloads) {
+            nav.navigate(Routes.DOWNLOADS)
+            onOpenDownloadsConsumed()
         }
     }
     NavHost(

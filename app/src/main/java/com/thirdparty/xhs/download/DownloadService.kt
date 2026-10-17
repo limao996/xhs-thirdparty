@@ -64,6 +64,13 @@ class DownloadService : Service() {
         /** 下载完成的一次性通知（与常驻进度通知分开 id，避免互相覆盖）。 */
         private const val FINISHED_NOTIFICATION_ID = 4802
 
+        /**
+         * 通知点击时带的 extra：为真则进应用后直接打开下载管理页。
+         *
+         * 两个通知（进度 / 完成）都带它 —— 通知本来就是"下载"这件事的回执，点开落到下载页才对。
+         */
+        const val EXTRA_OPEN_DOWNLOADS = "com.thirdparty.xhs.download.OPEN_DOWNLOADS"
+
         /** 启动（或唤醒）服务。已在跑时不会重复建服务。 */
         fun start(context: Context) {
             val intent = Intent(context, DownloadService::class.java).setAction(ACTION_START)
@@ -100,7 +107,9 @@ class DownloadService : Service() {
             val open = PendingIntent.getActivity(
                 context,
                 0,
-                Intent(context, MainActivity::class.java),
+                Intent(context, MainActivity::class.java).putExtra(
+                    EXTRA_OPEN_DOWNLOADS, true
+                ),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
             runCatching {
@@ -264,7 +273,7 @@ class DownloadService : Service() {
         }
         val text = buildString {
             append("已完成 $done / $total 项")
-            if (snapshot.running > 0) append("（同时 ${snapshot.running} 个）")
+            if (snapshot.running > 0) append("（同时下载 ${snapshot.running} 个）")
             if (DownloadStage.isProcessing(snapshot.currentStage)) {
                 // 处理阶段没有进度，明确说明"完成后会继续"，避免看起来停住
                 append(" · 正在处理，完成后自动保存")

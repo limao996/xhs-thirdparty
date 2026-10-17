@@ -701,6 +701,21 @@
   或 `status=RUNNING` 的行数），而不是把一段时间内出现过的"开始任务"条数当成同时在跑。
   另外"暂停原因"写在**数据库**里，别去 `logcat` 里找（我当时 grep 日志没找到，误以为门禁没生效）。
 
+### H34. `runCatching` 会连 `CancellationException` 一起吞掉 —— 用户「暂停」会变成「失败」
+
+**症状**：下载正在写公共目录时按暂停，任务被判成 `FAILED`（而不是保持 `PAUSED`），
+偶尔还留下一条 `IS_PENDING=1` 的隐形媒体行（相册里看不到、却占空间）。
+
+**根因**：`MediaStoreWriter.save()` 用 `runCatching { 写入 }.getOrElse { 失败 }` 包住写盘；
+用户暂停 = 协程取消 = 抛 `CancellationException`，而 `runCatching` 抓的是 `Throwable`，
+于是取消被当成「写入失败」，既标了失败、又把「取消」这条正常控制流吃掉了。
+
+**规矩**：协程里用 `runCatching` / `try-catch` 兜真实失败时，必须先放行取消 ——
+`catch (e: Throwable) { if (e is CancellationException) throw e; ... }`；
+需要「取消也要做清理」时，先清理（清理自己单开一层 `runCatching`）再把取消重抛。
+
+**同类检查点**：所有 `runCatching { ... }.getOrElse { }` 且内部有挂起调用（IO / DAO / 网络）的地方。
+
 ## I. 验证工具本身的坑
 
 **I1 · `uiautomator dump` 失败时会读到上一次的旧文件**
@@ -728,4 +743,3 @@
 
 **I3 · 触感取证要看时间戳**（与 I2 同源，单独列出以免再踩）
 - 判据：`createTime` 落在"我刚才操作的那几秒"内，并且 `opPkg` 是本应用，就算通过。
-

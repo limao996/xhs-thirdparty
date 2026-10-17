@@ -260,7 +260,7 @@ fun DownloadScreen(
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Text(
-                            "重复下载会留下多份文件；记录删掉后文件也会留在相册里，都可以在这里清掉",
+                            "早期版本重复下载会留下多份文件；记录删掉后文件仍留在相册里，都可以在这里清掉",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -274,7 +274,7 @@ fun DownloadScreen(
     pendingDelete?.let { target ->
         DeleteChoiceDialog(
             title = "删除这条下载？",
-            recordText = target.savedPath?.ifBlank { null } ?: "（还没有落盘文件）",
+            recordText = target.savedPath?.ifBlank { null } ?: "这条记录还没有保存到公共目录",
             hasFile = target.savedUri != null,
             onDeleteRecord = {
                 pendingDelete = null
@@ -528,7 +528,10 @@ private fun GroupCard(
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .clickable { haptics.tick(); onToggleExpand() }
+                    // onClickLabel 让"整行可点"对读屏用户也有名字（它做的事是展开/收起）
+                    .clickable(
+                        onClickLabel = if (expanded) "收起" else "展开"
+                    ) { haptics.tick(); onToggleExpand() }
                     .padding(start = Spacing.s, end = Spacing.xs, top = Spacing.s, bottom = Spacing.s),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -701,7 +704,10 @@ private fun itemStatusLine(task: DownloadTaskEntity): String = when (task.status
         else -> "下载中 · ${formatBytes(task.bytes)}"
     }
 
-    DownloadStatus.PAUSED -> "已暂停 · ${formatBytes(task.bytes)}"
+    // 暂停原因优先显示：只写「已暂停」用户不知道是自己按的还是被"仅 Wi-Fi"挡住的
+    DownloadStatus.PAUSED -> task.error?.takeIf { it.isNotBlank() }
+        ?.let { "已暂停 · $it" }
+        ?: "已暂停 · ${formatBytes(task.bytes)}"
     DownloadStatus.DONE -> "已完成 · ${formatBytes(task.bytes)}"
     DownloadStatus.FAILED -> "失败：${task.error ?: "未知原因"}"
     else -> task.status

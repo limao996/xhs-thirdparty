@@ -1,5 +1,6 @@
 package com.thirdparty.xhs
 
+import com.thirdparty.xhs.download.DownloadService
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -49,6 +50,9 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
      * text, so nothing has to resolve it as a URI.
      */
     private val pendingNote = androidx.compose.runtime.mutableStateOf<Long?>(null)
+
+    /** 下载/完成通知带过来的标记：为真时进入应用后直接打开下载管理页（消费一次）。 */
+    private val pendingOpenDownloads = androidx.compose.runtime.mutableStateOf(false)
 
     /**
      * Note id found in the clipboard when the app came back to the foreground,
@@ -134,6 +138,10 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
      * funnel into [pendingNote], which the nav host consumes once.
      */
     private fun consumeDeepLink(intent: android.content.Intent?) {
+        // 下载通知（进度/完成）点击：带 EXTRA_OPEN_DOWNLOADS，直接落到下载管理页
+        if (intent?.getBooleanExtra(DownloadService.EXTRA_OPEN_DOWNLOADS, false) == true) {
+            pendingOpenDownloads.value = true
+        }
         val data = intent?.data ?: return
         if (data.scheme == DeepLink.SCHEME && data.host == DeepLink.HOST) {
             data.lastPathSegment?.toLongOrNull()?.let { pendingNote.value = it }
@@ -532,9 +540,13 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
                     // 结论：宁可丢滚动位置，也不能丢画面 —— 摘掉整棵树还能让详情页重新 compose，
                     // 从而走"新建播放器 + 应用 `PlaybackHandoff` 的续播进度"那条已验证过的路。
                     if (!pipActive) {
-                        AppNavHost(navController, deepLinkNoteId = pendingNote.value) {
-                            pendingNote.value = null
-                        }
+                        AppNavHost(
+                            navController,
+                            deepLinkNoteId = pendingNote.value,
+                            onDeepLinkConsumed = { pendingNote.value = null },
+                            openDownloads = pendingOpenDownloads.value,
+                            onOpenDownloadsConsumed = { pendingOpenDownloads.value = false }
+                        )
                     }
                     // 记住当前路由：展开小窗时要判断"是不是已经在这个作品的详情页"，
                     // 是就不导航（导航会新建记录 → 整页重新加载）。

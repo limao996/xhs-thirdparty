@@ -33,6 +33,19 @@ data class DownloadGroup(
     /** 整组结束**且有失败**：这些要单独放「失败」组（可重试），不能混进「已完成」。 */
     val failed: Boolean get() = settled && failedCount > 0
 
+    /**
+     * 组内暂停的原因（取暂停条目上非空的那个），例如仅 Wi-Fi 时的「等待 Wi-Fi（已开启仅 Wi-Fi 下载）」。
+     *
+     * 为什么要显示：库里一直记着原因，但界面只显示「已暂停」，用户不知道是被设置挡住了还是自己按的
+     * （2026-10-17 审查发现）。
+     */
+    val pauseReason: String?
+        get() = items.firstOrNull { it.status == DownloadStatus.PAUSED && !it.error.isNullOrBlank() }?.error
+
+    /** 暂停原因的简称（取括号前那截）：组级汇总里再套一层括号会变成双括号，很难看。 */
+    val pauseReasonShort: String?
+        get() = pauseReason?.substringBefore('（')?.trim()?.takeIf { it.isNotEmpty() }
+
     /** 组内是否正在做"没有可数进度"的处理（合并 / 转封装 / 保存）。 */
     val processing: Boolean get() = items.any {
         it.status == DownloadStatus.RUNNING && DownloadStage.isProcessing(it.stage)
@@ -85,7 +98,8 @@ data class DownloadGroup(
             return "$failedCount 项失败 · ${itemPart()}"
         }
         if (pausedCount > 0 && queuedOrRunning == 0) {
-            return "已暂停 $pausedCount 项 · $doneCount/$total 已完成"
+            val why = pauseReasonShort?.let { "（$it）" }.orEmpty()
+            return "已暂停 $pausedCount 项$why · $doneCount/$total 已完成"
         }
         val parts = mutableListOf<String>()
         video?.let { v ->

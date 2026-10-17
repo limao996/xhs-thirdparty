@@ -216,6 +216,14 @@ Room（任务表）、Android `MediaStore`（公共目录）。
 
 ## 7. 已知缺口（如实记录）
 
+- **暂停要说明原因（2026-10-17 审查新增）**：「仅 Wi-Fi 下载」挡下的任务会显示
+  `已暂停 · 等待 Wi-Fi（仅 Wi-Fi 下载已开启）`，组级汇总显示简称 `已暂停 1 项（等待 Wi-Fi） · 0/1 已完成`。
+  原因本来就存在 `download_task.error` 里，只是以前没显示出来。
+- **通知点开直达下载管理（2026-10-17 审查新增）**：进度 / 完成通知的 `PendingIntent` 带
+  `DownloadService.EXTRA_OPEN_DOWNLOADS`，`MainActivity` 交给 `AppNavHost` 消费一次后 `navigate(Routes.DOWNLOADS)`。
+- **取消不能被当成失败（2026-10-17 审查修复）**：写公共目录时若协程被取消，`MediaStoreWriter`
+  先删掉刚插入的行、再把 `CancellationException` 重抛；否则任务会被判 `FAILED` 并可能留下
+  `IS_PENDING=1` 的隐形行（见 `docs/ai/GOTCHAS.md` H34）。
 - **实时速度（2026-10-17 新增）**：下载过程中组行显示 ` · 1.3 MB/s`。速度在**内存**里按字节差采样
   （≥400ms 一次 + 指数滑动平均），不落库（硬约束 30：状态真相只有 `download_task`）；格式化在
   `download/DownloadSpeed.kt`（纯函数 + 单测）。处理阶段仍然只显示已用秒数（那时没有可数进度）。

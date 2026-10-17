@@ -128,7 +128,7 @@ fun DownloadPickerDialog(
                         Column(Modifier.weight(1f)) {
                             Text("视频", style = MaterialTheme.typography.bodyLarge)
                             Text(
-                                "保存为 mp4，放到 Movies/小黄书/",
+                                "保存为 mp4，保存到 Movies/小黄书/",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -217,7 +217,7 @@ fun DownloadPickerDialog(
 
                 Spacer(Modifier.height(Spacing.s))
                 Text(
-                    "保存位置：视频进 Movies/小黄书/，图片进 Pictures/小黄书/。",
+                    "保存位置：视频保存到 Movies/小黄书/，图片保存到 Pictures/小黄书/。",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

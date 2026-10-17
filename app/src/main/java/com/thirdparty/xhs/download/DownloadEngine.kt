@@ -124,7 +124,7 @@ object DownloadEngine {
     }
 
     /** 「仅 Wi-Fi 下载」把任务挡下来时写的暂停原因（也是自动恢复的判据）。 */
-    const val WAITING_WIFI_REASON = "等待 Wi-Fi（已开启仅 Wi-Fi 下载）"
+    const val WAITING_WIFI_REASON = "等待 Wi-Fi（仅 Wi-Fi 下载已开启）"
 
     /**
      * 网络恢复后，把**因网络门禁而暂停**的任务重新排上（不碰用户手动暂停的）。
