@@ -56,7 +56,7 @@ object DuplicateCleaner {
     }
 
     /**
-     * 从 [files] 里挑出该删的重复文件。
+     * 从 [files] 里挑出该删的重复文件（同组多份里保留一份）。
      *
      * @param referenced 仍被下载记录引用的文件完整路径（`savedPath`）
      */
@@ -72,6 +72,29 @@ object DuplicateCleaner {
                     ?: group.minByOrNull { dupIndex(it.displayName) }!!
                 group.filter { it.uri != keep.uri }
             }
+    }
+
+    /**
+     * 孤儿文件：**没有任何下载记录引用的文件**（记录被删了、文件还留在相册 / 视频库里）。
+     *
+     * 图片用**目录级**判据（`Pictures/小黄书/<作品>/` 整目录都没被引用才算）：老版本落盘时
+     * MediaStore 会给文件名补一次扩展名（`01.png.jpg`），而记录里存的是 `01.jpg` —— 逐文件比对会把这些
+     * **仍在使用**的文件误判成孤儿，删掉之后记录里的 uri 就悬空了。目录级判断只在"这个作品的记录
+     * 全被删了"时才命中，安全得多。
+     *
+     * 视频用**文件级**判据（记录里的 `savedPath` 与文件名一致，可以精确比对）。
+     */
+    fun orphans(files: List<MediaFile>, referenced: Set<String>): List<MediaFile> {
+        val referencedDirs = referenced
+            .mapNotNull { ref -> ref.substringBeforeLast('/', "").takeIf { it.isNotEmpty() }?.plus("/") }
+            .toSet()
+        return files.filter { file ->
+            if (file.relativePath.startsWith("Pictures/")) {
+                file.relativePath !in referencedDirs
+            } else {
+                file.fullPath !in referenced
+            }
+        }
     }
 
     /** 扫描 `Movies/小黄书` 与 `Pictures/小黄书` 下的文件。 */

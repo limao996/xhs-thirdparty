@@ -82,16 +82,44 @@ class DuplicateCleanerTest {
     }
 
     @Test
-    fun mixed_suffixed_and_unsuffixed_keeps_only_one_winner() {
+    fun orphan_images_are_flagged_only_when_the_whole_work_dir_is_unreferenced() {
         val files = listOf(
-            f("03.png (2).jpg"),
-            f("03.png.jpg"),
-            f("03.png (1).jpg"),
-            f("04.jpg")
+            f("01.jpg", dir = "Pictures/小黄书/孤儿作品_9/"),
+            f("02.jpg", dir = "Pictures/小黄书/孤儿作品_9/"),
+            f("01.png.jpg", dir = "Pictures/小黄书/在记录里的作品_8/")
         )
-        val dup = DuplicateCleaner.duplicates(files, emptySet())
-        assertEquals(listOf("03.png (1).jpg", "03.png (2).jpg"), dup.map { it.displayName }.sorted())
-        // 04.jpg 是独一份，不能出现在删除清单里
-        assertTrue(dup.none { it.displayName == "04.jpg" })
+        // 记录里只有"在记录里的作品_8"，且它的记录路径是 01.jpg（老版本被 MediaStore 改名成了 01.png.jpg）
+        val referenced = setOf("Pictures/小黄书/在记录里的作品_8/01.jpg")
+
+        val orphans = DuplicateCleaner.orphans(files, referenced)
+
+        // 整目录没记录的 → 孤儿；名字被系统改过的 → 不能被误判（否则记录里的 uri 就悬空了）
+        assertEquals(
+            listOf("01.jpg", "02.jpg"),
+            orphans.map { it.displayName }.sorted()
+        )
+    }
+
+    @Test
+    fun orphan_videos_are_flagged_by_exact_path() {
+        val files = listOf(
+            f("有记录的_1.mp4", dir = "Movies/小黄书/"),
+            f("记录已删的_2.mp4", dir = "Movies/小黄书/")
+        )
+        val referenced = setOf("Movies/小黄书/有记录的_1.mp4")
+
+        val orphans = DuplicateCleaner.orphans(files, referenced)
+
+        assertEquals(listOf("记录已删的_2.mp4"), orphans.map { it.displayName })
+    }
+
+    @Test
+    fun nothing_is_an_orphan_when_everything_is_referenced() {
+        val files = listOf(
+            f("01.jpg", dir = "Pictures/小黄书/A_1/"),
+            f("v_1.mp4", dir = "Movies/小黄书/")
+        )
+        val referenced = setOf("Pictures/小黄书/A_1/01.jpg", "Movies/小黄书/v_1.mp4")
+        assertTrue(DuplicateCleaner.orphans(files, referenced).isEmpty())
     }
 }

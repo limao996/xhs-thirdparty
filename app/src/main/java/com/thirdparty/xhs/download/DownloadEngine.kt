@@ -49,6 +49,42 @@ object DownloadEngine {
     /** `schedule()` 的串行锁（见该函数注释：并发排期会突破并发上限）。 */
     private val scheduleMutex = Mutex()
 
+    /**
+     * 每个在跑任务的实时速度（字节/秒），**只在内存里**。
+     *
+     * 速度是瞬时观测量，不是任务状态 —— 状态真相仍然只有 `download_task`（硬约束 30），
+     * 所以不落库、进程重启后重新采样。界面与通知把它显示成 `1.2 MB/s`。
+     */
+    private val speeds = kotlinx.coroutines.flow.MutableStateFlow<Map<Long, Long>>(emptyMap())
+    val currentSpeeds: kotlinx.coroutines.flow.StateFlow<Map<Long, Long>> = speeds
+
+    /** 速度采样点（上一次的字节数与时间戳）。 */
+    private data class Sample(val bytes: Long, val at: Long, val rate: Long)
+
+    private val samples = java.util.concurrent.ConcurrentHashMap<Long, Sample>()
+
+    /** 记录一次进度采样，算出瞬时速度并用指数滑动平均压抖动。 */
+    private fun sampleSpeed(taskId: Long, bytes: Long) {
+        val now = System.currentTimeMillis()
+        val last = samples[taskId]
+        if (last == null) {
+            samples[taskId] = Sample(bytes, now, 0)
+            return
+        }
+        val dt = now - last.at
+        if (dt < 400) return
+        val instant = ((bytes - last.bytes) * 1000L / dt).coerceAtLeast(0)
+        val smoothed = if (last.rate <= 0) instant else (last.rate * 2 + instant) / 3
+        samples[taskId] = Sample(bytes, now, smoothed)
+        speeds.value = speeds.value + (taskId to smoothed)
+    }
+
+    /** 任务结束 / 暂停 / 失败时清掉速度。 */
+    private fun forgetSpeed(taskId: Long) {
+        samples.remove(taskId)
+        if (speeds.value.containsKey(taskId)) speeds.value = speeds.value - taskId
+    }
+
     /** 给通知用的一份摘要。 */
     data class Snapshot(
         val running: Int = 0,
@@ -186,6 +222,7 @@ object DownloadEngine {
         jobs[id]?.cancel()
         jobs.remove(id)
         dao.setStatus(id, DownloadStatus.PAUSED, null, System.currentTimeMillis())
+        forgetSpeed(id)
         refreshState()
     }
 
@@ -356,6 +393,8 @@ object DownloadEngine {
             workDir = work,
             limit = null,
             onProgress = { progress ->
+                // 速度是内存观测值：这里采样，界面/通知据此显示 "1.2 MB/s"
+                sampleSpeed(task.id, progress.bytes)
                 scope.launch {
                     dao.setProgress(
                         task.id, progress.done, progress.total, progress.bytes,
@@ -377,6 +416,7 @@ object DownloadEngine {
             is HlsDownloader.Outcome.Failed -> {
                 dao.setStatus(task.id, DownloadStatus.FAILED, outcome.reason, System.currentTimeMillis())
                 runFailed.incrementAndGet()
+                forgetSpeed(task.id)
             }
 
             is HlsDownloader.Outcome.Ok -> {
@@ -389,10 +429,12 @@ object DownloadEngine {
                     is MediaStoreWriter.Result.Failed -> {
                         dao.setStatus(task.id, DownloadStatus.FAILED, saved.reason, System.currentTimeMillis())
                         runFailed.incrementAndGet()
+                        forgetSpeed(task.id)
                     }
 
                     is MediaStoreWriter.Result.Ok -> {
                         dao.setDone(task.id, saved.displayPath, saved.uri.toString(), saved.bytes, System.currentTimeMillis())
+                        forgetSpeed(task.id)
                         runOk.incrementAndGet()
                         Log.i(TAG, "视频完成：${saved.displayPath}（${saved.bytes} 字节，${outcome.durationMs}ms）")
                     }
@@ -418,6 +460,7 @@ object DownloadEngine {
             is ImageDownloader.Outcome.Failed -> {
                 dao.setStatus(task.id, DownloadStatus.FAILED, outcome.reason, System.currentTimeMillis())
                 runFailed.incrementAndGet()
+                forgetSpeed(task.id)
             }
 
             is ImageDownloader.Outcome.Ok -> {
@@ -427,6 +470,7 @@ object DownloadEngine {
                 dao.setDone(
                     task.id, outcome.displayPath, outcome.uri, outcome.bytes, System.currentTimeMillis()
                 )
+                forgetSpeed(task.id)
                 runOk.incrementAndGet()
             }
         }

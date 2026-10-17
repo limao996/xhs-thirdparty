@@ -110,38 +110,80 @@ class DownloadViewModel(private val repo: XhsRepository) : ViewModel() {
         viewModelScope.launch { onResult(DownloadEngine.clearFinished(alsoDeleteFiles)) }
     }
 
-    // ---- 重复文件检查 --------------------------------------------------------
+    // ---- 重复 / 孤儿文件检查 ------------------------------------------------
 
-    /** 检查结果：待删清单与总大小（null 表示还没查过）。 */
-    data class DupReport(val files: List<DuplicateCleaner.MediaFile>, val bytes: Long)
+    /**
+     * 检查结果：待删的重复文件与孤儿文件。
+     *
+     * @param duplicates 同一内容存了多份时多出来的那些
+     * @param orphans 记录已被删、文件还留在相册 / 视频库里的那些
+     */
+    data class DupReport(
+        val duplicates: List<DuplicateCleaner.MediaFile>,
+        val orphans: List<DuplicateCleaner.MediaFile>
+    ) {
+        val all: List<DuplicateCleaner.MediaFile> get() = duplicates + orphans
+        val bytes: Long get() = all.sumOf { it.sizeBytes }
+        val isEmpty: Boolean get() = all.isEmpty()
+    }
 
-    private val _duplicates = MutableStateFlow<DupReport?>(null)
-    val duplicates: StateFlow<DupReport?> = _duplicates.asStateFlow()
+    /** 最近一次扫描结果（入口角标用；null = 还没扫过）。 */
+    private val _report = MutableStateFlow<DupReport?>(null)
+    val report: StateFlow<DupReport?> = _report.asStateFlow()
+
+    /** 是否把清单对话框摆出来。 */
+    private val _showDuplicates = MutableStateFlow(false)
+    val showDuplicates: StateFlow<Boolean> = _showDuplicates.asStateFlow()
 
     private val _scanning = MutableStateFlow(false)
     val scanning: StateFlow<Boolean> = _scanning.asStateFlow()
 
-    /** 扫公共目录，列出「重复下载留下来的多余文件」（先给用户看，确认后才删）。 */
-    fun scanDuplicates(context: android.content.Context) {
-        if (_scanning.value) return
+    /** 防重入用**独立字段**，不能拿 [scanning] 当锁（硬约束 29：显示态只用于渲染）。 */
+    private var scanInFlight = false
+
+    /**
+     * 扫公共目录，算出重复与孤儿文件。
+     *
+     * @param silent 真 = 只更新入口上的角标（进页面时自动跑一次）；假 = 同时把清单对话框摆出来
+     */
+    fun scanDuplicates(context: android.content.Context, silent: Boolean) {
+        if (scanInFlight) return
+        scanInFlight = true
         _scanning.value = true
         viewModelScope.launch {
             val files = DuplicateCleaner.scan(context)
             val referenced = runCatching { repo.downloadSavedPaths() }.getOrDefault(emptySet())
             val dups = DuplicateCleaner.duplicates(files, referenced)
-            _duplicates.value = DupReport(dups, dups.sumOf { it.sizeBytes })
+            val orphans = DuplicateCleaner.orphans(files, referenced)
+                .filter { o -> dups.none { it.uri == o.uri } }
+            _report.value = DupReport(dups, orphans)
             _scanning.value = false
+            scanInFlight = false
+            if (!silent) _showDuplicates.value = true
         }
     }
 
-    /** 删除清单里的文件（不动数据库记录）。 */
+    /** 点「检查重复文件 / 孤儿文件」：已经有结果就直接摆清单，否则先扫一遍。 */
+    fun openDuplicates(context: android.content.Context) {
+        if (_report.value != null) {
+            _showDuplicates.value = true
+        } else {
+            scanDuplicates(context, silent = false)
+        }
+    }
+
+    /** 删除清单里的文件（不动数据库记录），删完重新扫一次更新角标。 */
     fun deleteDuplicates(context: android.content.Context, onResult: (Int) -> Unit = {}) {
-        val files = _duplicates.value?.files.orEmpty()
-        _duplicates.value = null
-        viewModelScope.launch { onResult(DuplicateCleaner.delete(context, files)) }
+        val files = _report.value?.all.orEmpty()
+        _showDuplicates.value = false
+        viewModelScope.launch {
+            onResult(DuplicateCleaner.delete(context, files))
+            scanInFlight = false
+            scanDuplicates(context, silent = true)
+        }
     }
 
     fun dismissDuplicates() {
-        _duplicates.value = null
+        _showDuplicates.value = false
     }
 }

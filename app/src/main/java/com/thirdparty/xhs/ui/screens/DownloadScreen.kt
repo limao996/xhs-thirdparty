@@ -91,7 +91,11 @@ fun DownloadScreen(
 ) {
     val state by viewModel.ui.collectAsStateWithLifecycle()
     val scanning by viewModel.scanning.collectAsStateWithLifecycle()
-    val duplicates by viewModel.duplicates.collectAsStateWithLifecycle()
+    val dupReport by viewModel.report.collectAsStateWithLifecycle()
+    val showDuplicates by viewModel.showDuplicates.collectAsStateWithLifecycle()
+    // 速度是引擎内存里的观测值（不落库）：只在"正在拉切片"时显示
+    val speeds by com.thirdparty.xhs.download.DownloadEngine.currentSpeeds
+        .collectAsStateWithLifecycle()
     val haptics = rememberHaptics()
     val context = LocalContext.current
     // 删除确认：null = 没弹；"clear" = 清空已完成；否则是要删的那条记录
@@ -99,6 +103,9 @@ fun DownloadScreen(
     var pendingClear by remember { mutableStateOf(false) }
     // 展开的作品（默认折叠：列表要一眼看清有哪些作品）
     var expanded by remember { mutableStateOf(setOf<Long>()) }
+
+    // 进页面静默扫一次重复/孤儿文件，只在入口上更新数字（不打扰）
+    LaunchedEffect(Unit) { viewModel.scanDuplicates(context, silent = true) }
 
     /** 打开一个条目（视频或图片）：用 MediaStore 的 uri 交给系统相册/播放器。 */
     fun open(item: DownloadTaskEntity) {
@@ -203,6 +210,7 @@ fun DownloadScreen(
                         }
                     },
                     onRetryItem = { viewModel.retry(it) },
+                    videoSpeed = group.video?.id?.let { speeds[it] },
                     onOpenGroup = {
                         group.firstOpenable()?.let(::open)
                             ?: Toast.makeText(context, "还没有可打开的文件", Toast.LENGTH_SHORT).show()
@@ -230,7 +238,7 @@ fun DownloadScreen(
                         .clip(Corners.small)
                         .clickable {
                             haptics.tick()
-                            viewModel.scanDuplicates(context)
+                            viewModel.openDuplicates(context)
                         }
                         .padding(vertical = Spacing.m, horizontal = Spacing.xs),
                     verticalAlignment = Alignment.CenterVertically
@@ -242,12 +250,17 @@ fun DownloadScreen(
                     )
                     Spacer(Modifier.width(Spacing.s))
                     Column {
+                        val count = dupReport?.all?.size ?: 0
                         Text(
-                            if (scanning) "正在检查重复文件…" else "检查重复文件",
+                            when {
+                                scanning -> "正在检查重复 / 孤儿文件…"
+                                count > 0 -> "检查重复 / 孤儿文件 · 发现 $count 个"
+                                else -> "检查重复 / 孤儿文件"
+                            },
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Text(
-                            "重复下载在加去重之前会留下多份文件，可以在这里清掉",
+                            "重复下载会留下多份文件；记录删掉后文件也会留在相册里，都可以在这里清掉",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -266,41 +279,52 @@ fun DownloadScreen(
             onDeleteRecord = {
                 pendingDelete = null
                 viewModel.delete(target.id, alsoDeleteFile = false)
+                // 记录没了但文件还在 → 立刻重扫一次，入口上的"发现 N 个"要跟上
+                viewModel.scanDuplicates(context, silent = true)
             },
             onDeleteBoth = {
                 pendingDelete = null
                 viewModel.delete(target.id, alsoDeleteFile = true)
+                viewModel.scanDuplicates(context, silent = true)
             },
             onDismiss = { pendingDelete = null }
         )
     }
 
     // 清空已结束（完成 + 失败）：同样让用户选是否连文件一起删
-    // 重复文件清单：先让用户看到"要删哪些、共多大"，确认后才删
-    duplicates?.let { report ->
+    // 重复 / 孤儿文件清单：先让用户看到"要删哪些、共多大"，确认后才删
+    if (showDuplicates) {
+        val report = dupReport
         AlertDialog(
             onDismissRequest = { viewModel.dismissDuplicates() },
             title = {
                 Text(
-                    if (report.files.isEmpty()) "没有重复文件" else "发现 ${report.files.size} 个重复文件"
+                    when {
+                        report == null -> "正在检查…"
+                        report.isEmpty -> "没有多余文件"
+                        else -> "发现 ${report.all.size} 个多余文件"
+                    }
                 )
             },
             text = {
                 Column {
+                    val text = when {
+                        report == null -> "正在扫描公共目录里的下载文件…"
+                        report.isEmpty -> "公共目录里的下载文件都是干净的：没有重复，也没有无记录的文件。"
+                        else -> buildString {
+                            append("共 ${formatBytes(report.bytes)}。删除只影响这些多余文件，")
+                            append("下载记录与保留的那一份不受影响。此操作不可撤销。")
+                        }
+                    }
                     Text(
-                        if (report.files.isEmpty()) {
-                            "公共目录里的下载文件都只有一份，无需清理。"
-                        } else {
-                            "这些文件是重复下载留下的（同一张图/同一个视频存了多份），" +
-                                "共 ${formatBytes(report.bytes)}。删除只影响这些多余文件，" +
-                                "下载记录与保留的那一份不受影响。此操作不可撤销。"
-                        },
+                        text,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    if (report.files.isNotEmpty()) {
+                    if (report != null && !report.isEmpty) {
                         Spacer(Modifier.height(Spacing.s))
-                        report.files.take(8).forEach { file ->
+                        val shown = report.all.take(8)
+                        shown.forEach { file ->
                             Text(
                                 file.displayName,
                                 style = MaterialTheme.typography.labelSmall,
@@ -308,31 +332,37 @@ fun DownloadScreen(
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
-                        if (report.files.size > 8) {
+                        if (report.all.size > shown.size) {
                             Text(
-                                "…以及另外 ${report.files.size - 8} 个",
+                                "…以及另外 ${report.all.size - shown.size} 个",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                        Spacer(Modifier.height(Spacing.xs))
+                        Text(
+                            "其中重复 ${report.duplicates.size} 个、无记录 ${report.orphans.size} 个",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             },
             confirmButton = {
-                if (report.files.isEmpty()) {
+                if (report == null || report.isEmpty) {
                     TextButton(onClick = { viewModel.dismissDuplicates() }) { Text("知道了") }
                 } else {
                     TextButton(onClick = {
                         haptics.reject()
                         viewModel.deleteDuplicates(context) { deleted ->
-                            Toast.makeText(context, "已删除 $deleted 个重复文件", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "已删除 $deleted 个多余文件", Toast.LENGTH_SHORT).show()
                         }
                     }) {
                         Text("删除这些文件", color = MaterialTheme.colorScheme.error)
                     }
                 }
             },
-            dismissButton = if (report.files.isEmpty()) null else {
+            dismissButton = if (report == null || report.isEmpty) null else {
                 { TextButton(onClick = { viewModel.dismissDuplicates() }) { Text("取消") } }
             }
         )
@@ -346,12 +376,14 @@ fun DownloadScreen(
             onDeleteRecord = {
                 pendingClear = false
                 viewModel.clearFinished(alsoDeleteFiles = false)
+                viewModel.scanDuplicates(context, silent = true)
             },
             onDeleteBoth = {
                 pendingClear = false
                 viewModel.clearFinished(alsoDeleteFiles = true) { deleted ->
                     Toast.makeText(context, "已删除 $deleted 个文件", Toast.LENGTH_SHORT).show()
                 }
+                viewModel.scanDuplicates(context, silent = true)
             },
             onDismiss = { pendingClear = false }
         )
@@ -458,6 +490,8 @@ private fun GroupLabel(text: String) {
 private fun GroupCard(
     group: DownloadGroup,
     expanded: Boolean,
+    /** 这件作品的视频实时速度（字节/秒）；null = 没有在跑或还没采样到 */
+    videoSpeed: Long? = null,
     onToggleExpand: () -> Unit,
     onPauseGroup: () -> Unit,
     onResumeGroup: () -> Unit,
@@ -479,8 +513,12 @@ private fun GroupCard(
         }
     }
     val fraction = group.progressFraction()
+    // 拉切片时显示实时速度（处理阶段没有可数进度，就只显示秒数）
+    val speedText = videoSpeed
+        ?.takeIf { !group.processing && group.video?.status == DownloadStatus.RUNNING }
+        ?.let { com.thirdparty.xhs.download.DownloadSpeed.format(it) }
     val summary = group.statusSummary() +
-        if (group.processing) " · 已用 $ticker 秒" else ""
+        if (group.processing) " · 已用 $ticker 秒" else (speedText?.let { " · $it" } ?: "")
 
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerLowest,
