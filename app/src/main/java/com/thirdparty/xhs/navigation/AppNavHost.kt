@@ -345,7 +345,9 @@ fun AppNavHost(
             DetailScreen(
                 noteId = noteId,
                 onBack = { nav.popBackStack() },
-                onOpenAuthor = { uid -> nav.navigate(Routes.author(uid)) }
+                onOpenAuthor = { uid -> nav.navigate(Routes.author(uid)) },
+                // 下载确认后跳到下载管理页看进度
+                onOpenDownloads = { nav.navigate(Routes.DOWNLOADS) }
             )
         }
 

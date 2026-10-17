@@ -161,8 +161,24 @@ Room（任务表）、Android `MediaStore`（公共目录）。
   `savedPath` 少了 `Pictures/` 前缀，与视频行格式不一致 → 改为用 `MediaStoreWriter` 返回的完整路径。
   缺口：`cover` 缩略图这一轮没截到（探针取图地址偶发取不到，退回了类型图标），缩略图渲染走的是
   页面既有的 `XhsAsyncImage`，待 T7 的对话框带上真实封面后再看图。
-- [ ] **T7 详情页菜单化 + 下载对话框**：`ui/screens/DetailScreen.kt`、`ui/components/DownloadPickerDialog.kt`；
-  验收：标题栏只剩 收藏 + ⋮；菜单三项可用；图片多选（默认全选）→ 确认后建任务并跳转（dump + 截图）。
+- [x] **T7 详情页菜单化 + 下载对话框 —— 2026-10-17 通过**
+  文件：`ui/screens/DetailScreen.kt`（标题栏改为 收藏 + 「⋮」，新增 `DetailMenuDialog`、
+  下载对话框接线、确认后建任务并 `onOpenDownloads()` 跳转、API 33+ 通知权限按需申请一次）、
+  `ui/components/DownloadPickerDialog.kt`（视频行 + 图片网格多选，默认全选 / 全不选 / 全选，
+  确认按钮显示「下载 N 项」）、`navigation/AppNavHost.kt`（详情页传 `onOpenDownloads`）。
+  **实机证据（模拟器 API 34，走真实图文作品深链 `xhstp://note/34913`）**：
+  标题栏动作只剩 `返回 / 收藏 / 菜单`；点菜单 → `操作 / 分享 / 全屏 / 下载 / 关闭`；
+  点下载 → `图片 · 43/43 张`（默认全选）+ `全不选` + `保存位置：视频进 Movies/小黄书/，图片进 Pictures/小黄书/。`
+  + `下载 43 项`；
+  点「全不选」→ `图片 · 0/43 张` 且按钮变 `请选择内容`（不可确认）；
+  点「全选」后取消两张 → `图片 · 41/43 张` + `下载 41 项`；
+  点确认 → **自动跳到下载管理页**（标题 `下载管理`，`进行中 · 35 项` + 一排 `排队中`）；
+  稍后全部完成：`已完成 · 44 项`，行内路径 `Pictures/小黄书/<标题>_34913/43.jpg` 等
+  `Pictures/` 前缀与「标题_noteId」目录都正确；引擎日志 `图片解密后 811088 字节：40.jpg`；
+  `content query` 的 MediaStore 里能看到这些图片。
+  截图：`tools/out/t7-menu.png`（菜单）、`tools/out/t7-picker.png`（多选对话框）。
+  说明：这条作品是图文（43 张图、无视频），所以「视频」行按设计不显示；视频成品为真 mp4 已由
+  T5/T6 的实机流程证明（走的是同一个引擎）。
 - [ ] **T8 设置「下载」分组**：`ui/screens/SettingsScreen.kt` + prefs（并发任务数 / 并行切片 / 仅 Wi-Fi / 完成通知）；
   验收：改成 1 并发后同时下载数确实为 1；仅 Wi-Fi 打开后在流量下任务自动暂停。
 - [ ] **T9 文档与档案**：本文件定稿、`AGENTS.md`（仓库表 + 新硬约束：下载/公共目录/权限）、

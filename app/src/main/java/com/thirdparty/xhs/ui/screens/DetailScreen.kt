@@ -19,10 +19,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.ModeComment
 import androidx.compose.material.icons.filled.Share
@@ -39,6 +41,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -46,6 +49,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.runtime.remember
@@ -58,17 +62,25 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.ui.graphics.vector.ImageVector
+import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.thirdparty.xhs.App
 import com.thirdparty.xhs.data.CommentItem
 import com.thirdparty.xhs.data.CommentReply
+import com.thirdparty.xhs.data.DownloadKind
+import com.thirdparty.xhs.data.DownloadStatus
+import com.thirdparty.xhs.data.DownloadTaskEntity
 import com.thirdparty.xhs.data.NoteImage
 import com.thirdparty.xhs.data.NoteItem
 import com.thirdparty.xhs.ui.components.ConfirmActionDialog
+import com.thirdparty.xhs.ui.components.DownloadPickerDialog
 import com.thirdparty.xhs.ui.components.FeeBadge
 import com.thirdparty.xhs.ui.components.ImageGallery
 import com.thirdparty.xhs.ui.components.MediaPlayer
+import com.thirdparty.xhs.ui.components.rememberHaptics
 import com.thirdparty.xhs.ui.components.XhsAvatar
 import com.thirdparty.xhs.ui.theme.AvatarSize
 import com.thirdparty.xhs.ui.theme.Corners
@@ -97,6 +109,8 @@ fun DetailScreen(
     noteId: Long,
     onBack: () -> Unit,
     onOpenAuthor: (Int) -> Unit,
+    /** 下载确认后跳到下载管理页（入口在「我的」页，这里只是跳过去看进度） */
+    onOpenDownloads: () -> Unit = {},
     viewModel: DetailViewModel = viewModel(
         key = "detail-$noteId",
         factory = object : androidx.lifecycle.ViewModelProvider.Factory {
@@ -116,6 +130,14 @@ fun DetailScreen(
     // closing the viewer leaves the gallery on the picture the user swiped to.
     var imagePage by rememberSaveable(noteId) { mutableIntStateOf(0) }
     val context = LocalContext.current
+    // 标题栏「⋮」菜单与下载对话框（用户要求：分享 / 全屏 收进菜单，收藏右侧是菜单按钮）
+    var menuOpen by rememberSaveable { mutableStateOf(false) }
+    var downloadPickerOpen by rememberSaveable { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    // API 33+ 的通知权限：只在用户真的确认下载时申请一次（被拒也不影响下载，只是没有进度通知）
+    val notificationPermission = rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { }
 
     // In fullscreen the app bar is hidden, so the system back gesture must leave
     // fullscreen first instead of popping the whole detail screen — and while the
@@ -378,12 +400,6 @@ fun DetailScreen(
                     },
                     actions = {
                         IconButton(onClick = {
-                            haptics.tick()
-                            shareNote(context, state.item)
-                        }) {
-                            Icon(Icons.Filled.Share, contentDescription = "分享")
-                        }
-                        IconButton(onClick = {
                             // only the removal asks first; 收藏 stays one tap
                             if (state.saved) {
                                 haptics.reject()
@@ -400,35 +416,14 @@ fun DetailScreen(
                                 else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        // The 全屏 action means different things per media type.
-                        //
-                        // It used to be unconditional and only ever set the VIDEO
-                        // fullscreen flag, so on an image post it did nothing at all
-                        // (the fullscreen branch also requires isVideo). It now opens
-                        // the image viewer there instead.
-                        //
-                        // For video notes this is byte-for-byte the old behaviour.
-                        // `isVideoNote` rather than `state.item.isVideo`: a handed-over
-                        // player proves this is video even before the note's own request
-                        // answers, and without that the 全屏 button would open the IMAGE
-                        // viewer on a video for those first seconds.
-                        val videoNote = isVideoNote
+                        // 分享 / 全屏 / 下载 都收进菜单（用户 2026-10-17 明确要求：
+                        // 标题栏只留收藏 + 菜单按钮，分享与全屏挪进菜单）。
+                        // 菜单用原生 AlertDialog（硬约束 16）。
                         IconButton(onClick = {
                             haptics.tick()
-                            // `fullscreen` hides the app bar and the system bars; the
-                            // image branch used to set only `openImage`, so the viewer
-                            // came up with 内容详情 still sitting above it — not
-                            // fullscreen at all.
-                            fullscreen = true
-                            // open the viewer on the page the gallery is showing, not on
-                            // the first one (that was the other half of the two
-                            // counters disagreeing)
-                            if (!videoNote) openImage = imagePage
+                            menuOpen = true
                         }) {
-                            Icon(
-                                if (fullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
-                                "全屏"
-                            )
+                            Icon(Icons.Filled.MoreVert, contentDescription = "菜单")
                         }
                         // 「小窗播放」不在这里：它是对当前视频的操作，入口在播放器自己的菜单里
                         // （MediaPlayer 的「更多」→ 对话框，见 onEnterPip）
@@ -523,6 +518,154 @@ fun DetailScreen(
             },
             onDismiss = { confirmUnfollow = false }
         )
+    }
+
+    // 标题栏「⋮」菜单：分享 / 全屏 / 下载（用户要求的收纳方式）
+    if (menuOpen) {
+        DetailMenuDialog(
+            fullscreen = fullscreen,
+            canDownload = state.item != null,
+            onShare = {
+                menuOpen = false
+                shareNote(context, state.item)
+            },
+            onToggleFullscreen = {
+                menuOpen = false
+                // 全屏按钮的含义随媒体类型不同（历史行为，别改）：
+                // 视频笔记 = 沉浸播放；图文 = 打开图片查看器（并按画廊当前页打开）。
+                fullscreen = true
+                if (!isVideoNote) openImage = imagePage
+            },
+            onDownload = {
+                menuOpen = false
+                downloadPickerOpen = true
+            },
+            onDismiss = { menuOpen = false }
+        )
+    }
+
+    // 下载对话框：多选要保存的内容（视频 + 图片），确认后建任务并跳下载管理
+    if (downloadPickerOpen) {
+        val item = state.item
+        DownloadPickerDialog(
+            title = item?.title.orEmpty().ifBlank { "作品" },
+            videoUrl = item?.mediaUrl?.takeIf { it.isNotBlank() },
+            imageUrls = item?.images?.map { it.url }.orEmpty(),
+            onConfirm = { wantVideo, imageIndices ->
+                downloadPickerOpen = false
+                val note = state.item ?: return@DownloadPickerDialog
+                scope.launch {
+                    // API 33+ 的通知权限：这里申请一次；被拒也能下载，只是没有进度通知
+                    if (android.os.Build.VERSION.SDK_INT >= 33) {
+                        notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                    val now = System.currentTimeMillis()
+                    val tasks = buildList {
+                        if (wantVideo && note.mediaUrl.isNotBlank()) {
+                            add(
+                                DownloadTaskEntity(
+                                    noteId = note.noteId,
+                                    title = note.title,
+                                    cover = note.cover.ifEmpty { note.thumbnail },
+                                    kind = DownloadKind.VIDEO,
+                                    sourceUrl = note.mediaUrl,
+                                    status = DownloadStatus.QUEUED,
+                                    createdAt = now,
+                                    updatedAt = now
+                                )
+                            )
+                        }
+                        imageIndices.forEach { index ->
+                            add(
+                                DownloadTaskEntity(
+                                    noteId = note.noteId,
+                                    title = note.title,
+                                    cover = note.cover.ifEmpty { note.thumbnail },
+                                    kind = DownloadKind.IMAGE,
+                                    sourceUrl = note.images[index].url,
+                                    imageIndex = index,
+                                    status = DownloadStatus.QUEUED,
+                                    totalSegments = 1,
+                                    createdAt = now + index + 1,
+                                    updatedAt = now + index + 1
+                                )
+                            )
+                        }
+                    }
+                    if (tasks.isNotEmpty()) {
+                        com.thirdparty.xhs.download.DownloadEngine.init(context)
+                        com.thirdparty.xhs.download.DownloadEngine.enqueue(tasks)
+                        onOpenDownloads()
+                    }
+                }
+            },
+            onDismiss = { downloadPickerOpen = false }
+        )
+    }
+}
+
+/**
+ * 详情页标题栏的「⋮」菜单：分享 / 全屏 / 下载。
+ *
+ * 用 `material3.AlertDialog` 而不是 `DropdownMenu`（硬约束 16：下拉面板没有遮罩与入场动画，
+ * 铺在视频上还容易被裁掉）。
+ */
+@Composable
+private fun DetailMenuDialog(
+    fullscreen: Boolean,
+    canDownload: Boolean,
+    onShare: () -> Unit,
+    onToggleFullscreen: () -> Unit,
+    onDownload: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val haptics = rememberHaptics()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("操作") },
+        text = {
+            Column {
+                MenuRow(Icons.Filled.Share, "分享") {
+                    haptics.tick()
+                    onShare()
+                }
+                MenuRow(
+                    if (fullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
+                    if (fullscreen) "退出全屏" else "全屏"
+                ) {
+                    haptics.tick()
+                    onToggleFullscreen()
+                }
+                if (canDownload) {
+                    MenuRow(Icons.Filled.Download, "下载") {
+                        haptics.tick()
+                        onDownload()
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { haptics.click(onDismiss); onDismiss() }) { Text("关闭") }
+        }
+    )
+}
+
+@Composable
+private fun MenuRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(vertical = Spacing.m),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(Spacing.l))
+        Text(label, style = MaterialTheme.typography.bodyLarge)
     }
 }
 
