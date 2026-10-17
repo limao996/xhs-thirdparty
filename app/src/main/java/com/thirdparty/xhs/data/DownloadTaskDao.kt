@@ -57,9 +57,18 @@ interface DownloadTaskDao {
 
     @Query(
         "UPDATE download_task SET status = 'DONE', savedPath = :path, savedUri = :uri, " +
-            "bytes = :bytes, error = NULL, updatedAt = :now WHERE id = :id"
+            "bytes = :bytes, error = NULL, stage = '', updatedAt = :now WHERE id = :id"
     )
     suspend fun setDone(id: Long, path: String, uri: String?, bytes: Long, now: Long)
+
+    /**
+     * 只更新"进行中的阶段"（见 `DownloadStage`），不改状态。
+     *
+     * 用途：切片下完之后的 合并 / 转封装 / 保存 三段没有可数进度，
+     * 界面与通知靠这个字段告诉用户"现在在干什么"，避免看起来像卡住。
+     */
+    @Query("UPDATE download_task SET stage = :stage, updatedAt = :now WHERE id = :id")
+    suspend fun setStage(id: Long, stage: String, now: Long)
 
     /**
      * 把"进程被杀时卡在 RUNNING"的任务重新排队。

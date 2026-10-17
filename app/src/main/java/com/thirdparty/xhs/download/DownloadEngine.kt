@@ -3,6 +3,7 @@ package com.thirdparty.xhs.download
 import android.content.Context
 import android.util.Log
 import com.thirdparty.xhs.data.DownloadKind
+import com.thirdparty.xhs.data.DownloadStage
 import com.thirdparty.xhs.data.DownloadStatus
 import com.thirdparty.xhs.data.DownloadTaskDao
 import com.thirdparty.xhs.data.DownloadTaskEntity
@@ -52,7 +53,9 @@ object DownloadEngine {
         val queued: Int = 0,
         val totalBytes: Long = 0,
         val doneBytes: Long = 0,
-        val currentTitles: List<String> = emptyList()
+        val currentTitles: List<String> = emptyList(),
+        /** 正在跑的任务所处阶段（`DownloadStage`），供通知显示"合并中 / 转换为 mp4 / 保存中"。 */
+        val currentStage: String = ""
     )
 
     private val _state = MutableStateFlow(Snapshot())
@@ -285,22 +288,34 @@ object DownloadEngine {
         val outcome = downloader.remuxToMp4(
             context = appContext,
             playlistUrl = task.sourceUrl,
-            workDir = work
-        ) { progress ->
-            scope.launch {
-                dao.setProgress(
-                    task.id, progress.done, progress.total, progress.bytes,
-                    System.currentTimeMillis()
-                )
-                refreshState()
+            workDir = work,
+            limit = null,
+            onProgress = { progress ->
+                scope.launch {
+                    dao.setProgress(
+                        task.id, progress.done, progress.total, progress.bytes,
+                        System.currentTimeMillis()
+                    )
+                    refreshState()
+                }
+            },
+            // 阶段写库：界面与通知据此显示「合并中 / 转换为 mp4 / 保存中」，
+            // 否则切片下完后（22/22）会有一段时间看起来完全没动静
+            onStage = { stage ->
+                scope.launch {
+                    dao.setStage(task.id, stage, System.currentTimeMillis())
+                    refreshState()
+                }
             }
-        }
+        )
         when (outcome) {
             is HlsDownloader.Outcome.Failed -> {
                 dao.setStatus(task.id, DownloadStatus.FAILED, outcome.reason, System.currentTimeMillis())
             }
 
             is HlsDownloader.Outcome.Ok -> {
+                dao.setStage(task.id, DownloadStage.SAVING, System.currentTimeMillis())
+                refreshState()
                 val name = DownloadNames.uniqueName(
                     DownloadNames.baseName(task.title, task.noteId), "mp4"
                 ) { candidate -> existsInVideoDir(candidate) }
@@ -323,14 +338,19 @@ object DownloadEngine {
         val ext = DownloadNames.imageExtension(task.sourceUrl)
         val name = DownloadNames.imageFileName(task.imageIndex, ext)
         val downloader = ImageDownloader(client)
+        dao.setStage(task.id, DownloadStage.FETCHING, System.currentTimeMillis())
+        refreshState()
         when (val outcome = downloader.saveToGallery(appContext, task.sourceUrl, relativeDir, name)) {
             is ImageDownloader.Outcome.Failed ->
                 dao.setStatus(task.id, DownloadStatus.FAILED, outcome.reason, System.currentTimeMillis())
 
-            is ImageDownloader.Outcome.Ok ->
+            is ImageDownloader.Outcome.Ok -> {
+                // 单张图片的"保存"很短，但解码/解密大图时也会有一小段空窗，一并标出来
+                dao.setStage(task.id, DownloadStage.SAVING, System.currentTimeMillis())
                 dao.setDone(
                     task.id, outcome.displayPath, null, outcome.bytes, System.currentTimeMillis()
                 )
+            }
         }
     }
 
@@ -363,12 +383,17 @@ object DownloadEngine {
     private suspend fun refreshState() {
         val all = dao.all()
         val running = synchronized(lock) { jobs.size }
+        val active = all.filter { it.status == DownloadStatus.RUNNING }
         _state.value = Snapshot(
             running = running,
             queued = all.count { it.status == DownloadStatus.QUEUED },
             totalBytes = all.filter { it.status != DownloadStatus.DONE }.size.toLong(),
             doneBytes = all.count { it.status == DownloadStatus.DONE }.toLong(),
-            currentTitles = all.filter { it.status == DownloadStatus.RUNNING }.map { it.title }
+            currentTitles = active.map { it.title },
+            // 多个任务同时在跑时取"处理阶段"优先的那个：合并/转封装/保存比拉切片更值得说
+            currentStage = active.map { it.stage }
+                .firstOrNull { DownloadStage.isProcessing(it) }
+                ?: active.firstOrNull()?.stage.orEmpty()
         )
     }
 

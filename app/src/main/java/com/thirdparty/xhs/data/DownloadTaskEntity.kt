@@ -29,6 +29,18 @@ data class DownloadTaskEntity(
     val imageIndex: Int = 0,
     /** [DownloadStatus] 之一 */
     val status: String,
+    /**
+     * 进行中的**阶段**（[DownloadStage] 之一），只在 `RUNNING` 时有意义。
+     *
+     * 为什么要有它：切片下完之后还有"合并 TS → 转封装 mp4 → 保存到相册"三段，
+     * 其中转封装**拿不到进度**（media3 Transformer 只在结束时回调），如果界面上仍显示
+     * "下载中 22/22 片"，用户会以为卡住了（2026-10-17 用户反馈）。
+     *
+     * `DEFAULT ''` 是按 Room 的 schema 校验写的：实体这里用了 `defaultValue`，
+     * 迁移里的建列语句必须带同样的默认值，否则打开库时会校验失败。
+     */
+    @ColumnInfo(name = "stage", defaultValue = "")
+    val stage: String = "",
     /** HLS 已完成的切片数 / 总数（图片任务恒为 1/1） */
     val doneSegments: Int = 0,
     val totalSegments: Int = 0,
@@ -59,4 +71,37 @@ object DownloadStatus {
     const val FAILED = "FAILED"
 
     val unfinished = listOf(QUEUED, RUNNING, PAUSED)
+}
+
+/**
+ * 进行中的阶段（配合 [DownloadStatus.RUNNING] 用）。
+ *
+ * 顺序：拉取切片 → 合并 → 转封装 → 保存。后三段都没有"可数的进度"，
+ * 所以界面与通知要显示**阶段名**，并给一个"还在动"的信号（已用秒数 / 不确定进度条）。
+ * 纯常量与映射，可单测。
+ */
+object DownloadStage {
+    /** 拉取（并解密）切片；此时 `doneSegments/totalSegments` 有效。 */
+    const val FETCHING = "FETCHING"
+
+    /** 把解密后的切片按序合并成单个 TS（有字节进度，但用户不需要看那么细）。 */
+    const val MERGING = "MERGING"
+
+    /** TS → MP4 转封装。**没有进度**，只能显示"进行中 + 已用时间"。 */
+    const val REMUXING = "REMUXING"
+
+    /** 写进公共目录（MediaStore）。 */
+    const val SAVING = "SAVING"
+
+    /** 阶段的中文说明；`null` / 未知阶段返回 null（调用方退回默认文案）。 */
+    fun label(stage: String?): String? = when (stage) {
+        FETCHING -> "下载中"
+        MERGING -> "合并中"
+        REMUXING -> "转换为 mp4"
+        SAVING -> "保存中"
+        else -> null
+    }
+
+    /** 这一段是不是"没有可数进度"的处理阶段（界面要换成不确定进度条 + 秒数）。 */
+    fun isProcessing(stage: String?): Boolean = stage == MERGING || stage == REMUXING || stage == SAVING
 }

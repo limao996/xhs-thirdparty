@@ -15,7 +15,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         WatchLaterEntity::class,
         DownloadTaskEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class XhsDatabase : RoomDatabase() {
@@ -136,6 +136,24 @@ abstract class XhsDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v4 → v5：给 `download_task` 加 `stage` 列（进行中的阶段：合并 / 转封装 / 保存）。
+         *
+         * 为什么加：切片下完之后还有三段没有可数进度的处理，界面上原本一直停在"下载中 22/22 片"，
+         * 用户会以为卡住（2026-10-17 反馈）。
+         *
+         * **默认值必须写成 `DEFAULT ''`**：实体的 `stage` 用了
+         * `@ColumnInfo(defaultValue = "")`，Room 打开库时会比对列的默认值，两处不一致会直接报错。
+         * 注意这条迁移是真迁移：库里已有的下载记录会被保留（只是 stage 为空串 = 未知阶段）。
+         */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE `download_task` ADD COLUMN `stage` TEXT NOT NULL DEFAULT ''"
+                )
+            }
+        }
+
         fun get(context: Context): XhsDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -143,7 +161,7 @@ abstract class XhsDatabase : RoomDatabase() {
                     XhsDatabase::class.java,
                     "xhs_local.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     // **故意不挂 `fallbackToDestructiveMigration()`**：那会让"漏写迁移"的版本
                     // 静默清空用户的收藏 / 浏览 / 关注 / 队列。宁可启动就崩，也不能悄悄丢数据
                     // （见 docs/REVIEW.md P1-3 与附录C-P0-2；AGENTS 硬约束与 CONVENTIONS 都要求真迁移）。

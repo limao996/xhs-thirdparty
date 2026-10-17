@@ -2,6 +2,7 @@ package com.thirdparty.xhs.download
 
 import android.content.Context
 import android.util.Log
+import com.thirdparty.xhs.data.DownloadStage
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.atomic.AtomicInteger
@@ -56,18 +57,23 @@ class HlsDownloader(
      *
      * @param workDir 临时目录（调用方给 `cacheDir/download/<taskId>`，结束时应由调用方清掉）
      * @param limit 只下前 N 个切片（**仅供验证/探针使用**；正式路径不传）
+     * @param onStage 阶段变化回调（`DownloadStage.FETCHING` / `MERGING` / `REMUXING`）——
+     *   合并与转封装没有可数进度，界面必须靠它告诉用户"还在干活，不是卡住了"。
      */
     suspend fun remuxToMp4(
         context: Context,
         playlistUrl: String,
         workDir: File,
         limit: Int? = null,
-        onProgress: (Progress) -> Unit = {}
+        onProgress: (Progress) -> Unit = {},
+        onStage: (String) -> Unit = {}
     ): Outcome {
-        val merged = downloadAndMerge(playlistUrl, workDir, limit, onProgress) ?: return Outcome.Failed("下载失败")
+        val merged = downloadAndMerge(playlistUrl, workDir, limit, onProgress, onStage)
+            ?: return Outcome.Failed("下载失败")
         if (merged is Merged.Failed) return Outcome.Failed(merged.reason)
         val ts = (merged as Merged.Ok).file
         val mp4 = File(workDir, "video.mp4")
+        onStage(DownloadStage.REMUXING)
         return when (val out = HlsRemuxer.remux(context, ts, mp4)) {
             is HlsRemuxer.Outcome.Failed -> Outcome.Failed(out.reason)
             is HlsRemuxer.Outcome.Ok -> {
@@ -87,9 +93,11 @@ class HlsDownloader(
         playlistUrl: String,
         workDir: File,
         limit: Int? = null,
-        onProgress: (Progress) -> Unit = {}
+        onProgress: (Progress) -> Unit = {},
+        onStage: (String) -> Unit = {}
     ): Merged = withContext(Dispatchers.IO) {
         workDir.mkdirs()
+        onStage(DownloadStage.FETCHING)
         val playlist = try {
             HlsPlaylist.parse(fetchText(playlistUrl), playlistUrl)
         } catch (e: Exception) {
@@ -144,12 +152,18 @@ class HlsDownloader(
         }
         failure?.let { return@withContext Merged.Failed(it) }
 
+        // 合并阶段：这一步在大文件上要几秒到几十秒（顺序复制 + 删切片），
+        // 期间给界面报阶段与字节进度，别让用户以为卡在 22/22。
+        onStage(DownloadStage.MERGING)
         val out = File(workDir, "merged.ts")
+        val mergedBytes = AtomicLong(0)
         FileOutputStream(out).use { sink ->
             wanted.indices.forEach { index ->
                 val f = File(segFile(workDir, index))
                 if (!f.exists()) return@withContext Merged.Failed("切片 $index 缺失")
                 f.inputStream().use { it.copyTo(sink, 256 * 1024) }
+                mergedBytes.addAndGet(f.length())
+                onProgress(Progress(wanted.size, wanted.size, mergedBytes.get()))
                 f.delete()
             }
         }

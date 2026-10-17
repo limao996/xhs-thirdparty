@@ -38,7 +38,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -53,6 +55,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.thirdparty.xhs.common.RepoViewModelFactory
 import com.thirdparty.xhs.data.DownloadKind
+import com.thirdparty.xhs.data.DownloadStage
 import com.thirdparty.xhs.data.DownloadStatus
 import com.thirdparty.xhs.data.DownloadTaskEntity
 import com.thirdparty.xhs.data.formatBytes
@@ -213,6 +216,21 @@ private fun DownloadRow(
     onOpen: (() -> Unit)? = null
 ) {
     val haptics = rememberHaptics()
+    // 合并 / 转封装 / 保存这几段没有可数进度，用"已用秒数"当"还在动"的信号：
+    // 只在处理阶段心跳（每秒一次），拉切片阶段不必要地重组
+    val isProcessing = task.status == DownloadStatus.RUNNING && DownloadStage.isProcessing(task.stage)
+    var ticker by remember(task.id, isProcessing) {
+        androidx.compose.runtime.mutableIntStateOf(0)
+    }
+    if (isProcessing) {
+        LaunchedEffect(task.id) {
+            while (true) {
+                kotlinx.coroutines.delay(1000)
+                ticker += 1
+            }
+        }
+    }
+
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerLowest,
         modifier = Modifier.fillMaxWidth().clip(Corners.large)
@@ -247,7 +265,7 @@ private fun DownloadRow(
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    statusLine(task),
+                    statusLine(task, elapsedSeconds = if (isProcessing) ticker else null),
                     style = MaterialTheme.typography.labelSmall,
                     color = if (task.status == DownloadStatus.FAILED) {
                         MaterialTheme.colorScheme.error
@@ -257,12 +275,19 @@ private fun DownloadRow(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                if (task.status == DownloadStatus.RUNNING && task.totalSegments > 1) {
-                    Spacer(Modifier.height(Spacing.xs))
-                    LinearProgressIndicator(
-                        progress = { task.doneSegments.toFloat() / task.totalSegments.toFloat() },
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                if (task.status == DownloadStatus.RUNNING) {
+                    if (isProcessing) {
+                        // 合并 / 转封装 / 保存**没有可数进度**：给不确定进度条，
+                        // "动着的条 + 已用秒数"就是"还在干活"的信号
+                        Spacer(Modifier.height(Spacing.xs))
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    } else if (task.totalSegments > 1) {
+                        Spacer(Modifier.height(Spacing.xs))
+                        LinearProgressIndicator(
+                            progress = { task.doneSegments.toFloat() / task.totalSegments.toFloat() },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -299,13 +324,27 @@ private fun DownloadRow(
     }
 }
 
-/** 任务行的状态说明（文案按应用口吻：说明发生了什么 + 进度数字）。 */
-private fun statusLine(task: DownloadTaskEntity): String = when (task.status) {
+/**
+ * 任务行的状态说明（文案按应用口吻：说明发生了什么 + 进度数字）。
+ *
+ * 进行中要区分"拉切片"与"合并 / 转封装 / 保存"：后三段没有可数进度，
+ * 只说"下载中 22/22 片"会让用户以为卡住（2026-10-17 用户反馈）。
+ * [elapsedSeconds] 非空时给出已用秒数，进一步证明"还在动"。
+ */
+private fun statusLine(task: DownloadTaskEntity, elapsedSeconds: Int? = null): String = when (task.status) {
     DownloadStatus.QUEUED -> "排队中"
-    DownloadStatus.RUNNING -> if (task.kind == DownloadKind.VIDEO && task.totalSegments > 0) {
-        "下载中 ${task.doneSegments}/${task.totalSegments} 片 · ${formatBytes(task.bytes)}"
-    } else {
-        "下载中 · ${formatBytes(task.bytes)}"
+    DownloadStatus.RUNNING -> {
+        val stage = DownloadStage.label(task.stage)
+        val suffix = elapsedSeconds?.let { " · 已用 $it 秒" }.orEmpty()
+        when {
+            DownloadStage.isProcessing(task.stage) ->
+                (stage ?: "处理中") + "…" + suffix
+
+            task.kind == DownloadKind.VIDEO && task.totalSegments > 0 ->
+                "下载中 ${task.doneSegments}/${task.totalSegments} 片 · ${formatBytes(task.bytes)}"
+
+            else -> "下载中 · ${formatBytes(task.bytes)}"
+        }
     }
 
     DownloadStatus.PAUSED -> "已暂停 · ${formatBytes(task.bytes)}"

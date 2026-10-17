@@ -16,6 +16,7 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.thirdparty.xhs.MainActivity
 import com.thirdparty.xhs.R
+import com.thirdparty.xhs.data.DownloadStage
 import com.thirdparty.xhs.data.XhsDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -204,19 +205,36 @@ class DownloadService : Service() {
         )
         val done = snapshot.doneBytes.toInt()
         val total = maxOf(snapshot.totalBytes.toInt(), 1)
+        val stageLabel = DownloadStage.label(snapshot.currentStage)
         val title = when {
+            snapshot.currentTitles.isNotEmpty() && stageLabel != null ->
+                // 有阶段时优先说"现在在干什么"：切片下完之后的 合并 / 转封装 / 保存
+                // 都没有可数进度，只显示"22/22 片"会让人以为卡住
+                "$stageLabel · ${snapshot.currentTitles.first()}"
+
             snapshot.currentTitles.isNotEmpty() -> snapshot.currentTitles.joinToString("、")
             snapshot.queued > 0 -> "准备下载 ${snapshot.queued} 项"
             else -> "下载完成"
         }
-        val text = "已完成 $done / $total 项" +
-            if (snapshot.running > 0) "（同时 ${snapshot.running} 个）" else ""
+        val text = buildString {
+            append("已完成 $done / $total 项")
+            if (snapshot.running > 0) append("（同时 ${snapshot.running} 个）")
+            if (DownloadStage.isProcessing(snapshot.currentStage)) {
+                // 处理阶段没有进度，明确说明"完成后会继续"，避免看起来停住
+                append(" · 正在处理，完成后自动保存")
+            }
+        }
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_download)
             .setContentTitle(title)
             .setContentText(text)
-            .setProgress(total, done, snapshot.running == 0)
+            // 处理阶段（没有可数进度）用不确定进度条：动着的条本身就是"还活着"的信号
+            .setProgress(
+                total,
+                done,
+                snapshot.running == 0 || DownloadStage.isProcessing(snapshot.currentStage)
+            )
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setContentIntent(open)
