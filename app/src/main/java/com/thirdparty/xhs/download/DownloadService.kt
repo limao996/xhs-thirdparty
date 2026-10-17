@@ -345,6 +345,11 @@ class DownloadService : Service() {
             } else {
                 workNoticeIds.getOrPut(work.noteId) { nextNoticeId++ }
             }
+            // 作品从第 2 位升到第 1 位时会改用前台那条 id（4801），必须把它原来占的临时 id 收掉 ——
+            // 否则同一件作品会同时存在两条通知（一条 4801、一条 481x），直到服务退出才消失。
+            workNoticeIds[work.noteId]?.takeIf { it != id }?.let { stale ->
+                runCatching { manager.cancel(stale) }
+            }
             workNoticeIds[work.noteId] = id
             runCatching { manager.notify(id, buildWorkNotification(work)) }
         }
