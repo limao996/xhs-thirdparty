@@ -2,7 +2,9 @@ package com.thirdparty.xhs.download
 
 import android.content.Context
 import android.net.Uri
+import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.ExportResult
@@ -26,7 +28,11 @@ import kotlinx.coroutines.withContext
  * 8,358,452 B 的 mp4，时长 60.08 s（与源切片吻合），耗时 3.75 s（体积几乎不变 = 确实只换了容器）。
  *
  * `Transformer` 必须在有 Looper 的线程创建与启动，所以内部切到 Main。
+ *
+ * `Transformer` 属于 media3 的 `@UnstableApi`：按项目既有约定用 **`androidx.annotation.OptIn`**
+ * 标注（Kotlin 的 `@OptIn` 对 Java 注解无效，见 `VideoPlayer` 的同类写法）。
  */
+@OptIn(UnstableApi::class)
 object HlsRemuxer {
 
     private const val TIMEOUT_SECONDS = 10 * 60L
