@@ -118,8 +118,26 @@ Room（任务表）、Android `MediaStore`（公共目录）。
   升级后 `user_version=4`、`history=18`（**旧数据保留**，只是本次浏览 +1）、`download_task` 表存在（0 行）、
   我的页正常、`crash: 0`（Room 打开时会校验 schema，能开起来即说明建表语句与实体一致）。
   待办：`DownloadRepository` 与"杀进程重开任务列表还在"的验证放到 T5/T6。
-- [ ] **T5 前台服务 + 通知**：`download/DownloadService.kt` + 清单权限；
-  验收：下载中按 Home 进度继续；通知可暂停/取消（截图）。
+- [x] **T5 前台服务 + 通知（含下载引擎）—— 2026-10-17 通过**
+  文件：`download/DownloadService.kt`（前台服务 + 常驻进度通知 + 暂停全部/继续全部动作）、
+  `download/DownloadEngine.kt`（队列 / 并发 / 暂停 / 取消 / 重试 / 断点恢复 / 落盘，状态真相在 Room）、
+  `download/DownloadSettings.kt`（并发任务数、并行切片、仅 Wi-Fi、完成通知）、
+  `download/ImageDownloader.kt`（图片：下载 + **复用 `XhsCrypto.zdecrypt`** 解密 + 落相册）、
+  `res/drawable/ic_download.xml`、清单新增 `FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_DATA_SYNC` /
+  `POST_NOTIFICATIONS` 与 `<service … foregroundServiceType="dataSync">`。
+  **实机证据（模拟器 API 34）**：`服务已进前台（id=4801 type=1）`；
+  `dumpsys activity services` → `isForeground=true types=00000001`；
+  `NotificationRecord pkg=com.thirdparty.xhs.debug id=4801 channel=downloads actions=2`；
+  暂停 → `暂停全部：1 个在跑的任务` 且任务行转 `PAUSED`；继续 → 回 `RUNNING`；
+  **断点续传** → `跳过已下载的 15 片（断点续传）`（暂停在 15/22，继续时复用这 15 片）；
+  杀进程重启 → `把 1 个上次中断的任务重新排队` → `恢复未完成任务 1 个` → 继续下载；
+  图片 → 详情接口取真实图、解密后落 `Pictures/小黄书/服务验证图片_4242/01.jpg`（781,248 B）；
+  视频完成 → `Movies/小黄书/服务验证视频_4242(5).mp4`（29,000,933 B、211,381 ms，与 22×10 s 吻合）；
+  **崩溃 0**。
+  **本轮修掉的两个真缺陷**：① 服务 `onCreate` 里等状态收集器才 `startForeground`，收集器先看到
+  「没活干」就 `stopSelf()`，导致 `ForegroundServiceDidNotStartInTimeException` 崩进程（见 GOTCHAS H30）；
+  ② 进程被杀时卡在 `RUNNING` 的任务永远不会被重新排队（新增 `DAO.requeueRunning`）。
+  **临时探针**：`download/DownloadEnqueueProbe.kt` + App 钩子 + 服务的 DEBUG `DUMP` 动作（T7 后删除）。
 - [ ] **T6 下载管理页**：`ui/screens/DownloadScreen.kt`、`ui/viewmodel/DownloadViewModel.kt`、`navigation/Routes.kt`、
   `ui/screens/ProfileScreen.kt`（入口）；
   验收：UI dump + 截图；暂停/继续/取消/重试/打开/删除逐项实测。
@@ -130,7 +148,17 @@ Room（任务表）、Android `MediaStore`（公共目录）。
 - [ ] **T9 文档与档案**：本文件定稿、`AGENTS.md`（仓库表 + 新硬约束：下载/公共目录/权限）、
   `docs/ai/GOTCHAS.md`（`RESULT_SEEK` 坑、MediaStore 版本差异）、`docs/CHANGELOG.md`、`README.md` 功能列表。
 
-## 7. 风险与对策
+## 7. 已知缺口（如实记录）
+
+- **图片地址只在详情接口里有**：发现页/推荐页的摘要不带 `images` 列表（实测发现页 39 条里
+  `images` 全为空，只有 `fetchDetail` 才有），所以下载对话框要列出图片，必须逐条走详情接口取。
+  真实实现由 T7 的对话框负责，不猜字段。
+- **探针产物会重名**：探针多次运行会在公共目录留下 `xxx(2).mp4`、`01 (1).jpg` 这类文件
+  （MediaStore 自动去重），这是探针重复入队造成的，正式流程标题/noteId 来自作品，不会这样。
+- **未实测**：API 26–28 的 `WRITE_EXTERNAL_STORAGE` 分支（模拟器是 API 34）、
+  通知权限被拒后的降级提示（T7 里做）、仅 Wi-Fi 开关的实际拦截（T8 里做）。
+
+## 8. 风险与对策
 
 | 风险 | 对策 |
 | --- | --- |

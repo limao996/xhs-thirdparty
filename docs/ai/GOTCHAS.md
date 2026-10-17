@@ -663,6 +663,26 @@
   `CountDownLatch` 等回调）；`MediaItem` 指向本地文件时用 `Uri.fromFile`，但 **JVM 单元测试里
   `android.net.Uri` 是空壳**，所以这条链路只能在真机/模拟器上验证。
 
+**H30 · 前台服务必须在 `onCreate`/`onStartCommand` 里**立刻**`startForeground`**
+- 触发：`Context.startForegroundService(...)` 启动的服务，把 `startForeground` 放在"状态就绪之后"再调用。
+- 症状（2026-10-17）：下载一切正常，但进程突然死掉，crash 日志是
+  `RemoteServiceException$ForegroundServiceDidNotStartInTimeException: Context.startForegroundService() did not then call Service.startForeground()`。
+- 根因：我把 `startForeground` 放在**状态收集器**里（"有活干才提升为前台"），而收集器第一帧读到的内存摘要
+  还是初值（`running=0 queued=0`）→ 先执行了 `stopSelf()` → 那 5 秒窗口里再没提升 → 系统崩进程。
+- 正确做法：`onCreate`（或 `onStartCommand` 开头）**无条件**先 `startForeground(...)`，之后才按状态更新通知；
+  "该不该停服务"要用**权威判据**（例如库里还有没有未完成任务），不要用内存里的计数。
+- 顺带两条：服务 `exported="false"` 时 `adb shell am start-foreground-service` 会以
+  `Error: Requires permission not exported from uid …` 失败——这是正确的安全姿态，**不要**为了测试把服务开放出去；
+  验证改用**应用内脚本**（探针按时间轴自己触发暂停/继续/打印状态）或 DEBUG 专用的服务 action。
+
+**H31 · 把"进程被杀"当成"任务失败"会漏掉重启恢复**
+- 触发：任务状态存在库里，进程被杀时状态仍是 `RUNNING`。
+- 症状：下次启动后这些任务**永远不会再被跑**——`unfinished()` 能读到它们，但调度只挑 `QUEUED`
+  （`PAUSED` 是用户意图，不能自动继续）。
+- 正确做法：启动恢复时先把 `RUNNING` 重置为 `QUEUED`（`DownloadTaskDao.requeueRunning`）再排期；
+  暂停/取消走协程取消，且**取消路径不要清理临时目录**，这样重来时才能按已下载的切片续传
+  （实测：暂停在 15/22，继续时日志出现 `跳过已下载的 15 片`）。
+
 ## I. 验证工具本身的坑
 
 **I1 · `uiautomator dump` 失败时会读到上一次的旧文件**

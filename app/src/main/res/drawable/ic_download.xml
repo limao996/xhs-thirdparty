@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 下载通知的小图标（白色单色，系统会按通知栏着色） -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,3 L12,13.2 L8.4,9.6 L7,11 L12,16 L17,11 L15.6,9.6 L12,13.2 L12,3 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M5,18 L19,18 L19,20 L5,20 Z" />
+</vector>

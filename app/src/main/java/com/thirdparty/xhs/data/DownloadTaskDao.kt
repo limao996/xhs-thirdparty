@@ -61,6 +61,16 @@ interface DownloadTaskDao {
     )
     suspend fun setDone(id: Long, path: String, uri: String?, bytes: Long, now: Long)
 
+    /**
+     * 把"进程被杀时卡在 RUNNING"的任务重新排队。
+     *
+     * 为什么必须有：任务状态在库里，进程一死 RUNNING 就永远停在那里，
+     * 下次启动时 `unfinished()` 虽然会读到它，但调度只挑 QUEUED（PAUSED 是用户意图），
+     * 于是这些任务**再也不会被跑**。启动恢复时先调它。
+     */
+    @Query("UPDATE download_task SET status = 'QUEUED', error = NULL, updatedAt = :now WHERE status = 'RUNNING'")
+    suspend fun requeueRunning(now: Long): Int
+
     @Query("DELETE FROM download_task WHERE id = :id")
     suspend fun delete(id: Long)
 

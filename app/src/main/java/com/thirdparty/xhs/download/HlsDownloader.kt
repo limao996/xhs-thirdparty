@@ -104,8 +104,15 @@ class HlsDownloader(
         }
         Log.i(TAG, "切片 ${wanted.size}/${all.size}，加密=${playlist.encrypted}，并发=$parallel")
 
-        val done = AtomicInteger(0)
-        val bytes = AtomicLong(0)
+        // 切片级断点：暂停/被系统杀掉后重来时，已经落在 workDir 里的切片直接复用。
+        // （暂停走的是协程取消，`executeVideo` 里的清理在取消时不会执行，所以切片文件还在。）
+        val already = wanted.indices.filter { File(segFile(workDir, it)).length() > 0 }
+        val done = AtomicInteger(already.size)
+        val bytes = AtomicLong(already.sumOf { File(segFile(workDir, it)).length() })
+        if (already.isNotEmpty()) {
+            Log.i(TAG, "跳过已下载的 ${already.size} 片（断点续传）")
+            onProgress(Progress(done.get(), wanted.size, bytes.get()))
+        }
         val semaphore = Semaphore(parallel.coerceAtLeast(1))
         var failure: String? = null
 
@@ -114,6 +121,8 @@ class HlsDownloader(
                 launch(Dispatchers.IO) {
                     semaphore.withPermit {
                         if (failure != null) return@withPermit
+                        val target = File(segFile(workDir, index))
+                        if (target.length() > 0) return@withPermit
                         try {
                             val enc = fetchBytes(segment.uri)
                             val plain = if (key != null) {
@@ -122,8 +131,7 @@ class HlsDownloader(
                             } else {
                                 enc
                             }
-                            val f = File(workDir, "seg-%04d.ts".format(index))
-                            f.writeBytes(plain)
+                            target.writeBytes(plain)
                             bytes.addAndGet(plain.size.toLong())
                             onProgress(Progress(done.incrementAndGet(), wanted.size, bytes.get()))
                         } catch (e: Exception) {
@@ -139,7 +147,7 @@ class HlsDownloader(
         val out = File(workDir, "merged.ts")
         FileOutputStream(out).use { sink ->
             wanted.indices.forEach { index ->
-                val f = File(workDir, "seg-%04d.ts".format(index))
+                val f = File(segFile(workDir, index))
                 if (!f.exists()) return@withContext Merged.Failed("切片 $index 缺失")
                 f.inputStream().use { it.copyTo(sink, 256 * 1024) }
                 f.delete()
@@ -148,6 +156,8 @@ class HlsDownloader(
         Log.i(TAG, "合并完成：${out.length()} 字节（$bytes）")
         Merged.Ok(out, out.length(), wanted.size)
     }
+
+    private fun segFile(workDir: File, index: Int) = "$workDir/seg-%04d.ts".format(index)
 
     private fun fetchText(url: String): String =
         client.newCall(Request.Builder().url(url).build()).execute().use { resp ->

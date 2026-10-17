@@ -15,6 +15,12 @@
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
 
+    <!-- 下载：要让它在切后台/锁屏后继续，必须用前台服务；API 34+ 还要声明具体类型。
+         POST_NOTIFICATIONS（API 33+ 运行时）只影响"进度通知可不可见"，被拒也能继续下载。 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- A personal WebDAV drive may be plain http:// on the LAN; Android
          denies cleartext by default from API 28, which would make those
          servers unreachable. API traffic itself stays HTTPS. -->
@@ -68,6 +74,12 @@
 
         <!-- 应用内更新的 APK 要交给系统安装器，而 content:// 只能由 FileProvider 提供。
              只暴露 cacheDir/updates/（见 res/xml/file_paths.xml）。 -->
+        <!-- 下载前台服务：下载期间常驻通知，切后台不中断 -->
+        <service
+            android:name=".download.DownloadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
