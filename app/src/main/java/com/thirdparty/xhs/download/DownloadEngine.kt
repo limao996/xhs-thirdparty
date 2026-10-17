@@ -337,8 +337,10 @@ object DownloadEngine {
         val task = dao.byId(id)
         val key = task?.let { DownloadUnit.keyOf(it) }
         if (key != null) {
-            synchronized(lock) { jobs[key] }?.cancel()
-            synchronized(lock) { jobs.remove(key) }
+            // 取消后**等协程收尾**再动磁盘：否则正在写的那一片会把刚删掉的目录又建回来（孤儿文件）
+            val job = synchronized(lock) { jobs.remove(key) }
+            job?.cancel()
+            job?.join()
             // 用户取消的是**这一张**：单元里其它还在跑的图回到排队，等下次排期继续
             dao.unfinished()
                 .filter { DownloadUnit.keyOf(it) == key && it.id != id }
@@ -364,13 +366,27 @@ object DownloadEngine {
     fun delete(id: Long, alsoDeleteFile: Boolean) = scope.launch {
         val running = dao.byId(id)?.let { DownloadUnit.keyOf(it) }
         if (running != null) {
-            synchronized(lock) { jobs.remove(running) }?.cancel()
+            // 用户手动停止（点删除）时：先停协程并**等它收尾**，再删记录与临时文件 ——
+            // 不等的话，正在写盘的那一片会在清理之后把目录重建出来（缓存里留孤儿文件）；
+            // 另外被取消的单元不会执行 `startUnit` 结尾的 schedule，所以这组里其它还在跑的图
+            // 必须回到排队，并在本方法末尾补一次 schedule，否则它们会以 RUNNING 卡住。
+            val job = synchronized(lock) { jobs.remove(running) }
+            job?.cancel()
+            job?.join()
+            dao.unfinished()
+                .filter { DownloadUnit.keyOf(it) == running && it.id != id }
+                .forEach {
+                    if (it.status == DownloadStatus.RUNNING) {
+                        dao.setStatus(it.id, DownloadStatus.QUEUED, null, System.currentTimeMillis())
+                    }
+                }
         }
         val task = dao.byId(id)
         task?.let { deleteTemp(it.id) }
         if (alsoDeleteFile) task?.let { deleteSavedFile(it) }
         dao.delete(id)
         refreshState()
+        schedule()
     }
 
     /**

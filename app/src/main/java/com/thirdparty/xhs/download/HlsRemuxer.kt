@@ -97,10 +97,13 @@ object HlsRemuxer {
         if (mp4.exists() && !mp4.delete()) Log.w(TAG, "清不掉上次的半成品：${mp4.name}")
 
         val startedAt = System.currentTimeMillis()
-        transformer.start(
-            EditedMediaItem.Builder(MediaItem.fromUri(Uri.fromFile(ts))).build(),
-            mp4.absolutePath
-        )
+        // 不管怎么退出（正常结束 / 卡住 / 超时 / **用户手动停止把协程取消**）都要取消 Transformer：
+        // 少了这一步，转封装期间点删除/暂停会留下没释放的 codec 与线程（2026-10-18 审查发现）。
+        try {
+            transformer.start(
+                EditedMediaItem.Builder(MediaItem.fromUri(Uri.fromFile(ts))).build(),
+                mp4.absolutePath
+            )
 
         // 轮询：等待结束；同时做**卡住检测**（进度 90 秒没前进就主动失败，别让用户干等 10 分钟）
         // 与整体超时。返回 null = 正常结束，否则是"该怎么跟用户说"的中文原因。
@@ -135,28 +138,35 @@ object HlsRemuxer {
             null
         }
 
-        if (stopReason != null) {
-            runCatching { transformer.cancel() }
-            mp4.delete()
-            return@withContext Outcome.Failed(stopReason)
-        }
-
-        success.get()?.let { ok ->
-            // 自检：0 字节或时长为 0 一律当失败，绝不把空文件当成功交给用户
-            if (ok.bytes == 0L || ok.durationMs <= 0L) {
+            if (stopReason != null) {
+                runCatching { transformer.cancel() }
                 mp4.delete()
-                return@withContext Outcome.Failed("转换结果不完整，请重试")
+                return@withContext Outcome.Failed(stopReason)
             }
-            val ratio = if (ts.length() > 0) mp4.length() * 100 / ts.length() else 100
-            val kind = if (ratio < 95) "占比偏低→media3 走了重编码" else "转封装"
-            Log.i(
-                TAG,
-                "转 mp4 完成：${mp4.name}（${mp4.length()} 字节，源 ${ts.length()} 字节，占比 $ratio%，" +
-                    "耗时 ${System.currentTimeMillis() - startedAt}ms，$kind）"
-            )
-            return@withContext ok
+
+            success.get()?.let { ok ->
+                // 自检：0 字节或时长为 0 一律当失败，绝不把空文件当成功交给用户
+                if (ok.bytes == 0L || ok.durationMs <= 0L) {
+                    mp4.delete()
+                    return@withContext Outcome.Failed("转换结果不完整，请重试")
+                }
+                val ratio = if (ts.length() > 0) mp4.length() * 100 / ts.length() else 100
+                val kind = if (ratio < 95) "占比偏低→media3 走了重编码" else "转封装"
+                Log.i(
+                    TAG,
+                    "转 mp4 完成：${mp4.name}（${mp4.length()} 字节，源 ${ts.length()} 字节，占比 $ratio%，" +
+                        "耗时 ${System.currentTimeMillis() - startedAt}ms，$kind）"
+                )
+                return@withContext ok
+            }
+            return@withContext Outcome.Failed(failure.get() ?: "转换失败，请重试")
+        } finally {
+            // 手动停止（协程取消）时也走到这里：取消正在跑的 Transformer，并清掉半成品 mp4
+            runCatching { transformer.cancel() }
+            if (success.get() == null && mp4.exists() && mp4.length() == 0L) {
+                runCatching { mp4.delete() }
+            }
         }
-        Outcome.Failed(failure.get() ?: "转换失败，请重试")
     }
 
     /**

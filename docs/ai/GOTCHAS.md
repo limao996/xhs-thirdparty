@@ -775,6 +775,19 @@ CPU 打满。此时前台服务只保证进程不被杀，**不保证 CPU 不休
 （本轮实测：测试仍旧抛 `Method w in android.util.Log not mocked`）。
 
 
+### H40. 取消/删除后要先 `join()` 再清磁盘；被取消的单元不会再自己 `schedule()`
+
+手动停止下载（点删除/取消）时踩到两个坑：
+
+1. **竞态**：`job.cancel()` 是异步的，紧随其后的 `deleteTemp(id)` 会被"还在写盘的那一片"覆盖 ——
+   目录被重新建出来，缓存里留 `.ts` / `.part` 孤儿。正解：`job.cancel(); job.join()` **等协程收尾**再清理。
+2. **没人排期**：`startUnit` 结尾的 `refreshState()` / `schedule()` 都写在协程体里，
+   单元被取消后这两句**不会执行**。所以"把同组其它 RUNNING 改回 QUEUED"之后必须由调用方
+   （`cancel` / `delete`）**自己补一次 `schedule()`**，否则那些任务会以 RUNNING 卡死。
+3. 同理：`HlsRemuxer` 这类"有外部资源（media3 `Transformer`、codec、线程）的暂停点"要用
+   `try/finally` 释放，不能只在业务失败分支里取消 —— 用户手动停止走的是**协程取消**这条路径。
+
+
 ## I. 验证工具本身的坑
 
 **I1 · `uiautomator dump` 失败时会读到上一次的旧文件**
