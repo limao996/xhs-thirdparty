@@ -19,6 +19,8 @@ data class DownloadTaskEntity(
     val noteId: Long,
     /** 作品标题，用来生成公共目录里的文件名 */
     val title: String,
+    /** 作品封面地址（下载管理页显示缩略图用；空串表示没有封面，退回类型图标） */
+    val cover: String = "",
     /** [DownloadKind.VIDEO] 或 [DownloadKind.IMAGE] */
     val kind: String,
     /** 视频：m3u8 地址；图片：图片地址 */

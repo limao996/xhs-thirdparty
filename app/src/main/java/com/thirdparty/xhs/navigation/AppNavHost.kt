@@ -16,6 +16,7 @@ import com.thirdparty.xhs.ui.screens.AuthorScreen
 import com.thirdparty.xhs.ui.screens.AboutScreen
 import com.thirdparty.xhs.ui.screens.CacheScreen
 import com.thirdparty.xhs.ui.screens.UpdateScreen
+import com.thirdparty.xhs.ui.screens.DownloadScreen
 import com.thirdparty.xhs.ui.screens.WatchLaterScreen
 import com.thirdparty.xhs.ui.components.WatchLaterFab
 import com.thirdparty.xhs.ui.screens.DetailScreen
@@ -319,6 +320,7 @@ fun AppNavHost(
                 onOpenSettings = { nav.navigate(Routes.SETTINGS) },
                 onOpenAbout = { nav.navigate(Routes.ABOUT) },
                 onOpenUpdate = { nav.navigate(Routes.UPDATE) },
+                onOpenDownloads = { nav.navigate(Routes.DOWNLOADS) },
                 onOpenWatchLater = { nav.navigate(Routes.WATCH_LATER) }
             )
         }
@@ -469,6 +471,13 @@ fun AppNavHost(
                 onBack = { nav.popBackStack() },
                 onOpenDetail = { noteId -> nav.navigate(Routes.detail(noteId)) }
             )
+        }
+
+        composable(Routes.DOWNLOADS,
+            enterTransition = { fadeIn(tween(280)) + scaleIn(animationSpec = tween(280), initialScale = 0.97f) },
+            popExitTransition = { fadeOut(tween(200)) + scaleOut(animationSpec = tween(200), targetScale = 0.98f) }
+        ) {
+            DownloadScreen(onBack = { nav.popBackStack() })
         }
     }
 }

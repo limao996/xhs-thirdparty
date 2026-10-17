@@ -28,6 +28,16 @@ class XhsRepository(context: Context, httpClient: OkHttpClient) {
     private val historyDao get() = db.historyDao()
     private val followDao get() = db.followDao()
     private val watchLaterDao get() = db.watchLaterDao()
+    private val downloadDao get() = db.downloadTaskDao()
+
+    /**
+     * 下载任务列表（响应式）。
+     *
+     * 这里只是一条**读接口的桥**：任务的增删改由下载引擎（`download/DownloadEngine.kt`）负责，
+     * UI 只通过仓库观察，不直接摸 Room（与收藏 / 最近浏览 / 稍后观看同一套约定）。
+     */
+    fun downloadTasks(): kotlinx.coroutines.flow.Flow<List<DownloadTaskEntity>> =
+        downloadDao.observeAll()
 
     /** Feed page (discover). Throws on network/API error; caller handles state. */
     suspend fun discoverPage(categoryId: Int, groupId: Int, page: Int): List<NoteItem> =

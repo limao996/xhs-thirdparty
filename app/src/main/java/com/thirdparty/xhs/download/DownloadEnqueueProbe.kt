@@ -59,15 +59,40 @@ object DownloadEnqueueProbe {
         val dao = XhsDatabase.get(context).downloadTaskDao()
         dao.clearAll()
         val now = System.currentTimeMillis()
+        // 封面地址在下面找图片时顺带取到（声明提前，供 video 任务使用）
+        var coverOfVideo = ""
         val video = DownloadTaskEntity(
             noteId = 4242L,
             title = "服务验证视频",
+            cover = coverOfVideo,
             kind = DownloadKind.VIDEO,
             sourceUrl = SHORT_VIDEO,
             status = DownloadStatus.QUEUED,
             totalSegments = 0,
             createdAt = now,
             updatedAt = now
+        )
+        val video2 = DownloadTaskEntity(
+            noteId = 4243L,
+            title = "服务验证视频2",
+            cover = coverOfVideo,
+            kind = DownloadKind.VIDEO,
+            sourceUrl = SHORT_VIDEO,
+            status = DownloadStatus.QUEUED,
+            totalSegments = 0,
+            createdAt = now + 1,
+            updatedAt = now + 1
+        )
+        // 故意坏掉的地址：验证「失败」状态显示与「重试」按钮（探测用）
+        val broken = DownloadTaskEntity(
+            noteId = 4244L,
+            title = "服务验证失败项",
+            kind = DownloadKind.VIDEO,
+            sourceUrl = "https://127.0.0.1:9/broken/p.m3u8",
+            status = DownloadStatus.QUEUED,
+            totalSegments = 0,
+            createdAt = now + 2,
+            updatedAt = now + 2
         )
         // 摘要层不带图片列表（实测发现页 39 条全是视频，images 全空），所以逐条走详情接口找带图的
         val realImages = runCatching {
@@ -78,6 +103,7 @@ object DownloadEnqueueProbe {
             while (page <= 2 && found.isEmpty()) {
                 val notes = repo.discoverPage(categoryId = categoryId, groupId = 0, page = page)
                 Log.i(TAG, "第 $page 页 ${notes.size} 条，类型=${notes.map { it.noteType }.distinct()}")
+                coverOfVideo = notes.firstOrNull()?.cover.orEmpty()
                 for (note in notes) {
                     val detail = repo.fetchDetail(note.noteId) ?: continue
                     if (detail.images.size >= 2) {
@@ -105,11 +131,13 @@ object DownloadEnqueueProbe {
             )
         }
         DownloadEngine.init(context)
-        DownloadEngine.enqueue(listOf(video) + images)
-        Log.i(TAG, "任务入队完成：1 个视频 + ${images.size} 张图片")
+        DownloadEngine.enqueue(listOf(video, video2, broken) + images)
+        Log.i(TAG, "任务入队完成：2 个视频 + 1 个故意失败的 + ${images.size} 张图片")
 
         // ---- 脚本化验证：暂停 → 继续 → 等完成，每一步都把任务行打出来 ----
-        kotlinx.coroutines.delay(8_000)
+        // 说明：UI 侧的暂停/继续由 T6 的下载管理页按钮驱动（这里只做服务侧验证），
+        // 脚本里的暂停放在 25 秒，避开用户在页面上操作的时间窗。
+        kotlinx.coroutines.delay(25_000)
         dump(context, "暂停前")
         DownloadEngine.pauseAll()
         kotlinx.coroutines.delay(2_500)

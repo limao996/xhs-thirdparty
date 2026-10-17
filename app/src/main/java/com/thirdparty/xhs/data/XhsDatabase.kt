@@ -108,6 +108,9 @@ abstract class XhsDatabase : RoomDatabase() {
          * 而这次只是加一张全新的表，不能靠兜底清库（那个兜底本来就刻意没挂）。
          * 建表语句必须与 [DownloadTaskEntity] 的列**逐字对应**（Room 打开库时会校验 schema），
          * 可空列不能写成 NOT NULL。
+         *
+         * 注：`cover` 列是在 v4 **尚未随任何正式包发布**时并入本迁移的（T6 要给下载管理页显示缩略图），
+         * 所以不需要再写 4→5；本机若已有旧结构的 v4 库（只可能是开发机），清应用数据即可。
          */
         private val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -116,6 +119,7 @@ abstract class XhsDatabase : RoomDatabase() {
                         "`id` INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, " +
                         "`noteId` INTEGER NOT NULL, " +
                         "`title` TEXT NOT NULL, " +
+                        "`cover` TEXT NOT NULL, " +
                         "`kind` TEXT NOT NULL, " +
                         "`sourceUrl` TEXT NOT NULL, " +
                         "`imageIndex` INTEGER NOT NULL, " +

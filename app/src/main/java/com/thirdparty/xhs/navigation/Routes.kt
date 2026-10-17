@@ -28,6 +28,8 @@ object Routes {
     /** 稍后观看队列：按加入时间排列、**不提供排序**（硬约束 20）。入口是各瀑布流页面的浮动按钮、
  * 播放页底部的队列条，以及列表卡片的长按菜单。 */
     const val WATCH_LATER = "watch_later"
+    /** 下载管理：进行中 / 已完成，逐条 暂停 / 继续 / 取消 / 重试 / 打开 / 删除。入口在「我的」页。 */
+    const val DOWNLOADS = "downloads"
 
     fun detail(noteId: Long): String = "detail/$noteId"
     fun author(userId: Int): String = "author/$userId"

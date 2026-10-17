@@ -93,13 +93,13 @@ class HlsDownloader(
         val playlist = try {
             HlsPlaylist.parse(fetchText(playlistUrl), playlistUrl)
         } catch (e: Exception) {
-            return@withContext Merged.Failed("播放列表解析失败：${e.message}")
+            return@withContext Merged.Failed(humanError(e, "播放列表解析失败"))
         }
         val all = playlist.segments
         val wanted = if (limit != null) all.take(limit) else all
         val key = playlist.keyUri?.let {
             runCatching { fetchBytes(it) }.getOrElse { e ->
-                return@withContext Merged.Failed("获取解密密钥失败：${e.message}")
+                return@withContext Merged.Failed(humanError(e, "获取解密密钥失败"))
             }
         }
         Log.i(TAG, "切片 ${wanted.size}/${all.size}，加密=${playlist.encrypted}，并发=$parallel")
@@ -158,6 +158,20 @@ class HlsDownloader(
     }
 
     private fun segFile(workDir: File, index: Int) = "$workDir/seg-%04d.ts".format(index)
+
+    /**
+     * 把底层异常收成用户能看懂的一句话（文案约定 27：写清"发生了什么 + 怎么办"）。
+     * 界面上直接显示这句话，所以**不要**把 `Failed to connect to /127.0.0.1:9` 这种原文透出去。
+     */
+    private fun humanError(e: Throwable, action: String): String = when (e) {
+        is java.net.UnknownHostException, is java.net.ConnectException ->
+            "无法连接服务器，请检查网络"
+
+        is java.net.SocketTimeoutException -> "连接超时，请重试"
+
+        is IllegalStateException -> e.message?.takeIf { it.isNotBlank() } ?: "$action，请重试"
+        else -> "$action，请重试"
+    }
 
     private fun fetchText(url: String): String =
         client.newCall(Request.Builder().url(url).build()).execute().use { resp ->

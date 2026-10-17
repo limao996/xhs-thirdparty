@@ -15,7 +15,7 @@ import okhttp3.Request
 class ImageDownloader(private val client: OkHttpClient) {
 
     sealed interface Outcome {
-        data class Ok(val bytes: Long) : Outcome
+        data class Ok(val bytes: Long, val displayPath: String) : Outcome
         data class Failed(val reason: String) : Outcome
     }
 
@@ -46,9 +46,21 @@ class ImageDownloader(private val client: OkHttpClient) {
         Log.i(TAG, "图片解密后 ${bytes.size} 字节：$displayName")
         when (val saved = MediaStoreWriter.saveImage(context, bytes, relativeDir, displayName)) {
             is MediaStoreWriter.Result.Failed -> Outcome.Failed(saved.reason)
-            is MediaStoreWriter.Result.Ok -> Outcome.Ok(saved.bytes)
+            // 带上公共目录前缀（Pictures/…），与视频行显示的路径格式保持一致
+            is MediaStoreWriter.Result.Ok -> Outcome.Ok(saved.bytes, saved.displayPath)
         }
     } catch (e: Exception) {
-        Outcome.Failed(e.message ?: e.javaClass.simpleName)
+        Outcome.Failed(humanError(e))
+    }
+
+    /** 与 [HlsDownloader] 同样的口径：界面直接显示这句话，不要透出英文原文。 */
+    private fun humanError(e: Throwable): String = when (e) {
+        is java.net.UnknownHostException, is java.net.ConnectException ->
+            "无法连接服务器，请检查网络"
+
+        is java.net.SocketTimeoutException -> "连接超时，请重试"
+
+        is IllegalStateException -> e.message?.takeIf { it.isNotBlank() } ?: "下载失败，请重试"
+        else -> "下载失败，请重试"
     }
 }

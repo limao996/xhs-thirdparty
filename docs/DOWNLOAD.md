@@ -138,9 +138,29 @@ Room（任务表）、Android `MediaStore`（公共目录）。
   「没活干」就 `stopSelf()`，导致 `ForegroundServiceDidNotStartInTimeException` 崩进程（见 GOTCHAS H30）；
   ② 进程被杀时卡在 `RUNNING` 的任务永远不会被重新排队（新增 `DAO.requeueRunning`）。
   **临时探针**：`download/DownloadEnqueueProbe.kt` + App 钩子 + 服务的 DEBUG `DUMP` 动作（T7 后删除）。
-- [ ] **T6 下载管理页**：`ui/screens/DownloadScreen.kt`、`ui/viewmodel/DownloadViewModel.kt`、`navigation/Routes.kt`、
-  `ui/screens/ProfileScreen.kt`（入口）；
-  验收：UI dump + 截图；暂停/继续/取消/重试/打开/删除逐项实测。
+- [x] **T6 下载管理页 —— 2026-10-17 通过**
+  文件：`ui/screens/DownloadScreen.kt`、`ui/viewmodel/DownloadViewModel.kt`、
+  `navigation/Routes.kt`（新增 `DOWNLOADS`）、`navigation/AppNavHost.kt`、
+  `ui/screens/ProfileScreen.kt`（「其他」分组新增入口）、`ui/screens/HomeScreen.kt`（透传）、
+  `data/XhsRepository.kt`（新增只读桥 `downloadTasks()`）、`DownloadTaskEntity`（新增 `cover` 列）。
+  **实机证据（模拟器 API 34，逐项操作 UI）**：
+  入口 → `我的`页有「下载管理」；进页面显示 `进行中 · 2 项` + 两行并发
+  `下载中 4/22 片 · 5.2 MB` / `下载中 1/22 片 · 1.2 MB`；
+  点「全部暂停」→ 两行变 `已暂停 · 10.3 MB` / `已暂停 · 6.7 MB`；点「全部继续」→ 回到
+  `下载中 12/22 片` / `7/22 片`（**续传，不是重下**）；
+  点「打开」→ 系统收到 `ACTION_VIEW dat=content://media/… typ=video/*` 并由相册
+  （`com.google.android.apps.photos`）打开该视频；
+  点「删除记录」→ `已完成 · 2 项` → `1 项`；点「清空已完成」→ 确认弹窗
+  `清空已完成？/ 将移除 1 条已完成 / 失败的记录。已保存到相册或视频库的文件不会删除。` → 清空后
+  空态 `还没有下载任务`；
+  另外两条：故意坏地址的任务显示 `失败：无法连接服务器，请检查网络` 且点「重试」后引擎重新开跑；
+  活动行点「取消下载」→ `进行中 · 5 项` → `4 项`（任务与临时目录一起清掉）。
+  截图：`tools/out/dl-final2.png`（页面渲染：失败行红色文案 + 重试↻、完成行 打开▶ + 删除🗑）。
+  **本轮顺带修的两处文案/一致性**：① 失败原因原先直接透出英文（`Failed to connect to /127.0.0.1:9`），
+  违反文案约定 27 → 统一经 `humanError()` 收成「无法连接服务器，请检查网络」等中文；② 图片任务的
+  `savedPath` 少了 `Pictures/` 前缀，与视频行格式不一致 → 改为用 `MediaStoreWriter` 返回的完整路径。
+  缺口：`cover` 缩略图这一轮没截到（探针取图地址偶发取不到，退回了类型图标），缩略图渲染走的是
+  页面既有的 `XhsAsyncImage`，待 T7 的对话框带上真实封面后再看图。
 - [ ] **T7 详情页菜单化 + 下载对话框**：`ui/screens/DetailScreen.kt`、`ui/components/DownloadPickerDialog.kt`；
   验收：标题栏只剩 收藏 + ⋮；菜单三项可用；图片多选（默认全选）→ 确认后建任务并跳转（dump + 截图）。
 - [ ] **T8 设置「下载」分组**：`ui/screens/SettingsScreen.kt` + prefs（并发任务数 / 并行切片 / 仅 Wi-Fi / 完成通知）；

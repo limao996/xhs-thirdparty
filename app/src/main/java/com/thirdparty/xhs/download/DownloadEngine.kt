@@ -245,7 +245,7 @@ object DownloadEngine {
 
             is ImageDownloader.Outcome.Ok ->
                 dao.setDone(
-                    task.id, "$relativeDir/$name", null, outcome.bytes, System.currentTimeMillis()
+                    task.id, outcome.displayPath, null, outcome.bytes, System.currentTimeMillis()
                 )
         }
     }

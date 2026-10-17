@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Autorenew
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.History
@@ -77,6 +78,8 @@ fun ProfileScreen(
     /** 关于 / 检查更新：两个各自独立的页面，入口在这里（不在设置里） */
     onOpenAbout: (() -> Unit)? = null,
     onOpenUpdate: (() -> Unit)? = null,
+    /** 下载管理：进行中 / 已完成的下载任务都在这一页 */
+    onOpenDownloads: (() -> Unit)? = null,
     rotating: Boolean = false,
     /** changes whenever the guest account changes, forcing a profile reload */
     reloadKey: Any? = Unit,
@@ -243,6 +246,13 @@ fun ProfileScreen(
 
         Spacer(Modifier.height(Spacing.m))
         SectionLabel("其他", bottom = Spacing.xs)
+        if (onOpenDownloads != null) {
+            ProfileEntry(
+                Icons.Filled.Download, "下载管理",
+                "查看下载进度，暂停 / 继续 / 打开已保存的视频与图片",
+                onOpenDownloads
+            )
+        }
         if (onOpenSettings != null) {
             ProfileEntry(
                 Icons.Filled.Settings, "设置",

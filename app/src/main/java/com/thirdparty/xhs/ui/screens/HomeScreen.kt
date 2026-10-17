@@ -78,6 +78,8 @@ fun HomeScreen(
     /** 关于 / 检查更新：入口在「我的」页，各是一个独立页面 */
     onOpenAbout: () -> Unit,
     onOpenUpdate: () -> Unit,
+    /** 下载管理：入口在「我的」页 */
+    onOpenDownloads: () -> Unit = {},
     /** 稍后观看队列（浮动按钮） */
     onOpenWatchLater: () -> Unit,
     guestViewModel: GuestViewModel = viewModel(factory = RepoViewModelFactory())
@@ -189,6 +191,7 @@ fun HomeScreen(
                             onOpenSettings = onOpenSettings,
                             onOpenAbout = onOpenAbout,
                             onOpenUpdate = onOpenUpdate,
+                            onOpenDownloads = onOpenDownloads,
                             rotating = rotating,
                             reloadKey = guest
                         )
