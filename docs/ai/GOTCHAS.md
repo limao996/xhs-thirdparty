@@ -832,3 +832,13 @@ CPU 打满。此时前台服务只保证进程不被杀，**不保证 CPU 不休
 - 取证方式（实测有效）：开/关锁各截一张最近任务截图对比 —— 开锁时卡片应**整块空白**，
   关锁时应能看到内容。注意：**验证用的设备锁屏 PIN 用完要 `locksettings clear --old <pin>` 清掉**，
   否则模拟器会一直停在锁屏。
+
+**J2 · 输入类界面用 adb 驱动时的两个坑**
+
+- `adb shell input text 原神` **会抛 NPE**（`InputShellCommand.sendText` 拿到 null 数组）——
+  `input text` 只吃 ASCII，中文/emoji 一律失败，而且失败得很难看。要验中文匹配就写单测，
+  或者用单测 + 英文关键词两段式取证；`cmd clipboard set-text` 在 API 34 也**没有实现**
+  （`No shell command implementation`），别指望它。
+- 输入后**软键盘还开着**时，`EmptyState` 之类的"居中空状态按钮"会被键盘挡住 ——
+  按坐标点会落到键盘上，表现为"点了没反应"。自动化里先 `input keyevent 4` 收起键盘再点，
+  否则会误判成功能坏了（本轮就误判过一次「清除搜索」）。

@@ -3,7 +3,9 @@ package com.thirdparty.xhs.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.thirdparty.xhs.data.NoteItem
+import com.thirdparty.xhs.data.SavedSort
 import com.thirdparty.xhs.data.XhsRepository
+import com.thirdparty.xhs.data.applySavedFilter
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,10 +20,24 @@ data class LocalListUiState(
     val loading: Boolean = true,
     /** true while a pull-to-refresh is in flight */
     /** bumped on refresh so the grid scrolls back to the top */
-    val refreshTick: Int = 0
+    val refreshTick: Int = 0,
+    /** 收藏页的搜索词：匹配标题与作者名（最近浏览不用它） */
+    val query: String = "",
+    /** 收藏页的排序方式，见 [SavedSort] */
+    val sort: SavedSort = SavedSort.SAVED_DESC
 ) {
-    val visible: List<NoteItem> get() = all.take(visibleCount)
-    val hasMore: Boolean get() = visibleCount < all.size
+    /** 过滤 + 排序之后的完整结果（纯函数，见 [applySavedFilter]） */
+    val filtered: List<NoteItem> get() = applySavedFilter(all, query, sort)
+
+    /** 当前已展开的部分（客户端分页） */
+    val visible: List<NoteItem> get() = filtered.take(visibleCount)
+
+    val hasMore: Boolean get() = visibleCount < filtered.size
+
+    /** 过滤后还剩几条 —— 界面用它区分「还没有收藏」与「没有匹配的收藏」 */
+    val resultCount: Int get() = filtered.size
+
+    val searching: Boolean get() = query.isNotBlank()
 
     companion object {
         const val PAGE_SIZE = 20
@@ -79,8 +95,39 @@ class LocalListViewModel(
     /** Client-side pagination for the local list. */
     fun loadMore() {
         _ui.update {
-            if (it.visibleCount >= it.all.size) it
-            else it.copy(visibleCount = (it.visibleCount + LocalListUiState.PAGE_SIZE).coerceAtMost(it.all.size))
+            // 分页要按「过滤后的总数」算，否则搜索时会把可见条数撑到超出结果集
+            val total = it.resultCount
+            if (it.visibleCount >= total) it
+            else it.copy(visibleCount = (it.visibleCount + LocalListUiState.PAGE_SIZE).coerceAtMost(total))
+        }
+    }
+
+    /**
+     * 收藏页的搜索词（标题 / 作者名的一部分）。
+     *
+     * 改词就把已展开的条数收回首页大小、并 bump `refreshTick` —— 后者是瀑布流的 `resetKey`，
+     * 这样结果集一变列表就回到顶部，而不是停在原来那一条的滚动位置。
+     */
+    fun onQueryChange(query: String) {
+        _ui.update {
+            if (it.query == query) it
+            else it.copy(
+                query = query,
+                visibleCount = LocalListUiState.PAGE_SIZE,
+                refreshTick = it.refreshTick + 1
+            )
+        }
+    }
+
+    /** 收藏页的排序方式（最近收藏 / 最早收藏 / 标题），同样会重置滚动位置。 */
+    fun onSortChange(sort: SavedSort) {
+        _ui.update {
+            if (it.sort == sort) it
+            else it.copy(
+                sort = sort,
+                visibleCount = LocalListUiState.PAGE_SIZE,
+                refreshTick = it.refreshTick + 1
+            )
         }
     }
 
