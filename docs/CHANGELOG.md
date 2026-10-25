@@ -631,6 +631,64 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 
 
+### 阶段七十九 · 修「发现页滑动切换有延迟、标签栏也慢半拍」（2026-10-25，用户反馈）
+
+用户：「发现页发现 tab 滑动切换标签总是有延迟，松手之后停一会儿才加载出来，上面的标签栏也有延迟」
+
+**根因（一层，不是两处）**：分类内容是一个 `HorizontalPager`，而「选中分类」是**唯一**的发请求触发点
+（`selectCategory` → 清空 feed → `loadMore()`）。原实现的 pager→选中 同步只认**停稳**
+（`snapshotFlow { currentPage to isScrollInProgress }`，`if (scrolling) return`），于是时间线是：
+
+```
+手指抬起 → 惯性动画跑完（停稳）→ 才 selectCategory → 才发请求 → 才出内容
+                            ↑ 分类 chip 的高亮也在这里才变
+```
+
+两段等待串起来，正好对上用户说的"松手之后停一会儿"和"标签栏也慢半拍"。
+（那个"只在停稳才同步"是**刻意的**：早先按每次 `currentPage` 变化反应，会把 `animateScrollToPage`
+途经的邻页当成用户滑动，产生「点标签偶尔切到前一个/后一个」的老 bug。）
+
+**改法**：把触发点从"停稳"提前到"**过了翻页点**"，同时保留老 bug 的护栏：
+
+- `snapshotFlow { Triple(currentPage, targetPage, isScrollInProgress) }`；
+- 滑动中当 `currentPage != targetPage`（还没过翻页点）**先不动**；一旦 `currentPage` 变成新页
+  （用户确实翻过去了）就立刻选中 —— 此时 `isScrollInProgress` 仍为 true，请求在手指抬起前就发出；
+- 程序性滚动继续由 `syncingToChip` 挡掉 → 「点标签落错页」不会回归；
+- 为什么不用更早的 `targetPage`：手势刚提交目标时会先选，但正在滑出的那一页会立刻被换成一圈转圈，
+  半屏可见地闪一下（第一版这么写过，实机看到闪）。翻页点之后旧页基本离场，视觉干净且仍然远早于停稳；
+- 顺带：`collectLatest` 做合并（一次快速滑动里 `targetPage` 会来回跳，第一版实测连发 3 次 select）。
+
+**实机取证（模拟器 API 34；新增 DEBUG 日志 `XhsDiscover`，`adb logcat -s XhsDiscover`）**
+
+改前（仅日志观测，逻辑=停稳才选）：
+```
+pager→select(滑动中-target) page=1 cat=1
+pager→select(滑动中-target) page=0 cat=0      ← 一次滑动连着选 3 次
+pager→select(滑动中-target) page=1 cat=1
+```
+
+改后（手机侧时钟对照，swipe 命令 = 240ms）：
+```
+swipe 结束(手机时钟)=1792931187136
+pager→select page=1 current=1 target=1 scrolling=true t=1792931186972   ← 比手指抬起早 164ms
+select cat=1 t=1792931186972
+feed 到达 cat=1 items=9 t=1792931187452                                  ← 松手后 +316ms 内容已到
+```
+- `scrolling=true` ⇒ 选择发生在**滑动动画中**（不是停稳后）；
+- 少了一次滑动连发 3 个请求的浪费；
+- 截图：滑动结束后分类 chip 「最新」已高亮、内容已渲染，无转圈。
+
+**回归测试**：点分类 chip「原创」→ `select cat=2` **一次** → 201ms 后数据到达 → chip 行仍显示「原创」
+（没有回跳到邻页，老 bug 未回归）。
+
+**关于三个顶部 tab（发现 / 粉丝圈 / 关注）**：它们的切换是同步的 —— `tab = t` 立即换内容，
+只有「关注」会做一次**本地** DB 读，切 tab 不发请求（代码注释里写明这是刻意设计）。
+所以本轮修的是**分类 chip 行 + 内容**的延迟；如果你说的"标签栏"指的是顶部这三个 tab，
+那是另一条现象，需要单独复现。
+
+**测试**：76 例全绿；lint 10 项均既有告警（本次 0 新增）。
+
+
 ### 阶段七十八 · 修「点赞图标和收藏图标撞车」（2026-10-25，用户反馈）
 
 用户：「作品卡片里的点赞数图标和作品收藏图标怎么是一样的？？？」

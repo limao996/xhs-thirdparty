@@ -146,6 +146,9 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
         feedPage = 0
         feedLoading = false
         emptyPages = 0
+        if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+            android.util.Log.i("XhsDiscover", "select cat=$id t=" + System.currentTimeMillis())
+        }
         loadMore()
     }
 
@@ -194,6 +197,13 @@ class DiscoverViewModel(private val repo: XhsRepository) : ViewModel() {
                     // empty page, or two consecutive pages that add nothing new,
                     // really means "no more".
                     emptyPages = if (added == 0) emptyPages + 1 else 0
+                    if (com.thirdparty.xhs.BuildConfig.DEBUG && before == 0) {
+                        android.util.Log.i(
+                            "XhsDiscover",
+                            "feed 到达 cat=" + catId + " items=" + merged.size +
+                                " t=" + System.currentTimeMillis()
+                        )
+                    }
                     s.copy(feed = s.feed.copy(
                         // page boundaries are not stable upstream; duplicate keys
                         // would crash the staggered grid

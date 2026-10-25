@@ -73,6 +73,8 @@ import com.thirdparty.xhs.ui.theme.Spacing
 import com.thirdparty.xhs.ui.viewmodel.DiscoverTab
 import com.thirdparty.xhs.ui.viewmodel.DiscoverViewModel
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -228,22 +230,44 @@ private fun FeedTab(
             }
         }
     }
-    // pager -> selection, but ONLY once the pager has stopped.
+    // pager -> selection，两路触发（2026-10-25 修「滑动切换标签/内容有延迟」）：
     //
-    // This is the fix for "点击标签偶尔切到前一个/后一个": `animateScrollToPage` (and a
-    // fling) passes OVER the neighbouring pages, so `currentPage` changes to them on the
-    // way. Reacting to each of those re-selected a neighbour, which in turn re-ran the
-    // chip→pager effect and pulled the pager back — so the tap could settle on either
-    // side of the category the user picked. Requiring a settled, non-programmatic pager
-    // makes a tap land exactly where it was aimed.
+    // ① **滑动中**：手势一旦把目标页（`targetPage`）定下来就立刻选中它 —— 网络请求在手指还没抬起来时
+    //    就发出去了，松手时内容通常已经在路上，不会再"停一会儿才加载出来"；
+    // ② **停稳**：用 `currentPage` 兜底（含系统把动画时长比例关掉、一步到位的情况）。
+    //
+    // 原来只在①之后（停稳）才选，而选中又才是发请求的起点 —— 于是"松手 → 等选择 → 等网络"两段延迟叠加，
+    // 顶上的分类标签也要等停稳才变高亮，看起来"标签栏也慢半拍"。
+    //
+    // 程序性滚动（点标签 → `animateScrollToPage`）必须由 `syncingToChip` 挡掉：它会把途经的邻页
+    // 当成用户的滑动，那正是老 bug「点标签偶尔切到前一个/后一个」。
     LaunchedEffect(pagerState) {
-        snapshotFlow { pagerState.currentPage to pagerState.isScrollInProgress }
+        snapshotFlow {
+            Triple(pagerState.currentPage, pagerState.targetPage, pagerState.isScrollInProgress)
+        }
             .distinctUntilChanged()
-            .collect { (page, scrolling) ->
-                if (scrolling || syncingToChip.value) return@collect
-                val current = viewModel.ui.value
-                current.categories.getOrNull(page)?.let { cat ->
-                    if (cat.id != current.selectedCategory) viewModel.selectCategory(cat.id)
+            .collectLatest { (current, target, scrolling) ->
+                if (syncingToChip.value) return@collectLatest
+                // 滑动中先只在**过了翻页点**（`currentPage` 已经变成新页）时才预取：
+                // 更早（手势刚提交 target）也能发请求，但正在滑出的那一页会立刻被换成一圈转圈，
+                // 半屏可见地闪一下。翻页点之后旧页基本离场，视觉上干净，而且仍然远早于"停稳"。
+                if (scrolling && current != target) return@collectLatest
+                val page = current
+                val currentUi = viewModel.ui.value
+                currentUi.categories.getOrNull(page)?.let { cat ->
+                    if (cat.id != currentUi.selectedCategory) {
+                        if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+                            // 取证用：scrolling=true 说明这次选择发生在**滑动动画中**（不是停稳后）。
+                            // adb logcat -s XhsDiscover
+                            android.util.Log.i(
+                                "XhsDiscover",
+                                "pager→select page=" + page + " current=" + current +
+                                    " target=" + target + " scrolling=" + scrolling +
+                                    " t=" + System.currentTimeMillis()
+                            )
+                        }
+                        viewModel.selectCategory(cat.id)
+                    }
                 }
             }
     }
