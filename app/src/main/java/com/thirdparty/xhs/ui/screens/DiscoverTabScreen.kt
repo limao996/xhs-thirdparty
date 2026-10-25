@@ -214,61 +214,12 @@ private fun FeedTab(
     // Guards the two-way sync: while WE are the ones moving the pager (a chip tap), the
     // page changes the animation produces must not be fed back as "the user swiped".
     val syncingToChip = remember { androidx.compose.runtime.mutableStateOf(false) }
-    // chip 行的可见位置**跟随 pager 的滑动进度**（用户 2026-10-25：「标签栏动画应该跟随滑窗进度」）。
+    // 保守方案（用户 2026-10-25 选定）：**拖动时 chip 行完全不动**，只有高亮与内容跟着翻页；
+    // 松手后由下面的「一次平滑归位」把选中 chip 滑到尽量居中的位置。
     //
-    // 取 pager 的连续位置 `raw = currentPage + currentPageOffsetFraction`（`currentPage` 是**最近的**页，
-    // 所以这个值单调、翻页时不跳），然后**纯增量**地平移 chip 行：
-    //   本帧位移 = 相邻两枚 chip 的中心距离 × 本帧的进度增量
-    //
-    // 为什么必须是"纯增量"而不是"每一帧都对到居中位置"：靠左的几枚 chip **物理上无法居中**
-    // （行已经在最左端）。早先的写法在 `frac→1` 时把行推了一格，停稳后又按"居中"把它拽回去，
-    // 被 LazyRow clamp 到 0 —— 表现为「前几个标签滑动时松手闪一下」（用户 2026-10-25 反馈）。
-    // 纯增量不会自相矛盾：推到哪就停在哪，两端的 clamp 由 LazyRow 自己处理。
-    //
-    // 停稳（frac==0）时只做**小幅**纠正：选中态让 FilterChip 的勾选图标动画入场、chip 变宽约 16px，
-    // 居中点跟着漂一点，需要对齐；但需要移动几十像素以上的情况一律不纠正（那正是"闪一下"的来源）。
-    // 首次进入给 chip 行一个绝对位置（此时没有"上一帧"，挑个 chip 居中不会造成闪烁）。
-    // 必须放在 LaunchedEffect 外面：remember 是 @Composable，不能在协程里调。
-    val chipRowAnchored = remember { androidx.compose.runtime.mutableStateOf(false) }
-    LaunchedEffect(pagerState, categoryRowState, state.selectedCategory) {
-        var lastPos = Float.NaN
-        val lastIndex = state.categories.lastIndex
-        snapshotFlow { pagerState.currentPage + pagerState.currentPageOffsetFraction }
-            .distinctUntilChanged()
-            .collect { raw ->
-                if (lastIndex < 0) { lastPos = raw; return@collect }
-                val rawBase = kotlin.math.floor(raw).toInt()
-                val base = rawBase.coerceIn(0, lastIndex)
-                val frac = raw - rawBase
-                if (!chipRowAnchored.value) {
-                    categoryRowState.scrollToItemCentered(base)
-                    chipRowAnchored.value = true
-                }
-                // pager 没在滚动时不要动行 —— 否则会和下面"停稳归位"的动画抢同一个滚动互斥量，
-                // 把动画打断（实测归位只走到一半就停住）。
-                if (!pagerState.isScrollInProgress) {
-                    lastPos = raw
-                    return@collect
-                }
-                if (!lastPos.isNaN()) {
-                    val step = categoryRowState.adjacentCentreDistance(base)
-                    if (step != null) {
-                        val delta = step * (raw - lastPos)
-                        if (delta != 0f) {
-                            categoryRowState.dispatchRawDelta(delta)
-                            if (com.thirdparty.xhs.BuildConfig.DEBUG) {
-                                android.util.Log.i(
-                                    "XhsDiscover",
-                                    "chipRow follow base=" + base + " frac=" + (Math.round(frac * 100) / 100f) +
-                                        " delta=" + (Math.round(delta * 10) / 10f)
-                                )
-                            }
-                        }
-                    }
-                }
-                lastPos = raw
-            }
-    }
+    // 之前试过"行跟手平移"，问题是一路要处理边界钳制、跨页补齐、回调打断等一堆例外，
+    // 每修一个现象就引出另一个（前后四轮）。这里换成最可控的形态：行的位置完全由"选中项 + 一次动画"
+    // 决定，没有跟手的累计状态，也就不存在过冲、回弹、离位回不来这类问题。
 
     // 停稳后**一次平滑归位**（用户 2026-10-25 选定：「松手后平滑滑到尽量居中，做不到就靠边停，不回弹」）。
     //
@@ -867,58 +818,3 @@ private fun FollowedMineTab(
 /** Height reserved for the category chip row (a FilterChip plus its padding). */
 private val CategoryRowHeight = 48.dp
 
-/**
- * Brings [index] to the middle of the viewport.
- *
- * Two things were wrong before, and both were visible when tapping a chip:
- *
- *  1. It called `animateScrollToItem(index)` first, which aligns the item to the
- *     START — so an already-visible chip slid left and then slid back to the middle.
- *     Reported as "总是把标签移动到左侧再居中". Now an item that is already on screen
- *     is not realigned at all: it just gets the one correction that centres it. An
- *     item that is off screen is placed near the middle instantly (a negative
- *     `scrollOffset` stops short of the start) and then corrected.
- *
- *  2. It measured the chip immediately. Selecting a `FilterChip` ANIMATES a leading
- *     check icon in, so the width at that moment is the narrower pre-selection one
- *     and the correction landed ~13dp off centre — the "居中并没有对齐" half. So the
- *     width is now watched until it stops changing, and only then does the single
- *     animated correction run.
- */
-/**
- * 相邻两枚 chip 的**中心距离**（像素）：半宽之和 + 两者的间距。
- *
- * 用来把 pager 的翻页进度（0..1）换算成 chip 行该平移多少 —— 只需要两枚 chip 的宽度与间距，
- * 不需要它们的绝对位置（`LazyRow` 也没法给出屏幕外条目的绝对位置）。任一枚没被布局就返回 null，
- * 调用方跳过这一段的跟随（宁可不动，也不要按错误的比例乱滑）。
- */
-private fun androidx.compose.foundation.lazy.LazyListState.adjacentCentreDistance(
-    index: Int
-): Float? {
-    val a = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index } ?: return null
-    val b = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index + 1 } ?: return null
-    val gap = (b.offset - (a.offset + a.size)).toFloat()
-    return (a.size + b.size) / 2f + gap
-}
-
-private suspend fun androidx.compose.foundation.lazy.LazyListState.scrollToItemCentered(
-    index: Int
-) {
-    val start = layoutInfo.viewportStartOffset
-    val end = layoutInfo.viewportEndOffset
-    if (end - start <= 0) return
-    val viewportCentre = (start + end) / 2
-    if (layoutInfo.visibleItemsInfo.none { it.index == index }) {
-        scrollToItem(index, -viewportCentre)
-    }
-    val info = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index } ?: return
-    val delta = (info.offset + info.size / 2) - viewportCentre
-    if (com.thirdparty.xhs.BuildConfig.DEBUG) {
-        android.util.Log.i(
-            "XhsDiscover",
-            "snap idx=" + index + " offset=" + info.offset + " size=" + info.size +
-                " centre=" + viewportCentre + " delta=" + delta
-        )
-    }
-    if (delta != 0) scrollBy(delta.toFloat())
-}
