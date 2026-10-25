@@ -214,11 +214,6 @@ private fun FeedTab(
     // Guards the two-way sync: while WE are the ones moving the pager (a chip tap), the
     // page changes the animation produces must not be fed back as "the user swiped".
     val syncingToChip = remember { androidx.compose.runtime.mutableStateOf(false) }
-    // 这次选中是"点 chip"还是"滑动 pager"驱动的？收尾方式不同：
-    // - 滑动：行已经跟着手指停在它该在的位置了，**不要再纠正**（纠正就是"松手闪一下"）；
-    // - 点击：pager 动画会跨好几页，跟随可能因为某些 chip 不在布局里而少走一段，
-    //   所以最后让行平滑滑到居中（`animateScrollBy`，不会有跳变）。
-    var selectionByPager by remember { mutableStateOf(true) }
     // chip 行的可见位置**跟随 pager 的滑动进度**（用户 2026-10-25：「标签栏动画应该跟随滑窗进度」）。
     //
     // 取 pager 的连续位置 `raw = currentPage + currentPageOffsetFraction`（`currentPage` 是**最近的**页，
@@ -249,6 +244,12 @@ private fun FeedTab(
                     categoryRowState.scrollToItemCentered(base)
                     chipRowAnchored.value = true
                 }
+                // pager 没在滚动时不要动行 —— 否则会和下面"停稳归位"的动画抢同一个滚动互斥量，
+                // 把动画打断（实测归位只走到一半就停住）。
+                if (!pagerState.isScrollInProgress) {
+                    lastPos = raw
+                    return@collect
+                }
                 if (!lastPos.isNaN()) {
                     val step = categoryRowState.adjacentCentreDistance(base)
                     if (step != null) {
@@ -269,33 +270,42 @@ private fun FeedTab(
             }
     }
 
-    // 选中态稳定后做一次**小幅**居中纠正：选中会让 FilterChip 的勾选图标动画入场、chip 变宽
-    // （实测 16~30px），居中点跟着漂。等图标动画结束（150ms）再对齐。
+    // 停稳后**一次平滑归位**（用户 2026-10-25 选定：「松手后平滑滑到尽量居中，做不到就靠边停，不回弹」）。
     //
-    // 超过 SETTLE_CORRECTION_LIMIT_PX 的偏差**一律不动**：靠左的几枚 chip 物理上无法居中
-    // （行已经在最左端，`scrollToItemCentered` 会被 clamp 回去），硬拽就是用户 2026-10-25 反馈的
-    // 「滑动到前几个标签时松手闪一下」。
+    // 为什么必须有这一步（不能只靠拖动时的增量跟随）：跟随是"在原处基础上继续平移"，没有绝对参照 ——
+    // 用户手动把标签栏拖到另一头之后，pager 再怎么切，行也回不到该在的位置（用户实测反馈）。
+    // 这里用 `animateScrollBy(drift)` 把选中 chip 滑到视口正中；靠左/靠右的 chip 物理上到不了正中时，
+    // LazyRow 会在边缘 clamp 住 = "尽量居中、靠边停"，并且整个过程是一次动画，**没有跳变也没有回弹**。
+    //
+    // 等 120ms 是因为选中会让 `FilterChip` 的勾选图标动画入场、chip 变宽十几像素，居中点会跟着漂。
     LaunchedEffect(state.selectedCategory, state.categories) {
         val index = state.categories.indexOfFirst { it.id == state.selectedCategory }
         if (index < 0) return@LaunchedEffect
-        delay(150)
+        delay(120)
         val li = categoryRowState.layoutInfo
-        val info = li.visibleItemsInfo.firstOrNull { it.index == index } ?: return@LaunchedEffect
         val centre = (li.viewportStartOffset + li.viewportEndOffset) / 2
-        val drift = (info.offset + info.size / 2) - centre
-        if (selectionByPager) {
-            // 滑动来的：行已经跟着手指到位，只对齐小漂移（勾选图标让 chip 变宽那十几像素）
-            if (drift != 0 && kotlin.math.abs(drift) <= SETTLE_CORRECTION_LIMIT_PX) {
-                categoryRowState.dispatchRawDelta(drift.toFloat())
-            } else if (com.thirdparty.xhs.BuildConfig.DEBUG) {
-                android.util.Log.i("XhsDiscover", "chipRow settle skip drift=" + drift + "（滑动驱动，不纠正）")
-            }
-        } else if (drift != 0) {
-            // 点标签来的：平滑补到居中（大位移也走动画，不会有跳变）
+        if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+            val info = li.visibleItemsInfo.firstOrNull { it.index == index }
+            android.util.Log.i(
+                "XhsDiscover",
+                "chipRow settle→center idx=" + index + " drift=" +
+                    (info?.let { (it.offset + it.size / 2) - centre } ?: 0)
+            )
+        }
+        // 第一段：动画滚到该 chip 附近（`animateScrollToItem` 的 scrollOffset 是"条目**起点**相对
+        // 视口起点"，所以这只是粗定位；靠边时它自己会钳在边缘）。
+        categoryRowState.animateScrollToItem(index, -centre)
+        // 第二段：按布局实测的中心偏差再补一次，落到**精确**正中（同样靠边就停）。
+        // 两段都在同一个协程里顺序执行，不会被别的滚动操作打断。
+        val li2 = categoryRowState.layoutInfo
+        val info = li2.visibleItemsInfo.firstOrNull { it.index == index }
+        if (info != null) {
+            val c2 = (li2.viewportStartOffset + li2.viewportEndOffset) / 2
+            val drift = (info.offset + info.size / 2) - c2
             if (com.thirdparty.xhs.BuildConfig.DEBUG) {
-                android.util.Log.i("XhsDiscover", "chipRow settle animate drift=" + drift + "（点击驱动）")
+                android.util.Log.i("XhsDiscover", "chipRow refine drift=" + drift)
             }
-            categoryRowState.animateScrollBy(drift.toFloat())
+            if (drift != 0) categoryRowState.animateScrollBy(drift.toFloat())
         }
     }
     // chip tap -> pager follows (the chip's own onClick already changed the selection)
@@ -345,7 +355,6 @@ private fun FeedTab(
                                     " t=" + System.currentTimeMillis()
                             )
                         }
-                        selectionByPager = true
                         viewModel.selectCategory(cat.id)
                     }
                 }
@@ -407,7 +416,6 @@ private fun FeedTab(
                     onClick = {
                         if (state.selectedCategory != cat.id) {
                             haptics.tick()
-                            selectionByPager = false
                             viewModel.selectCategory(cat.id)
                         }
                     },
@@ -859,15 +867,6 @@ private fun FollowedMineTab(
 
 /** Height reserved for the category chip row (a FilterChip plus its padding). */
 private val CategoryRowHeight = 48.dp
-
-/**
- * 停稳时最多纠正多少像素的居中偏差。
- *
- * 选定分类让 `FilterChip` 的勾选图标入场后 chip 会变宽 ~16px，居中点跟着漂，这点要向正；
- * 但需要移动几十像素以上的情况（靠左的 chip 物理上无法居中）**一律不纠正** ——
- * 硬拽回去正是用户 2026-10-25 反馈的「滑动时松手闪一下」。
- */
-private const val SETTLE_CORRECTION_LIMIT_PX = 40f
 
 /**
  * Brings [index] to the middle of the viewport.
