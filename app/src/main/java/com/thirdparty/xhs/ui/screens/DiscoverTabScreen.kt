@@ -282,31 +282,30 @@ private fun FeedTab(
         val index = state.categories.indexOfFirst { it.id == state.selectedCategory }
         if (index < 0) return@LaunchedEffect
         delay(120)
-        val li = categoryRowState.layoutInfo
-        val centre = (li.viewportStartOffset + li.viewportEndOffset) / 2
+        // **只在 chip 已经可见时**做一次平滑动画（`animateScrollBy(drift)`）：
+        // 一次动画、没有过冲、靠边时由 LazyRow 自己钳住 = "尽量居中、靠边停"。
+        //
+        // 千万不要用 `animateScrollToItem(index, -centre)` 做这一步 —— 它的 `scrollOffset` 是
+        // "条目**前缘**相对视口起点"，传 -centre 会把 chip 推到屏幕左侧外面，再靠下一段拉回来，
+        // 一冲一回就是用户 2026-10-25 第二次反馈的「又开始闪」。
+        fun driftOf(): Float? {
+            val li = categoryRowState.layoutInfo
+            val info = li.visibleItemsInfo.firstOrNull { it.index == index } ?: return null
+            val centre = (li.viewportStartOffset + li.viewportEndOffset) / 2
+            return ((info.offset + info.size / 2) - centre).toFloat()
+        }
+        var drift = driftOf()
+        if (drift == null) {
+            // chip 不在视野里（用户把行拖远了）：先把它带到视野内。这一步只能是瞬移或另一段动画，
+            // 用不带 offset 的 `animateScrollToItem` 会让它停在左边缘，方向与随后的小幅修正一致，
+            // 不会出现"冲过去再回来"。
+            categoryRowState.animateScrollToItem(index)
+            drift = driftOf()
+        }
         if (com.thirdparty.xhs.BuildConfig.DEBUG) {
-            val info = li.visibleItemsInfo.firstOrNull { it.index == index }
-            android.util.Log.i(
-                "XhsDiscover",
-                "chipRow settle→center idx=" + index + " drift=" +
-                    (info?.let { (it.offset + it.size / 2) - centre } ?: 0)
-            )
+            android.util.Log.i("XhsDiscover", "chipRow settle idx=" + index + " drift=" + drift)
         }
-        // 第一段：动画滚到该 chip 附近（`animateScrollToItem` 的 scrollOffset 是"条目**起点**相对
-        // 视口起点"，所以这只是粗定位；靠边时它自己会钳在边缘）。
-        categoryRowState.animateScrollToItem(index, -centre)
-        // 第二段：按布局实测的中心偏差再补一次，落到**精确**正中（同样靠边就停）。
-        // 两段都在同一个协程里顺序执行，不会被别的滚动操作打断。
-        val li2 = categoryRowState.layoutInfo
-        val info = li2.visibleItemsInfo.firstOrNull { it.index == index }
-        if (info != null) {
-            val c2 = (li2.viewportStartOffset + li2.viewportEndOffset) / 2
-            val drift = (info.offset + info.size / 2) - c2
-            if (com.thirdparty.xhs.BuildConfig.DEBUG) {
-                android.util.Log.i("XhsDiscover", "chipRow refine drift=" + drift)
-            }
-            if (drift != 0) categoryRowState.animateScrollBy(drift.toFloat())
-        }
+        if (drift != null && drift != 0f) categoryRowState.animateScrollBy(drift)
     }
     // chip tap -> pager follows (the chip's own onClick already changed the selection)
     LaunchedEffect(categoryIndex, state.categories.size) {
