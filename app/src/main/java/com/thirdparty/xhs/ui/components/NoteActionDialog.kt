@@ -10,8 +10,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Checklist
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.PlaylistRemove
 import androidx.compose.material3.AlertDialog
@@ -61,7 +61,8 @@ fun NoteActionDialog(
         text = {
             Column {
                 ActionRow(
-                    icon = if (saved) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                    // 收藏用**书签**：点赞是 ♥、平台收藏数是 ⭐，三者不能混（用户 2026-10-25 反馈）
+            icon = if (saved) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
                     label = if (saved) "取消收藏" else "收藏"
                 ) {
                     if (saved) haptics.reject() else haptics.confirm()

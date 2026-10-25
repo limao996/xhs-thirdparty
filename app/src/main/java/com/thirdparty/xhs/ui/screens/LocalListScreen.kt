@@ -24,7 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
@@ -149,9 +149,9 @@ fun LocalListScreen(
                     title = if (mode == LocalListViewModel.Mode.SAVED) "还没有收藏" else "还没有浏览记录",
                     modifier = Modifier.fillMaxSize(),
                     description = if (mode == LocalListViewModel.Mode.SAVED)
-                        "在详情页点击右上角的心形即可收藏；长按可批量取消"
+                        "在详情页右上角点书签图标即可收藏；长按可批量取消"
                     else "看过的内容会自动出现在这里",
-                    icon = if (mode == LocalListViewModel.Mode.SAVED) Icons.Filled.FavoriteBorder
+                    icon = if (mode == LocalListViewModel.Mode.SAVED) Icons.Filled.BookmarkBorder
                     else Icons.Filled.History
                 )
 

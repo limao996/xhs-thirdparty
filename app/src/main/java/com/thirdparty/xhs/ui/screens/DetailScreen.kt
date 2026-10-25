@@ -21,8 +21,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.MoreVert
@@ -413,7 +414,8 @@ fun DetailScreen(
                             }
                         }) {
                             Icon(
-                                if (state.saved) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                                // 本地收藏用书签（点赞 ♥ / 收藏数 ⭐ 各用各的图标）
+                                if (state.saved) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
                                 if (state.saved) "取消收藏" else "收藏",
                                 tint = if (state.saved) MaterialTheme.colorScheme.primary
                                 else MaterialTheme.colorScheme.onSurfaceVariant
