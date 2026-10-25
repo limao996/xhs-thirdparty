@@ -631,6 +631,46 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 
 
+### 阶段八十 · 分类标签栏跟随滑动进度平移（2026-10-25，用户要求）
+
+用户：「标签栏动画应该跟随滑窗进度」—— 即 chip 行要**跟手连续平移**，而不是翻页点跳一下、
+也不是事后才 animate 过去。
+
+**做法**（`DiscoverTabScreen`）：
+
+- 取 pager 的**连续位置** `pos = currentPage + currentPageOffsetFraction`（`currentPage` 是最近的页，
+  这个值单调、翻页时不会跳），拆成 `base = floor(pos)` 与 `frac = pos - base`；
+- `base` 变化时（= pager 正好压在某一页，此时 `frac ≈ 0`）用 `scrollToItemCentered(base)`
+  把行**绝对定位**到该 chip 居中；
+- `base` 不变时，按 `adjacentCentreDistance(base) × frac` 与"已补上的量"的差
+  `dispatchRawDelta` 一帧一帧地补 —— 于是行是**逐帧跟随**的，松手时 `frac → 0`，行自然落回居中；
+- `adjacentCentreDistance` 只用**相邻两枚 chip 的宽度与间距**估算中心距离（`LazyRow` 给不出屏幕外条目的
+  绝对位置，只能这样）；任一枚没被布局就返回 null、这一段不跟随（宁可不动，也别按错比例乱滑）；
+- `selectedCategory` 进 `LaunchedEffect` 的 key：选中会让 `FilterChip` 的勾选图标动画入场、宽度变宽，
+  居中位置随之偏移（约 16px，肉眼可见），需要重新对齐一次；
+- **删除**了 `animateScrollToItemCentered`（它先等两帧、再 `animateScrollBy` 几百毫秒，
+  正是"标签栏慢半拍"的来源，且已被进度跟随完全取代）。
+
+**证据（模拟器 API 34；DEBUG 日志 `adb logcat -s XhsDiscover`）**
+
+1) 1200ms 慢拖，`chipRow follow` 连续输出（摘录）：
+```
+chipRow follow base=0 frac=0.5  step=169.0 delta=84.8
+chipRow follow base=0 frac=0.75 step=169.0 delta=9.5
+chipRow follow base=0 frac=0.92 step=169.0 delta=3.6
+chipRow follow base=0 frac=0.97 step=169.0 delta=1.6
+chipRow follow base=0 frac=1.0  step=169.0 delta=0.2
+```
+→ `frac` 单调递增、每帧都有位移 = 行在跟着滑窗进度走 ✓
+
+2) 点中间 chip「国产」，停稳后各 chip 中心：`cx=56 / 202 / 371 / 540(选中) / 709 / 906 / 1052`
+→ 选中项正好在屏幕正中（540）✓
+
+3) 截图：`国产` 居中，两侧分别是 `推荐/最新/原创` 与 `吃瓜/SM调教`。
+
+**测试**：76 例全绿；lint 10 项均既有告警（本次 0 新增）。
+
+
 ### 阶段七十九 · 修「发现页滑动切换有延迟、标签栏也慢半拍」（2026-10-25，用户反馈）
 
 用户：「发现页发现 tab 滑动切换标签总是有延迟，松手之后停一会儿才加载出来，上面的标签栏也有延迟」

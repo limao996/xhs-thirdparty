@@ -868,3 +868,9 @@ CPU 打满。此时前台服务只保证进程不被杀，**不保证 CPU 不休
 - 取证方式：DEBUG 日志带 `scrolling=` / `current=` / `target=` + `System.currentTimeMillis()`，
   再与 `adb shell date +%s%3N` 对齐，能直接算出"选择发生在手指抬起前还是后"。
   （注意：PowerShell 里别把 `$matches` 和后续 `-match` 混用，会把时间戳算成天文数字。）
+- **让标签行跟手（2026-10-25 用户要的最终形态）**：用 pager 的连续位置
+  `currentPage + currentPageOffsetFraction` 拆成 `base + frac`；`base` 变时把 LazyRow
+  `scrollToItem(index, -viewportCentre)` 绝对定位，`base` 不变时按
+  "相邻两项中心距离 × frac" 的**增量** `dispatchRawDelta`。`LazyRow` 给不出屏幕外条目的绝对位置，
+  所以中心距离只能用**相邻两项的宽度与间距**估算（拿不到就跳过这一段，别按错比例乱滑）。
+  不要用 `animateScrollToItem` / `animateScrollBy` 做这件事：它们先等布局稳定再动，天然慢半拍。

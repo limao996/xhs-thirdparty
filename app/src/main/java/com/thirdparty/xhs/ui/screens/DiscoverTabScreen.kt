@@ -214,28 +214,51 @@ private fun FeedTab(
     // Guards the two-way sync: while WE are the ones moving the pager (a chip tap), the
     // page changes the animation produces must not be fed back as "the user swiped".
     val syncingToChip = remember { androidx.compose.runtime.mutableStateOf(false) }
-    // 这次选中是"点 chip"还是"滑动 pager"驱动的？
-    // 点击 → chip 行用动画跟过去（是用户主动的一次选择）；
-    // 滑动 → 立刻对齐（动画会让行"慢半拍追上去"，正是用户 2026-10-25 反馈的"标签栏也有延迟"）。
-    var selectionByPager by remember { mutableStateOf(true) }
-    LaunchedEffect(state.selectedCategory, state.categories) {
-        val index = state.categories.indexOfFirst { it.id == state.selectedCategory }
-        if (index >= 0) {
-            if (com.thirdparty.xhs.BuildConfig.DEBUG) {
-                android.util.Log.i(
-                    "XhsDiscover",
-                    "chipRow center idx=" + index + " byPager=" + selectionByPager +
-                        " t=" + System.currentTimeMillis()
-                )
+    // chip 行的可见位置**跟随 pager 的滑动进度**（用户 2026-10-25：「标签栏动画应该跟随滑窗进度」）。
+    //
+    // 做法：取 pager 的连续位置 `currentPage + currentPageOffsetFraction`（`currentPage` 是**最近的**页，
+    // 所以这个值单调、在翻页时不会跳），拆成整数 base + 小数 frac：
+    // - base 变了（= pager 正好压到某一页，此时 frac≈0）→ 把行**绝对定位**到该 chip 居中；
+    // - base 不变 → 按"相邻两枚 chip 中心的距离 × frac"补一段连续位移（`dispatchRawDelta`）。
+    // 于是拖动过程中行是**连续平移**的，不是翻页点跳一下；松手时 frac→0，行自然落回居中位置。
+    //
+    // `selectedCategory` 进 key 是为了让选中态变化后重新对齐一次：选中会让 FilterChip 的勾选图标
+    // 动画入场、宽度变大，居中位置随之偏移（差 16px 左右，肉眼可见）。
+    LaunchedEffect(pagerState, categoryRowState, state.selectedCategory) {
+        var lastBase = -1
+        var appliedExtra = 0f
+        val lastIndex = state.categories.lastIndex
+        snapshotFlow { pagerState.currentPage + pagerState.currentPageOffsetFraction }
+            .distinctUntilChanged()
+            .collect { raw ->
+                if (lastIndex < 0) return@collect
+                val rawBase = kotlin.math.floor(raw).toInt()
+                val base = rawBase.coerceIn(0, lastIndex)
+                val frac = raw - rawBase
+                if (base != lastBase) {
+                    categoryRowState.scrollToItemCentered(base)
+                    lastBase = base
+                    appliedExtra = 0f
+                }
+                val step = categoryRowState.adjacentCentreDistance(base)
+                if (step != null) {
+                    val want = step * frac
+                    val delta = want - appliedExtra
+                    if (delta != 0f) {
+                        categoryRowState.dispatchRawDelta(delta)
+                        appliedExtra = want
+                        if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+                            // 取证用：一次慢拖会连续打出 frac 递增的行，说明行是跟着进度走的。
+                            // adb logcat -s XhsDiscover
+                            android.util.Log.i(
+                                "XhsDiscover",
+                                "chipRow follow base=" + base + " frac=" + (Math.round(frac * 100) / 100f) +
+                                    " step=" + step + " delta=" + (Math.round(delta * 10) / 10f)
+                            )
+                        }
+                    }
+                }
             }
-            if (selectionByPager) {
-                // 滑动驱动：瞬间对齐，不拖动画（否则就是"标签栏慢半拍"）
-                categoryRowState.scrollToItemCentered(index)
-            } else {
-                // 点击驱动：让行滑过去，让用户看清"我选的是这个"
-                categoryRowState.animateScrollToItemCentered(index)
-            }
-        }
     }
     // chip tap -> pager follows (the chip's own onClick already changed the selection)
     LaunchedEffect(categoryIndex, state.categories.size) {
@@ -284,7 +307,6 @@ private fun FeedTab(
                                     " t=" + System.currentTimeMillis()
                             )
                         }
-                        selectionByPager = true
                         viewModel.selectCategory(cat.id)
                     }
                 }
@@ -346,7 +368,6 @@ private fun FeedTab(
                     onClick = {
                         if (state.selectedCategory != cat.id) {
                             haptics.tick()
-                            selectionByPager = false
                             viewModel.selectCategory(cat.id)
                         }
                     },
@@ -817,53 +838,22 @@ private val CategoryRowHeight = 48.dp
  *     width is now watched until it stops changing, and only then does the single
  *     animated correction run.
  */
-private suspend fun androidx.compose.foundation.lazy.LazyListState.animateScrollToItemCentered(
+/**
+ * 相邻两枚 chip 的**中心距离**（像素）：半宽之和 + 两者的间距。
+ *
+ * 用来把 pager 的翻页进度（0..1）换算成 chip 行该平移多少 —— 只需要两枚 chip 的宽度与间距，
+ * 不需要它们的绝对位置（`LazyRow` 也没法给出屏幕外条目的绝对位置）。任一枚没被布局就返回 null，
+ * 调用方跳过这一段的跟随（宁可不动，也不要按错误的比例乱滑）。
+ */
+private fun androidx.compose.foundation.lazy.LazyListState.adjacentCentreDistance(
     index: Int
-) {
-    val start = layoutInfo.viewportStartOffset
-    val end = layoutInfo.viewportEndOffset
-    val viewport = end - start
-    if (viewport <= 0) return
-
-    // The CENTRE of the viewport in the layout's own coordinates — start + (end-start)/2,
-    // not (end-start)/2.
-    //
-    // This row has a 12dp contentPadding, and that makes `viewportStartOffset` NEGATIVE
-    // (and `viewportEndOffset` correspondingly larger). Using (end-start)/2 as the target
-    // therefore aimed 12dp to the right of the real middle, which is exactly the "居中
-    // 并没有对齐" report: every chip settled one content-padding off centre.
-    val viewportCentre = (start + end) / 2
-
-    if (layoutInfo.visibleItemsInfo.none { it.index == index }) {
-        // off screen: land it roughly in the middle without animating through the row
-        scrollToItem(index, -viewportCentre)
-    }
-
-    // wait for the size to settle (the selected chip animates a check icon in, which
-    // makes it wider)
-    var lastSize = -1
-    var stableFrames = 0
-    while (stableFrames < 2) {
-        val size = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }?.size ?: break
-        if (size == lastSize) stableFrames++ else stableFrames = 0
-        lastSize = size
-        withFrameNanos { }
-    }
-
-    val info = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index } ?: return
-    val centre = (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2
-    val delta = (info.offset + info.size / 2) - centre
-    if (delta != 0) animateScrollBy(delta.toFloat())
+): Float? {
+    val a = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index } ?: return null
+    val b = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index + 1 } ?: return null
+    val gap = (b.offset - (a.offset + a.size)).toFloat()
+    return (a.size + b.size) / 2f + gap
 }
 
-/**
- * 同一个居中对齐，但**不做动画**、也不等两帧（用户 2026-10-25 反馈"上面的标签栏也有延迟"）。
- *
- * 为什么要有两条路径：`animateScrollToItemCentered` 会先等 chip 变宽（选中时前面的勾动画），
- * 再 `animateScrollBy` 滑一小段 —— 合计几百毫秒。**点标签**时这段是"行跟着选择走"，值；
- * 但**左右滑动切换**时，用户的手指刚刚翻页，chip 行还要慢慢追上去，看起来就是标签栏慢半拍。
- * 滑动驱动的选中一律瞬间对齐（跟手），动画只留给点击。
- */
 private suspend fun androidx.compose.foundation.lazy.LazyListState.scrollToItemCentered(
     index: Int
 ) {
