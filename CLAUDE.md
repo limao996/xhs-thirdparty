@@ -19,5 +19,6 @@
 13. **`loading`/`checking` 这类显示态只用于渲染**，不能当"要不要发起请求"的判据或重入锁；防重入用独立的私有字段（硬约束 29）。
 14. 下载：状态只以 Room 的 `download_task` 为准（UI 与服务都从库读）；HLS 转 mp4 用 media3 `Transformer`（不要自己驱动 extractor）、转封装不重编码；图片 URL 含 `codstatic` 必须先 `XhsCrypto.zdecrypt` 再存（硬约束 30/31，细节见 [docs/DOWNLOAD.md](docs/DOWNLOAD.md)）。
 15. 设置里的开关必须真的连到行为（同一次改动里实现并实测），不允许只写偏好的空开关（硬约束 32）。
+16. **Release 更新说明**：精简、面向用户、纯文本、≤600 字符（应用内更新弹窗直接显示这段，atom 路径还会截断到 600 字符；不要写 Markdown 与工程术语，硬约束 33）。
 
-完整条目（32 条，另含 5b / 17b 两条细分）见 [AGENTS.md](AGENTS.md) §0。
+完整条目（33 条，另含 5b / 17b 两条细分）见 [AGENTS.md](AGENTS.md) §0。
