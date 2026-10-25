@@ -96,9 +96,9 @@ Get-FileHash $apk -Algorithm MD5                          # 分发时贴这个�
 
 | 项 | 值 |
 | --- | --- |
-| 大小 / md5 | `3,626,205 B`（1.4.0 正式包） |
-| sha256 | `F350B5646B4FFC07EF78461D454D4046A75DFB8252EAD15534E67849076A4BC1` |
-| versionName / versionCode | **`1.4.0`** / `1483501`（已发布：[v1.4.0](https://github.com/limao996/xhs-thirdparty/releases/tag/v1.4.0)；上一版 `1.3.2` / `780868`，更早 `1.3.1` / `568071`、`1.3.0` / `469201`） |
+| 大小 / md5 | `3,626,201 B`（1.4.1 正式包） |
+| sha256 | `1CD3F8B6239C69E86AF6CCAA8FB8580EEA3AEE670595228E278963CEAE257305` |
+| versionName / versionCode | **`1.4.1`** / `2154735`（2026-10-25 已构建并本机实测，**待发布**；上一版 `1.4.0` / `1483501`，更早 `1.3.2` / `780868`、`1.3.1` / `568071`、`1.3.0` / `469201`） |
 | minSdk / targetSdk / compileSdk | `26` / `37` / `37` |
 | 签名 | v2 scheme（v1/v3 未启用），`CN=ThirdParty XHS Client`，RSA 2048 |
 | 权限（合并后） | `INTERNET`、`ACCESS_NETWORK_STATE`、`WAKE_LOCK`、`REQUEST_INSTALL_PACKAGES`（应用内更新用）+ `USE_BIOMETRIC`、`USE_FINGERPRINT`（biometric 库合入）+ `com.thirdparty.xhs.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`（androidx 合入） |
