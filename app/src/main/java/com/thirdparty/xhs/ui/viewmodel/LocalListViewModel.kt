@@ -2,10 +2,11 @@ package com.thirdparty.xhs.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.thirdparty.xhs.data.LocalSortField
+import com.thirdparty.xhs.data.LocalSortOrder
 import com.thirdparty.xhs.data.NoteItem
-import com.thirdparty.xhs.data.SavedSort
 import com.thirdparty.xhs.data.XhsRepository
-import com.thirdparty.xhs.data.applySavedFilter
+import com.thirdparty.xhs.data.applyLocalFilter
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,13 +22,16 @@ data class LocalListUiState(
     /** true while a pull-to-refresh is in flight */
     /** bumped on refresh so the grid scrolls back to the top */
     val refreshTick: Int = 0,
-    /** 收藏页的搜索词：匹配标题与作者名（最近浏览不用它） */
+    /** 搜索词：匹配标题与作者名（收藏 / 最近浏览共用） */
     val query: String = "",
-    /** 收藏页的排序方式，见 [SavedSort] */
-    val sort: SavedSort = SavedSort.SAVED_DESC
+    /** 排序维度，见 [LocalSortField]；默认按时间 */
+    val sortField: LocalSortField = LocalSortField.TIME,
+    /** 排序方向，默认倒序（时间维度 = 新的在前） */
+    val sortOrder: LocalSortOrder = LocalSortOrder.DESC
 ) {
-    /** 过滤 + 排序之后的完整结果（纯函数，见 [applySavedFilter]） */
-    val filtered: List<NoteItem> get() = applySavedFilter(all, query, sort)
+    /** 过滤 + 排序之后的完整结果（纯函数，见 [applyLocalFilter]） */
+    val filtered: List<NoteItem>
+        get() = applyLocalFilter(all, query, sortField, sortOrder)
 
     /** 当前已展开的部分（客户端分页） */
     val visible: List<NoteItem> get() = filtered.take(visibleCount)
@@ -92,6 +96,7 @@ class LocalListViewModel(
             reload()
         }
     }
+
     /** Client-side pagination for the local list. */
     fun loadMore() {
         _ui.update {
@@ -103,7 +108,7 @@ class LocalListViewModel(
     }
 
     /**
-     * 收藏页的搜索词（标题 / 作者名的一部分）。
+     * 搜索词（标题 / 作者名的一部分）。
      *
      * 改词就把已展开的条数收回首页大小、并 bump `refreshTick` —— 后者是瀑布流的 `resetKey`，
      * 这样结果集一变列表就回到顶部，而不是停在原来那一条的滚动位置。
@@ -119,26 +124,27 @@ class LocalListViewModel(
         }
     }
 
-    /** 收藏页的排序方式（最近收藏 / 最早收藏 / 标题），同样会重置滚动位置。 */
-    fun onSortChange(sort: SavedSort) {
+    /** 切换排序维度（时间 / 标题 / 作者 / 点赞量），同样会重置滚动位置。 */
+    fun onSortFieldChange(field: LocalSortField) {
         _ui.update {
-            if (it.sort == sort) it
+            if (it.sortField == field) it
             else it.copy(
-                sort = sort,
+                sortField = field,
                 visibleCount = LocalListUiState.PAGE_SIZE,
                 refreshTick = it.refreshTick + 1
             )
         }
     }
 
-    /** Wipe the underlying local table (收藏 / 最近浏览) and reset the list. */
-    fun clear() {
-        viewModelScope.launch {
-            when (mode) {
-                Mode.SAVED -> repo.clearSaved()
-                Mode.HISTORY -> repo.clearHistory()
-            }
-            _ui.value = LocalListUiState(all = emptyList(), loading = false)
+    /** 切换正序 / 倒序。 */
+    fun onToggleSortOrder() {
+        _ui.update {
+            it.copy(
+                sortOrder = if (it.sortOrder == LocalSortOrder.DESC) LocalSortOrder.ASC
+                else LocalSortOrder.DESC,
+                visibleCount = LocalListUiState.PAGE_SIZE,
+                refreshTick = it.refreshTick + 1
+            )
         }
     }
 }

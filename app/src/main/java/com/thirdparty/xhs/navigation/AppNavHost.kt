@@ -86,7 +86,6 @@ private fun LocalListNav(
     var selected by remember { mutableStateOf(emptySet<Long>()) }
     val selecting = selected.isNotEmpty()
 
-    var confirmClear by remember { mutableStateOf(false) }
     var confirmRemove by remember { mutableStateOf(false) }
     var confirmExit by remember { mutableStateOf(false) }
 
@@ -109,14 +108,9 @@ private fun LocalListNav(
                         IconButton(onClick = haptics.click(onBack)) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回")
                         }
-                    },
-                    actions = {
-                        if (state.all.isNotEmpty()) {
-                            IconButton(onClick = haptics.click { confirmClear = true }) {
-                                Icon(Icons.Filled.DeleteOutline, contentDescription = "清空")
-                            }
-                        }
                     }
+                    // 非多选状态**不放清空按钮**（用户 2026-10-25 要求）：
+                    // 要清理就长按进多选，用多选栏的删除，误触代价小得多。
                 )
             }
         },
@@ -134,23 +128,6 @@ private fun LocalListNav(
                 onSelectionChange = { selected = it }
             )
         }
-    }
-
-    if (confirmClear) {
-        AlertDialog(
-            onDismissRequest = { confirmClear = false },
-            title = { Text("清空$title？") },
-            text = { Text("将删除全部 ${state.all.size} 条记录，此操作不可撤销。") },
-            confirmButton = {
-                TextButton(onClick = haptics.rejectClick {
-                    viewModel.clear()
-                    confirmClear = false
-                }) { Text("清空") }
-            },
-            dismissButton = {
-                TextButton(onClick = haptics.click { confirmClear = false }) { Text("取消") }
-            }
-        )
     }
 
     // Un-favouriting is destructive and has no undo, so it asks first.
