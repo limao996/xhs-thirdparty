@@ -2,6 +2,7 @@
 
 package com.thirdparty.xhs.ui.screens
 
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -213,10 +214,27 @@ private fun FeedTab(
     // Guards the two-way sync: while WE are the ones moving the pager (a chip tap), the
     // page changes the animation produces must not be fed back as "the user swiped".
     val syncingToChip = remember { androidx.compose.runtime.mutableStateOf(false) }
+    // 这次选中是"点 chip"还是"滑动 pager"驱动的？
+    // 点击 → chip 行用动画跟过去（是用户主动的一次选择）；
+    // 滑动 → 立刻对齐（动画会让行"慢半拍追上去"，正是用户 2026-10-25 反馈的"标签栏也有延迟"）。
+    var selectionByPager by remember { mutableStateOf(true) }
     LaunchedEffect(state.selectedCategory, state.categories) {
         val index = state.categories.indexOfFirst { it.id == state.selectedCategory }
         if (index >= 0) {
-            categoryRowState.animateScrollToItemCentered(index)
+            if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+                android.util.Log.i(
+                    "XhsDiscover",
+                    "chipRow center idx=" + index + " byPager=" + selectionByPager +
+                        " t=" + System.currentTimeMillis()
+                )
+            }
+            if (selectionByPager) {
+                // 滑动驱动：瞬间对齐，不拖动画（否则就是"标签栏慢半拍"）
+                categoryRowState.scrollToItemCentered(index)
+            } else {
+                // 点击驱动：让行滑过去，让用户看清"我选的是这个"
+                categoryRowState.animateScrollToItemCentered(index)
+            }
         }
     }
     // chip tap -> pager follows (the chip's own onClick already changed the selection)
@@ -266,6 +284,7 @@ private fun FeedTab(
                                     " t=" + System.currentTimeMillis()
                             )
                         }
+                        selectionByPager = true
                         viewModel.selectCategory(cat.id)
                     }
                 }
@@ -325,8 +344,11 @@ private fun FeedTab(
                 FilterChip(
                     selected = state.selectedCategory == cat.id,
                     onClick = {
-                        if (state.selectedCategory != cat.id) haptics.tick()
-                        viewModel.selectCategory(cat.id)
+                        if (state.selectedCategory != cat.id) {
+                            haptics.tick()
+                            selectionByPager = false
+                            viewModel.selectCategory(cat.id)
+                        }
                     },
                     label = { Text(cat.name) }
                 )
@@ -832,4 +854,34 @@ private suspend fun androidx.compose.foundation.lazy.LazyListState.animateScroll
     val centre = (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2
     val delta = (info.offset + info.size / 2) - centre
     if (delta != 0) animateScrollBy(delta.toFloat())
+}
+
+/**
+ * 同一个居中对齐，但**不做动画**、也不等两帧（用户 2026-10-25 反馈"上面的标签栏也有延迟"）。
+ *
+ * 为什么要有两条路径：`animateScrollToItemCentered` 会先等 chip 变宽（选中时前面的勾动画），
+ * 再 `animateScrollBy` 滑一小段 —— 合计几百毫秒。**点标签**时这段是"行跟着选择走"，值；
+ * 但**左右滑动切换**时，用户的手指刚刚翻页，chip 行还要慢慢追上去，看起来就是标签栏慢半拍。
+ * 滑动驱动的选中一律瞬间对齐（跟手），动画只留给点击。
+ */
+private suspend fun androidx.compose.foundation.lazy.LazyListState.scrollToItemCentered(
+    index: Int
+) {
+    val start = layoutInfo.viewportStartOffset
+    val end = layoutInfo.viewportEndOffset
+    if (end - start <= 0) return
+    val viewportCentre = (start + end) / 2
+    if (layoutInfo.visibleItemsInfo.none { it.index == index }) {
+        scrollToItem(index, -viewportCentre)
+    }
+    val info = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index } ?: return
+    val delta = (info.offset + info.size / 2) - viewportCentre
+    if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+        android.util.Log.i(
+            "XhsDiscover",
+            "snap idx=" + index + " offset=" + info.offset + " size=" + info.size +
+                " centre=" + viewportCentre + " delta=" + delta
+        )
+    }
+    if (delta != 0) scrollBy(delta.toFloat())
 }
