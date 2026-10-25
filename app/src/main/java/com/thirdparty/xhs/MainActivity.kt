@@ -437,6 +437,23 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
     private fun biometricLockEnabled(): Boolean = App.INSTANCE.repository.biometricLock
 
     /**
+     * 应用锁开启时隐藏「最近任务」里的缩略图（用户 2026-10-25 要求）。
+     *
+     * 用 API 33 的 [setRecentsScreenshotEnabled]：它只影响系统最近任务卡片里的那张快照，
+     * **不影响**应用内截图/录屏，也不需要 `FLAG_SECURE`（那个会连带禁掉截图与录屏，超出本次要求，
+     * 还会影响视频画面）。所以：
+     * - API 33+：锁开启 → `setRecentsScreenshotEnabled(false)`，关闭 → 恢复 `true`；
+     * - API 26–32：系统没有这个能力，保持原样（不用 FLAG_SECURE 兜底，理由同上）。
+     *
+     * 调用时机：`onCreate`（冷启动）与用户改开关时（`lockEpoch`），开关立刻生效。
+     */
+    private fun applyRecentsScreenshotPolicy(lockEnabled: Boolean) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            setRecentsScreenshotEnabled(!lockEnabled)
+        }
+    }
+
+    /**
      * Ask for the device credential and report success.
      *
      * Falls through to success when the device cannot authenticate at all: a user
@@ -464,6 +481,8 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
             onUpdateParams = { refreshPipParams() }
         )
         consumeDeepLink(intent)
+        // 应用锁开着时，最近任务卡片里不该露出内容（用户 2026-10-25 要求）
+        applyRecentsScreenshotPolicy(biometricLockEnabled())
         enableEdgeToEdge()
         // Paint the launch window with the colour the user will actually land on,
         // so an in-app 深色/浅色 override does not flash the system default.
@@ -530,6 +549,8 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
                     val lockEpoch by App.INSTANCE.lockEpoch.collectAsStateWithLifecycle()
                     androidx.compose.runtime.LaunchedEffect(lockEpoch) {
                         if (lockEpoch > 0) locked = biometricLockEnabled()
+                        // 最近任务缩略图的隐藏策略也跟着开关走（开关一改立刻生效，不用重启）
+                        applyRecentsScreenshotPolicy(biometricLockEnabled())
                     }
                     // 小窗里只画视频：系统把整个 Activity 缩成小窗，其余 chrome 一律不要。
                     //
