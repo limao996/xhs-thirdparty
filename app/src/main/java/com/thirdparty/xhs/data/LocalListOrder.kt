@@ -52,15 +52,21 @@ fun applyLocalFilter(
         // 已经是"新 → 旧"，正序就是反过来
         return if (order == LocalSortOrder.DESC) filtered else filtered.asReversed()
     }
-    val comparator = when (field) {
-        LocalSortField.TITLE -> compareBy<NoteItem> { it.title.lowercase() }
-        LocalSortField.AUTHOR -> compareBy<NoteItem> { it.userName.lowercase() }
-        LocalSortField.LIKES -> compareBy<NoteItem> { it.likeCount }
-        LocalSortField.TIME -> error("TIME 已在上面单独处理")
+    if (field == LocalSortField.LIKES) {
+        // 点赞量是 Int，比较不产生临时对象
+        return if (order == LocalSortOrder.DESC) filtered.sortedByDescending { it.likeCount }
+        else filtered.sortedBy { it.likeCount }
     }
-    return if (order == LocalSortOrder.ASC) {
-        filtered.sortedWith(comparator)
-    } else {
-        filtered.sortedWith(comparator.reversed())
+    // 标题 / 作者要先转小写再比 —— 每个元素**只算一次** key，别放进比较器里
+    // （`compareBy { it.title.lowercase() }` 会在每次比较时都新建字符串：n log n 次分配，
+    //  收藏/浏览上千条时就是肉眼可见的卡顿；用户 2026-10-25 特别提醒过"数量多了不要卡顿"）。
+    val keySelector: (NoteItem) -> String = when (field) {
+        LocalSortField.TITLE -> { item -> item.title.lowercase() }
+        LocalSortField.AUTHOR -> { item -> item.userName.lowercase() }
+        else -> error("不可达")
     }
+    val keyed = filtered.map { it to keySelector(it) }
+    val sorted = if (order == LocalSortOrder.ASC) keyed.sortedBy { it.second }
+    else keyed.sortedByDescending { it.second }
+    return sorted.map { it.first }
 }

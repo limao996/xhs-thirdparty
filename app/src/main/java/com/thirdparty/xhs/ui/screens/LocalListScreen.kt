@@ -68,7 +68,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
  * 两个页面都带**搜索 + 排序**（用户 2026-10-25 要求）：搜索匹配标题与作者名；
  * 排序维度是时间 / 标题 / 作者 / 点赞量，另有正序 / 倒序切换（逻辑见 `data/LocalListOrder.kt`）。
  *
- * 收藏支持**长按进入多选**批量取消（最近浏览不提供：它没有"取消浏览"的语义）。
+ * 收藏支持**长按进入多选**批量取消；最近浏览同样支持多选，选中的记录会被删掉
+ * （两个页面共用一套多选，动作与文案由宿主页按模式区分）。
  *
  * Selection is HOISTED to the caller (see [selected] / [onSelectionChange]) so the
  * hosting Scaffold can swap its own TopAppBar for a contextual selection bar —
@@ -95,7 +96,9 @@ fun LocalListScreen(
     LaunchedEffect(mode) { viewModel.reload() }
 
     val selecting = selected.isNotEmpty()
-    val canSelect = mode == LocalListViewModel.Mode.SAVED
+    // 两个页面都支持多选（用户 2026-10-25 要求"最近浏览也加一套"）：
+    // 收藏页的长按/多选删除 = 取消收藏；最近浏览的长按/多选删除 = 删掉这几条浏览记录。
+    val canSelect = true
     // 排序维度的选择框（原生 AlertDialog，不用下拉菜单：项目硬约束 16）
     var showSortDialog by remember { mutableStateOf(false) }
 

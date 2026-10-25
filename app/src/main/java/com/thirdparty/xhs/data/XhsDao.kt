@@ -46,6 +46,10 @@ interface HistoryDao {
         @Query("DELETE FROM history WHERE noteId != 0 AND noteId NOT IN (SELECT noteId FROM history ORDER BY viewedAt DESC LIMIT :limit)")
     suspend fun trim(limit: Int)
 
+    /** 多选删除：一次 SQL 删掉选中的几条（逐条删会有 N 次事务）。 */
+    @Query("DELETE FROM history WHERE noteId IN (:ids)")
+    suspend fun removeAll(ids: List<Long>)
+
     @Query("DELETE FROM history")
     suspend fun clearAll()
 }

@@ -89,6 +89,11 @@ private fun LocalListNav(
     var confirmRemove by remember { mutableStateOf(false) }
     var confirmExit by remember { mutableStateOf(false) }
 
+    // 两个页面共用一套多选栏，但动作不同：收藏是"取消收藏"，最近浏览是"删除浏览记录"
+    val savedMode = mode == LocalListViewModel.Mode.SAVED
+    val deleteLabel = if (savedMode) "取消收藏" else "删除记录"
+    val confirmTitle = if (savedMode) "取消收藏？" else "删除浏览记录？"
+
     // 屏幕上自己画的按钮都要有触感（硬约束 19）。这里以前只有一个 `haptics` 都没有。
     val haptics = com.thirdparty.xhs.ui.components.rememberHaptics()
 
@@ -97,9 +102,10 @@ private fun LocalListNav(
             if (selecting) {
                 SelectionTopBar(
                     count = selected.size,
-                    onSelectAll = { selected = state.all.map { it.noteId }.toSet() },
+                    onSelectAll = { selected = state.allIds },
                     onExit = { confirmExit = true },
-                    onDelete = { confirmRemove = true }
+                    onDelete = { confirmRemove = true },
+                    deleteDescription = deleteLabel
                 )
             } else {
                 TopAppBar(
@@ -134,14 +140,19 @@ private fun LocalListNav(
     if (confirmRemove) {
         AlertDialog(
             onDismissRequest = { confirmRemove = false },
-            title = { Text("取消收藏？") },
-            text = { Text("将取消收藏 ${selected.size} 项，此操作不可撤销。") },
+            title = { Text(confirmTitle) },
+            text = {
+                Text(
+                    if (savedMode) "将取消收藏 ${selected.size} 项，此操作不可撤销。"
+                    else "将删除 ${selected.size} 条浏览记录，此操作不可撤销。"
+                )
+            },
             confirmButton = {
                 TextButton(onClick = haptics.rejectClick {
-                    viewModel.removeSaved(selected)
+                    if (savedMode) viewModel.removeSaved(selected) else viewModel.removeHistory(selected)
                     selected = emptySet()
                     confirmRemove = false
-                }) { Text("取消收藏") }
+                }) { Text(deleteLabel) }
             },
             dismissButton = {
                 TextButton(onClick = haptics.click { confirmRemove = false }) { Text("暂不") }
@@ -180,7 +191,9 @@ private fun SelectionTopBar(
     count: Int,
     onSelectAll: () -> Unit,
     onExit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    /** 删除按钮的无障碍描述：收藏页是「取消收藏」，最近浏览是「删除记录」 */
+    deleteDescription: String = "删除"
 ) {
     val haptics = com.thirdparty.xhs.ui.components.rememberHaptics()
     TopAppBar(
@@ -193,7 +206,7 @@ private fun SelectionTopBar(
         actions = {
             TextButton(onClick = haptics.click(onSelectAll)) { Text("全选") }
             IconButton(onClick = haptics.rejectClick(onDelete)) {
-                Icon(Icons.Filled.DeleteOutline, contentDescription = "取消收藏")
+                Icon(Icons.Filled.DeleteOutline, contentDescription = deleteDescription)
             }
         }
     )

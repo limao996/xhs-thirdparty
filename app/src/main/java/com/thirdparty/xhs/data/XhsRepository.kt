@@ -313,6 +313,11 @@ class XhsRepository(context: Context, private val httpClient: OkHttpClient) {
     suspend fun history(): List<NoteItem> =
         withContext(Dispatchers.IO) { historyDao.recent(api.historyLimit).mapNotNull { it.toNoteOrNull() } }
 
+    /** 最近浏览页多选删除：一次事务删掉选中的记录（空集合直接返回，不动库）。 */
+    suspend fun removeHistory(ids: Collection<Long>) = withContext(Dispatchers.IO) {
+        if (ids.isNotEmpty()) historyDao.removeAll(ids.toList())
+    }
+
     /** Wipe all local browsing history. */
     suspend fun clearHistory() = withContext(Dispatchers.IO) { historyDao.clearAll() }
 
