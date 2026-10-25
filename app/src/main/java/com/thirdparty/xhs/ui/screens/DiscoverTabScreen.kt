@@ -214,51 +214,89 @@ private fun FeedTab(
     // Guards the two-way sync: while WE are the ones moving the pager (a chip tap), the
     // page changes the animation produces must not be fed back as "the user swiped".
     val syncingToChip = remember { androidx.compose.runtime.mutableStateOf(false) }
+    // 这次选中是"点 chip"还是"滑动 pager"驱动的？收尾方式不同：
+    // - 滑动：行已经跟着手指停在它该在的位置了，**不要再纠正**（纠正就是"松手闪一下"）；
+    // - 点击：pager 动画会跨好几页，跟随可能因为某些 chip 不在布局里而少走一段，
+    //   所以最后让行平滑滑到居中（`animateScrollBy`，不会有跳变）。
+    var selectionByPager by remember { mutableStateOf(true) }
     // chip 行的可见位置**跟随 pager 的滑动进度**（用户 2026-10-25：「标签栏动画应该跟随滑窗进度」）。
     //
-    // 做法：取 pager 的连续位置 `currentPage + currentPageOffsetFraction`（`currentPage` 是**最近的**页，
-    // 所以这个值单调、在翻页时不会跳），拆成整数 base + 小数 frac：
-    // - base 变了（= pager 正好压到某一页，此时 frac≈0）→ 把行**绝对定位**到该 chip 居中；
-    // - base 不变 → 按"相邻两枚 chip 中心的距离 × frac"补一段连续位移（`dispatchRawDelta`）。
-    // 于是拖动过程中行是**连续平移**的，不是翻页点跳一下；松手时 frac→0，行自然落回居中位置。
+    // 取 pager 的连续位置 `raw = currentPage + currentPageOffsetFraction`（`currentPage` 是**最近的**页，
+    // 所以这个值单调、翻页时不跳），然后**纯增量**地平移 chip 行：
+    //   本帧位移 = 相邻两枚 chip 的中心距离 × 本帧的进度增量
     //
-    // `selectedCategory` 进 key 是为了让选中态变化后重新对齐一次：选中会让 FilterChip 的勾选图标
-    // 动画入场、宽度变大，居中位置随之偏移（差 16px 左右，肉眼可见）。
+    // 为什么必须是"纯增量"而不是"每一帧都对到居中位置"：靠左的几枚 chip **物理上无法居中**
+    // （行已经在最左端）。早先的写法在 `frac→1` 时把行推了一格，停稳后又按"居中"把它拽回去，
+    // 被 LazyRow clamp 到 0 —— 表现为「前几个标签滑动时松手闪一下」（用户 2026-10-25 反馈）。
+    // 纯增量不会自相矛盾：推到哪就停在哪，两端的 clamp 由 LazyRow 自己处理。
+    //
+    // 停稳（frac==0）时只做**小幅**纠正：选中态让 FilterChip 的勾选图标动画入场、chip 变宽约 16px，
+    // 居中点跟着漂一点，需要对齐；但需要移动几十像素以上的情况一律不纠正（那正是"闪一下"的来源）。
+    // 首次进入给 chip 行一个绝对位置（此时没有"上一帧"，挑个 chip 居中不会造成闪烁）。
+    // 必须放在 LaunchedEffect 外面：remember 是 @Composable，不能在协程里调。
+    val chipRowAnchored = remember { androidx.compose.runtime.mutableStateOf(false) }
     LaunchedEffect(pagerState, categoryRowState, state.selectedCategory) {
-        var lastBase = -1
-        var appliedExtra = 0f
+        var lastPos = Float.NaN
         val lastIndex = state.categories.lastIndex
         snapshotFlow { pagerState.currentPage + pagerState.currentPageOffsetFraction }
             .distinctUntilChanged()
             .collect { raw ->
-                if (lastIndex < 0) return@collect
+                if (lastIndex < 0) { lastPos = raw; return@collect }
                 val rawBase = kotlin.math.floor(raw).toInt()
                 val base = rawBase.coerceIn(0, lastIndex)
                 val frac = raw - rawBase
-                if (base != lastBase) {
+                if (!chipRowAnchored.value) {
                     categoryRowState.scrollToItemCentered(base)
-                    lastBase = base
-                    appliedExtra = 0f
+                    chipRowAnchored.value = true
                 }
-                val step = categoryRowState.adjacentCentreDistance(base)
-                if (step != null) {
-                    val want = step * frac
-                    val delta = want - appliedExtra
-                    if (delta != 0f) {
-                        categoryRowState.dispatchRawDelta(delta)
-                        appliedExtra = want
-                        if (com.thirdparty.xhs.BuildConfig.DEBUG) {
-                            // 取证用：一次慢拖会连续打出 frac 递增的行，说明行是跟着进度走的。
-                            // adb logcat -s XhsDiscover
-                            android.util.Log.i(
-                                "XhsDiscover",
-                                "chipRow follow base=" + base + " frac=" + (Math.round(frac * 100) / 100f) +
-                                    " step=" + step + " delta=" + (Math.round(delta * 10) / 10f)
-                            )
+                if (!lastPos.isNaN()) {
+                    val step = categoryRowState.adjacentCentreDistance(base)
+                    if (step != null) {
+                        val delta = step * (raw - lastPos)
+                        if (delta != 0f) {
+                            categoryRowState.dispatchRawDelta(delta)
+                            if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+                                android.util.Log.i(
+                                    "XhsDiscover",
+                                    "chipRow follow base=" + base + " frac=" + (Math.round(frac * 100) / 100f) +
+                                        " delta=" + (Math.round(delta * 10) / 10f)
+                                )
+                            }
                         }
                     }
                 }
+                lastPos = raw
             }
+    }
+
+    // 选中态稳定后做一次**小幅**居中纠正：选中会让 FilterChip 的勾选图标动画入场、chip 变宽
+    // （实测 16~30px），居中点跟着漂。等图标动画结束（150ms）再对齐。
+    //
+    // 超过 SETTLE_CORRECTION_LIMIT_PX 的偏差**一律不动**：靠左的几枚 chip 物理上无法居中
+    // （行已经在最左端，`scrollToItemCentered` 会被 clamp 回去），硬拽就是用户 2026-10-25 反馈的
+    // 「滑动到前几个标签时松手闪一下」。
+    LaunchedEffect(state.selectedCategory, state.categories) {
+        val index = state.categories.indexOfFirst { it.id == state.selectedCategory }
+        if (index < 0) return@LaunchedEffect
+        delay(150)
+        val li = categoryRowState.layoutInfo
+        val info = li.visibleItemsInfo.firstOrNull { it.index == index } ?: return@LaunchedEffect
+        val centre = (li.viewportStartOffset + li.viewportEndOffset) / 2
+        val drift = (info.offset + info.size / 2) - centre
+        if (selectionByPager) {
+            // 滑动来的：行已经跟着手指到位，只对齐小漂移（勾选图标让 chip 变宽那十几像素）
+            if (drift != 0 && kotlin.math.abs(drift) <= SETTLE_CORRECTION_LIMIT_PX) {
+                categoryRowState.dispatchRawDelta(drift.toFloat())
+            } else if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+                android.util.Log.i("XhsDiscover", "chipRow settle skip drift=" + drift + "（滑动驱动，不纠正）")
+            }
+        } else if (drift != 0) {
+            // 点标签来的：平滑补到居中（大位移也走动画，不会有跳变）
+            if (com.thirdparty.xhs.BuildConfig.DEBUG) {
+                android.util.Log.i("XhsDiscover", "chipRow settle animate drift=" + drift + "（点击驱动）")
+            }
+            categoryRowState.animateScrollBy(drift.toFloat())
+        }
     }
     // chip tap -> pager follows (the chip's own onClick already changed the selection)
     LaunchedEffect(categoryIndex, state.categories.size) {
@@ -307,6 +345,7 @@ private fun FeedTab(
                                     " t=" + System.currentTimeMillis()
                             )
                         }
+                        selectionByPager = true
                         viewModel.selectCategory(cat.id)
                     }
                 }
@@ -368,6 +407,7 @@ private fun FeedTab(
                     onClick = {
                         if (state.selectedCategory != cat.id) {
                             haptics.tick()
+                            selectionByPager = false
                             viewModel.selectCategory(cat.id)
                         }
                     },
@@ -819,6 +859,15 @@ private fun FollowedMineTab(
 
 /** Height reserved for the category chip row (a FilterChip plus its padding). */
 private val CategoryRowHeight = 48.dp
+
+/**
+ * 停稳时最多纠正多少像素的居中偏差。
+ *
+ * 选定分类让 `FilterChip` 的勾选图标入场后 chip 会变宽 ~16px，居中点跟着漂，这点要向正；
+ * 但需要移动几十像素以上的情况（靠左的 chip 物理上无法居中）**一律不纠正** ——
+ * 硬拽回去正是用户 2026-10-25 反馈的「滑动时松手闪一下」。
+ */
+private const val SETTLE_CORRECTION_LIMIT_PX = 40f
 
 /**
  * Brings [index] to the middle of the viewport.
