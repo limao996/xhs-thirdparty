@@ -144,4 +144,61 @@ class LocalListOrderTest {
         // 入参顺序不变（界面里的 all 还要用于计数）
         assertEquals(listOf(5L, 4L, 3L), items.map { it.noteId })
     }
+
+    // ---- 我关注的作者（用户 2026-10-25：关注页也加搜索和排序）----------------
+
+    private fun author(id: Int, name: String, signature: String = "") =
+        FollowedEntity(userId = id, userName = name, headImg = "", signature = signature)
+
+    /** DAO 顺序：最近关注在前（followedAt DESC）。 */
+    private val followed = listOf(
+        author(3, "Zebra", "接推广"),
+        author(2, "apple", ""),
+        author(1, "香蕉君", "互关必回"),
+    )
+
+    @Test
+    fun author_time_field_only_reverses() {
+        assertEquals(
+            listOf(3, 2, 1),
+            applyAuthorFilter(followed, "", AuthorSortField.TIME, LocalSortOrder.DESC).map { it.userId }
+        )
+        assertEquals(
+            listOf(1, 2, 3),
+            applyAuthorFilter(followed, "", AuthorSortField.TIME, LocalSortOrder.ASC).map { it.userId }
+        )
+    }
+
+    @Test
+    fun author_name_field_both_directions() {
+        // 香蕉君(U+9999) > apple / Zebra 的码位；apple < Zebra
+        assertEquals(
+            listOf("apple", "Zebra", "香蕉君"),
+            applyAuthorFilter(followed, "", AuthorSortField.NAME, LocalSortOrder.ASC).map { it.userName }
+        )
+        assertEquals(
+            listOf("香蕉君", "Zebra", "apple"),
+            applyAuthorFilter(followed, "", AuthorSortField.NAME, LocalSortOrder.DESC).map { it.userName }
+        )
+    }
+
+    @Test
+    fun author_search_matches_nickname_and_signature() {
+        assertEquals(
+            listOf("Zebra"),
+            applyAuthorFilter(followed, "zebra", AuthorSortField.TIME, LocalSortOrder.DESC).map { it.userName }
+        )
+        // 签名里也能搜到（"互关必回"这类关键词很实用）
+        assertEquals(
+            listOf("香蕉君"),
+            applyAuthorFilter(followed, "互关", AuthorSortField.TIME, LocalSortOrder.DESC).map { it.userName }
+        )
+        assertEquals(
+            listOf("Zebra"),
+            applyAuthorFilter(followed, "  推广  ", AuthorSortField.TIME, LocalSortOrder.DESC).map { it.userName }
+        )
+        assertTrue(applyAuthorFilter(followed, "不存在", AuthorSortField.TIME, LocalSortOrder.DESC).isEmpty())
+        // 不改入参
+        assertEquals(listOf(3, 2, 1), followed.map { it.userId })
+    }
 }

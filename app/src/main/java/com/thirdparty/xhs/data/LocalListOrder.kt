@@ -70,3 +70,42 @@ fun applyLocalFilter(
     else keyed.sortedByDescending { it.second }
     return sorted.map { it.first }
 }
+
+/** 「我关注的作者」的排序维度（用户 2026-10-25：关注页也要搜索和排序）。 */
+enum class AuthorSortField(val label: String) {
+    /** 关注时间：DAO 已按 `followedAt DESC` 返回，正序时整体反转。 */
+    TIME("关注时间"),
+
+    /** 昵称（不区分大小写，中文按码位）。 */
+    NAME("昵称"),
+}
+
+/**
+ * 「我关注的作者」的筛选 + 排序（纯函数，与 [applyLocalFilter] 同一套语义）。
+ *
+ * 搜索匹配**昵称**与**签名**（签名里常写"互关""接推广"这类关键词，找起来比只搜昵称有用）；
+ * 排序只有两个维度：关注时间与昵称。同样不改动入参，昵称比较的 key 只算一次。
+ */
+fun applyAuthorFilter(
+    items: List<FollowedEntity>,
+    query: String,
+    field: AuthorSortField,
+    order: LocalSortOrder
+): List<FollowedEntity> {
+    val q = query.trim()
+    val filtered = if (q.isEmpty()) {
+        items
+    } else {
+        items.filter { item ->
+            item.userName.contains(q, ignoreCase = true) ||
+                item.signature.contains(q, ignoreCase = true)
+        }
+    }
+    if (field == AuthorSortField.TIME) {
+        return if (order == LocalSortOrder.DESC) filtered else filtered.asReversed()
+    }
+    val keyed = filtered.map { it to it.userName.lowercase() }
+    val sorted = if (order == LocalSortOrder.ASC) keyed.sortedBy { it.second }
+    else keyed.sortedByDescending { it.second }
+    return sorted.map { it.first }
+}

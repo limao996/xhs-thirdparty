@@ -54,6 +54,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thirdparty.xhs.data.LocalSortField
 import com.thirdparty.xhs.data.LocalSortOrder
 import com.thirdparty.xhs.ui.components.EmptyState
+import com.thirdparty.xhs.ui.components.ListFilterBar
 import com.thirdparty.xhs.ui.components.XhsWaterfallGrid
 import com.thirdparty.xhs.ui.components.rememberNoteActions
 import com.thirdparty.xhs.ui.components.rememberNoteFlags
@@ -122,90 +123,19 @@ fun LocalListScreen(
             )
         }
 
-        // 搜索 + 排序工具条。原来用 M3 `SearchBar` 时它自带 56dp 高度与内边距，
-        // 和旁边的排序按钮**重心对不齐**（图标看着飘在上面），所以这里换成自绘的紧凑搜索框：
-        // 44dp 圆角面 + 单行输入 + 清除按钮，与右侧两个按钮严格垂直居中。
-        // 一条数据都没有时整条工具条隐藏 —— 搜索/排序空列表没有意义。
+        // 搜索 + 排序工具条：与「我关注的作者」页共用 `ListFilterBar`（一份实现，
+        // 高度/内边距/按钮位置不会两处走偏）。一条数据都没有时整条隐藏 —— 搜索空列表没有意义。
         if (state.all.isNotEmpty()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = Spacing.s, end = Spacing.xs, top = Spacing.xs, bottom = Spacing.xs),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Surface(
-                    modifier = Modifier.weight(1f).height(44.dp),
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxSize().padding(horizontal = Spacing.s),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Filled.Search,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(Modifier.width(Spacing.xs))
-                        Box(Modifier.weight(1f)) {
-                            if (state.query.isEmpty()) {
-                                Text(
-                                    "搜索标题 / 作者",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1
-                                )
-                            }
-                            BasicTextField(
-                                value = state.query,
-                                onValueChange = { viewModel.onQueryChange(it) },
-                                singleLine = true,
-                                textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                    color = MaterialTheme.colorScheme.onSurface
-                                ),
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                        if (state.query.isNotEmpty()) {
-                            IconButton(
-                                onClick = { haptics.tick(); viewModel.onQueryChange("") },
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Icon(
-                                    Icons.Filled.Close,
-                                    contentDescription = "清除搜索",
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-                // 当前排序维度（点开选其它维度）。
-                // 图标的 contentDescription 说明"这是个排序入口"，读屏会念成「排序方式，浏览时间」；
-                // 光靠按钮文字的话，读屏用户不知道点它会发生什么。
-                TextButton(onClick = { haptics.tick(); showSortDialog = true }) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.Sort,
-                        contentDescription = "排序方式",
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(fieldLabel, style = MaterialTheme.typography.labelLarge, maxLines = 1)
-                }
-                // 正序 / 倒序
-                IconButton(onClick = { haptics.tick(); viewModel.onToggleSortOrder() }) {
-                    Icon(
-                        if (state.sortOrder == LocalSortOrder.DESC) Icons.Filled.ArrowDownward
-                        else Icons.Filled.ArrowUpward,
-                        contentDescription = if (state.sortOrder == LocalSortOrder.DESC) "当前倒序，点击改成正序"
-                        else "当前正序，点击改成倒序",
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
+            ListFilterBar(
+                query = state.query,
+                onQueryChange = { viewModel.onQueryChange(it) },
+                placeholder = "搜索标题 / 作者",
+                fieldLabel = fieldLabel,
+                onOpenSort = { showSortDialog = true },
+                order = state.sortOrder,
+                onToggleOrder = { viewModel.onToggleSortOrder() },
+                haptics = haptics
+            )
         }
 
         when {
