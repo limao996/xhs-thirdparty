@@ -358,6 +358,8 @@ private fun AutoHideController(
     // 在控制栏上方提示 5 秒；点横条 → 跳到上次位置，点 ✕ → 关掉。
     var resumeBanner by remember(noteId) { mutableStateOf(false) }
     var resumePositionMs by remember(noteId) { androidx.compose.runtime.mutableLongStateOf(0L) }
+    // 控制栏实测高度（dp）：横条要显示在它**上方**，不是在它里面
+    var barHeightDp by remember(player) { mutableStateOf(0.dp) }
 
     // ── 长按加速（用户 2026-11-09 要求）──────────────────────────────────
     // 按住画面中间 1.5 秒 → 振动 + 1.25x；保持按住向右滑继续加；松手回到 1x。
@@ -365,11 +367,6 @@ private fun AutoHideController(
     var boostSpeed by remember(player) { mutableStateOf<Float?>(null) }
     // 加速前的控制栏可见性：松手要还原，而不是无条件显示/隐藏
     var controlsBeforeBoost by remember(player) { mutableStateOf(false) }
-    // 按下时的横坐标（按"向右滑了多少"换算倍率）与"吞掉下一次点击"标记
-    val boostDownX = remember(player) { androidx.compose.runtime.mutableFloatStateOf(0f) }
-    var suppressNextTap by remember(player) { mutableStateOf(false) }
-    val boostActiveState = androidx.compose.runtime.rememberUpdatedState(boostSpeed != null)
-    val boostSpeedState = androidx.compose.runtime.rememberUpdatedState(boostSpeed)
     val density = LocalDensity.current
     androidx.compose.runtime.LaunchedEffect(visible) { onControlsVisibility(visible) }
     // 播放器控件也给系统触感反馈：它和页面其他按钮是同一层交互
@@ -572,79 +569,16 @@ private fun AutoHideController(
     }
 
     Box(
-        Modifier.fillMaxSize()
-            // 加速期间的横向拖动跟踪：常驻一个**只读** pointerInput（不消费事件，不影响单击/双击/
-            // 缩放），只在 boostSpeed 非空时按"当前 x − 按下时 x"换算倍率。
-            .pointerInput(Unit) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val ev = awaitPointerEvent()
-                        if (boostActiveState.value) {
-                            val ch = ev.changes.firstOrNull()
-                            if (ch != null) {
-                                val cur = boostSpeedState.value
-                                val target = boostedSpeed(ch.position.x - boostDownX.floatValue)
-                                if (target != cur) {
-                                    boostSpeed = target
-                                    haptics.segment()
-                                    if (BuildConfig.DEBUG) {
-                                        android.util.Log.i("XhsBoost", "boost to " + target + "x")
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            .pointerInput(Unit) {
+        Modifier.fillMaxSize().pointerInput(Unit) {
             // pointerInput (not clickable) on purpose: no ripple, and it gives us
             // a double-tap for free. Ripples over video look like artifacts.
             detectTapGestures(
-                // 长按加速（用户 2026-11-09 要求）：按住 1.5 秒进入变速态，并显示中央叠加层。
-                //
-                // 为什么放在 `onPress`：之前用并列的第二个 pointerInput 判长按，同一节点上两个手势
-                // 解析器会互相干扰 —— 实机表现为"按住有时不触发"，所以叠加层根本不出现。
-                // `onPress` 是官方给"按住某时长"用的：`tryAwaitRelease` 超时未返回 = 手指还按着。
-                onPress = { down ->
-                    if (fullscreen) {
-                        val hh = size.height.toFloat()
-                        if (hh > 0f && down.y >= hh * 0.12f && down.y <= hh * 0.80f) {
-                            val released = withTimeoutOrNull(BOOST_HOLD_MS) { tryAwaitRelease() }
-                            if (released == null) {
-                                haptics.longPress()
-                                boostDownX.floatValue = down.x
-                                controlsBeforeBoost = visible
-                                boostSpeed = BOOST_BASE_SPEED
-                                visible = false
-                                // 长按后抬手会被判成一次点击 → 吞掉，免得又弹出控制栏
-                                suppressNextTap = true
-                                if (BuildConfig.DEBUG) {
-                                    android.util.Log.i("XhsBoost", "boost start 1.25x")
-                                }
-                                try {
-                                    awaitRelease()
-                                } finally {
-                                    boostSpeed = null
-                                    speed = DEFAULT_SPEED
-                                    visible = controlsBeforeBoost
-                                    if (BuildConfig.DEBUG) {
-                                        android.util.Log.i("XhsBoost", "boost end -> 1x")
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
                 onTap = {
-                    if (suppressNextTap) {
-                        suppressNextTap = false
-                    } else {
-                        // No timer here: the LaunchedEffect above owns auto-hide and
-                        // restarts with every interaction. A timer started here could
-                        // not be reset by later touches.
-                        visible = !visible
-                        if (visible) interaction++
-                    }
+                    // No timer here: the LaunchedEffect above owns auto-hide and
+                    // restarts with every interaction. A timer started here could
+                    // not be reset by later touches.
+                    visible = !visible
+                    if (visible) interaction++
                 },
                 onDoubleTap = {
                     // 双击暂停/继续：轻点反馈（用户反馈这里没有触感）
@@ -655,6 +589,71 @@ private fun AutoHideController(
                 }
             )
         }
+            // 全屏长按加速：**这条路径在用户设备上验证过可用**（2026-11-09 早先版本留下
+            // `XhsBoost: boost start 1.25x → boost end -> 1x` 日志）。之后改用 `detectTapGestures.onPress`
+            // 反而完全不响应，所以退回这里；同样的判定不要再挪进 tap 检测器。
+            //
+            // 热区：整宽 + 纵向 12%~80%（让开顶栏与底部控制栏）。1.5 秒内移动超过 2 个 touchSlop 就放弃
+            // （那是在拖动/缩放，不是长按）。
+            .then(
+                if (!fullscreen) Modifier else Modifier.pointerInput(player) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val w = size.width.toFloat()
+                        val h = size.height.toFloat()
+                        if (w <= 0f || h <= 0f) return@awaitEachGesture
+                        if (down.position.y < h * 0.12f || down.position.y > h * 0.80f) {
+                            return@awaitEachGesture
+                        }
+                        val held = withTimeoutOrNull(BOOST_HOLD_MS) {
+                            while (true) {
+                                val ev = awaitPointerEvent()
+                                val ch = ev.changes.firstOrNull { it.id == down.id }
+                                    ?: return@withTimeoutOrNull false
+                                if (!ch.pressed) return@withTimeoutOrNull false
+                                if ((ch.position - down.position).getDistance() >
+                                    viewConfiguration.touchSlop * 2f
+                                ) return@withTimeoutOrNull false
+                            }
+                            @Suppress("UNREACHABLE_CODE")
+                            false
+                        } != null
+                        if (!held) return@awaitEachGesture
+                        // 触发：振动 + 默认 1.25x，并收起控制栏只留中央叠加层
+                        haptics.longPress()
+                        boostSpeed = BOOST_BASE_SPEED
+                        controlsBeforeBoost = visible
+                        visible = false
+                        if (BuildConfig.DEBUG) {
+                            android.util.Log.i("XhsBoost", "boost start 1.25x")
+                        }
+                        try {
+                            while (true) {
+                                val ev = awaitPointerEvent()
+                                val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
+                                if (!ch.pressed) break
+                                val target = boostedSpeed(ch.position.x - down.position.x)
+                                if (target != boostSpeed) {
+                                    boostSpeed = target
+                                    haptics.segment()
+                                    if (BuildConfig.DEBUG) {
+                                        android.util.Log.i("XhsBoost", "boost to " + target + "x")
+                                    }
+                                }
+                                ch.consume()
+                            }
+                        } finally {
+                            // 松手回到 1x（用户要求），并恢复进入加速前的控制栏状态
+                            boostSpeed = null
+                            speed = DEFAULT_SPEED
+                            visible = controlsBeforeBoost
+                            if (BuildConfig.DEBUG) {
+                                android.util.Log.i("XhsBoost", "boost end -> 1x")
+                            }
+                        }
+                    }
+                }
+            )
     ) {
         // 长按加速的叠加层（用户 2026-11-09 要求：隐藏控制栏、中间显示倍率与提示）。
         // 放大到显示倍率 + 操作提示，用户按住时一眼就知道发生了什么、松手会怎样。
@@ -836,57 +835,62 @@ private fun AutoHideController(
             val dense = !fullscreen
             val btnSize = if (dense) 40.dp else 48.dp
             val iconSize = if (dense) 20.dp else 24.dp
+            // 「继续观看上次位置」横条：**独立一层**，贴在控制栏上方（用户明确要求：
+            // 不要塞进控制栏里面）。底边距 = 控制栏实测高度，控制栏隐藏时它也不显示。
+            if (resumeBanner) {
+                Row(
+                    Modifier.align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(
+                            start = Spacing.m, end = Spacing.s,
+                            bottom = barHeightDp + Spacing.xs
+                        )
+                        .clip(MaterialTheme.shapes.small)
+                        .background(Scrim.strong)
+                        .clickable {
+                            haptics.confirm()
+                            player.seekTo(resumePositionMs)
+                            position = resumePositionMs.toFloat()
+                            resumeBanner = false
+                            interaction++
+                            if (BuildConfig.DEBUG) {
+                                android.util.Log.i("XhsResume", "tap -> seek " + resumePositionMs)
+                            }
+                        }
+                        .padding(start = Spacing.m, end = Spacing.xs, top = Spacing.xs,
+                            bottom = Spacing.xs),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "继续观看上次位置",
+                        color = Scrim.onMedia,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(
+                        onClick = { haptics.tick(); resumeBanner = false },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.Close,
+                            contentDescription = "关闭",
+                            tint = Scrim.onMedia,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
             Column(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                     // 量一下控制栏的真实高度：全屏时的「恢复」按钮要据此避让，
                     // 否则控制栏一显示就把它压在下面（用户反馈"没避让控制栏"）。
                     .onGloballyPositioned { coords ->
-                        onControlBarHeight(with(density) { coords.size.height.toDp() })
+                        val hDp = with(density) { coords.size.height.toDp() }
+                        barHeightDp = hDp
+                        onControlBarHeight(hDp)
                     }
                     .background(Scrim.strong).padding(vertical = if (dense) 1.dp else Spacing.xs)
             ) {
-                // 上次没看完 → 控制栏上方提示，5 秒后自己消失（用户要求）；
-                // **点它才跳**到上次位置（用户明确要求：不要自动跳）
-                if (resumeBanner) {
-                    Row(
-                        Modifier.fillMaxWidth()
-                            .padding(start = Spacing.s, end = Spacing.xs, top = Spacing.xs)
-                            .clip(MaterialTheme.shapes.small)
-                            .background(Scrim.strong)
-                            .clickable {
-                                haptics.confirm()
-                                player.seekTo(resumePositionMs)
-                                position = resumePositionMs.toFloat()
-                                resumeBanner = false
-                                interaction++
-                                if (BuildConfig.DEBUG) {
-                                    android.util.Log.i(
-                                        "XhsResume", "tap -> seek " + resumePositionMs
-                                    )
-                                }
-                            }
-                            .padding(start = Spacing.m, end = Spacing.xs),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            "继续观看上次位置",
-                            color = Scrim.onMedia,
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.weight(1f)
-                        )
-                        IconButton(
-                            onClick = { haptics.tick(); resumeBanner = false },
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(
-                                Icons.Filled.Close,
-                                contentDescription = "关闭",
-                                tint = Scrim.onMedia,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-                }
                 val fraction = if (duration > 0f) (position / duration).coerceIn(0f, 1f) else 0f
                 // BufferedSlider, not Slider: it draws the already-buffered span as
                 // a third segment, so a stalled stream (buffer ahead of the
