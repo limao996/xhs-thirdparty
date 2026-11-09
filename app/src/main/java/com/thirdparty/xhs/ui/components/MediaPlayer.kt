@@ -354,13 +354,17 @@ private fun AutoHideController(
     val appContext = LocalContext.current.applicationContext
 
     // ── 上次看到哪了（用户 2026-11-09 要求）──────────────────────────────
-    // 进详情页读本地进度：没看完就跳过去继续，并在控制栏上方提示 5 秒。
+    // 进详情页读本地进度，**不自动跳**（用户明确要求：点了横条才跳），
+    // 在控制栏上方提示 5 秒；点横条 → 跳到上次位置，点 ✕ → 关掉。
     var resumeBanner by remember(noteId) { mutableStateOf(false) }
+    var resumePositionMs by remember(noteId) { androidx.compose.runtime.mutableLongStateOf(0L) }
 
     // ── 长按加速（用户 2026-11-09 要求）──────────────────────────────────
     // 按住画面中间 1.5 秒 → 振动 + 1.25x；保持按住向右滑继续加；松手回到 1x。
     // 用独立的 boostSpeed 而不是改 speed：加速是"临时按压态"，松手要精确还原。
     var boostSpeed by remember(player) { mutableStateOf<Float?>(null) }
+    // 加速前的控制栏可见性：松手要还原，而不是无条件显示/隐藏
+    var controlsBeforeBoost by remember(player) { mutableStateOf(false) }
     val density = LocalDensity.current
     androidx.compose.runtime.LaunchedEffect(visible) { onControlsVisibility(visible) }
     // 播放器控件也给系统触感反馈：它和页面其他按钮是同一层交互
@@ -401,18 +405,18 @@ private fun AutoHideController(
     // keep the speed applied（按压加速优先于菜单里选的倍速）
     LaunchedEffect(speed, boostSpeed) { player.setPlaybackSpeed(boostSpeed ?: speed) }
 
-    // 进页面时恢复上次进度。共享播放器（从信息流交接过来的）已经在自己播，不要打断。
+    // 进页面时读上次进度：**只提示，不跳**（用户 2026-11-09 明确要求点了才跳）。
+    // 共享播放器（从信息流交接过来的）已经有自己的位置，直接不提示。
     LaunchedEffect(player, noteId) {
         val id = noteId ?: return@LaunchedEffect
         val saved = com.thirdparty.xhs.data.VideoProgressStore.load(appContext, id) ?: return@LaunchedEffect
         if (player.currentPosition > RESUME_SKIP_MS) return@LaunchedEffect
-        player.seekTo(saved.positionMs)
-        position = saved.positionMs.toFloat()
+        resumePositionMs = saved.positionMs
         resumeBanner = true
-        visible = true
+        visible = true          // 横条挂在控制栏上方，控制栏得先出来
         interaction++
         if (BuildConfig.DEBUG) {
-            android.util.Log.i("XhsResume", "resume note=" + id + " at=" + saved.positionMs)
+            android.util.Log.i("XhsResume", "prompt note=" + id + " at=" + saved.positionMs)
         }
         delay(RESUME_BANNER_MS)
         resumeBanner = false
@@ -595,9 +599,11 @@ private fun AutoHideController(
                         val w = size.width.toFloat()
                         val h = size.height.toFloat()
                         if (w <= 0f || h <= 0f) return@awaitEachGesture
-                        if (down.position.x < w * 0.25f || down.position.x > w * 0.75f ||
-                            down.position.y < h * 0.25f || down.position.y > h * 0.75f
-                        ) return@awaitEachGesture
+                        // 热区：整宽 + 纵向 12%~80%（让开顶栏与底部控制栏）。
+                        // 用户反馈"热区太小"，原来是中间 50%×50%，现在 100%×68%。
+                        if (down.position.y < h * 0.12f || down.position.y > h * 0.80f) {
+                            return@awaitEachGesture
+                        }
                         val held = withTimeoutOrNull(BOOST_HOLD_MS) {
                             while (true) {
                                 val ev = awaitPointerEvent()
@@ -615,8 +621,9 @@ private fun AutoHideController(
                         // 触发：振动 + 默认 1.25x
                         haptics.longPress()
                         boostSpeed = BOOST_BASE_SPEED
-                        visible = true
-                        interaction++
+                        // 进加速态就**收起控制栏**，只留中间的加速叠加层（用户要求）
+                        controlsBeforeBoost = visible
+                        visible = false
                         if (BuildConfig.DEBUG) {
                             android.util.Log.i("XhsBoost", "boost start 1.25x")
                         }
@@ -637,9 +644,10 @@ private fun AutoHideController(
                                 ch.consume()
                             }
                         } finally {
-                            // 松手回到 1x（用户明确要求），并同步底栏显示
+                            // 松手回到 1x（用户明确要求），并恢复进入加速前的控制栏状态
                             boostSpeed = null
                             speed = DEFAULT_SPEED
+                            visible = controlsBeforeBoost
                             if (BuildConfig.DEBUG) {
                                 android.util.Log.i("XhsBoost", "boost end -> 1x")
                             }
@@ -648,6 +656,31 @@ private fun AutoHideController(
                 }
             )
     ) {
+        // 长按加速的叠加层（用户 2026-11-09 要求：隐藏控制栏、中间显示倍率与提示）。
+        // 放大到显示倍率 + 操作提示，用户按住时一眼就知道发生了什么、松手会怎样。
+        val boosting = boostSpeed
+        if (boosting != null) {
+            Column(
+                modifier = Modifier.align(Alignment.Center)
+                    .clip(MaterialTheme.shapes.large)
+                    .background(Scrim.strong)
+                    .padding(horizontal = Spacing.xl, vertical = Spacing.l),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    formatSpeed(boosting) + "x",
+                    color = Scrim.onMedia,
+                    style = MaterialTheme.typography.displaySmall
+                )
+                Spacer(Modifier.height(Spacing.xs))
+                Text(
+                    "向右滑动加速 · 松开恢复 1x",
+                    color = Scrim.onMedia,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+
         // Replay button once the work has finished.
         //
         // The detail player does not loop, so this is the only way back to the
@@ -812,13 +845,26 @@ private fun AutoHideController(
                     }
                     .background(Scrim.strong).padding(vertical = if (dense) 1.dp else Spacing.xs)
             ) {
-                // 上次没看完 → 控制栏上方提示，5 秒后自己消失（用户要求）
+                // 上次没看完 → 控制栏上方提示，5 秒后自己消失（用户要求）；
+                // **点它才跳**到上次位置（用户明确要求：不要自动跳）
                 if (resumeBanner) {
                     Row(
                         Modifier.fillMaxWidth()
                             .padding(start = Spacing.s, end = Spacing.xs, top = Spacing.xs)
                             .clip(MaterialTheme.shapes.small)
                             .background(Scrim.strong)
+                            .clickable {
+                                haptics.confirm()
+                                player.seekTo(resumePositionMs)
+                                position = resumePositionMs.toFloat()
+                                resumeBanner = false
+                                interaction++
+                                if (BuildConfig.DEBUG) {
+                                    android.util.Log.i(
+                                        "XhsResume", "tap -> seek " + resumePositionMs
+                                    )
+                                }
+                            }
                             .padding(start = Spacing.m, end = Spacing.xs),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
