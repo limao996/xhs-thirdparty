@@ -400,18 +400,26 @@ private fun AutoHideController(
     LaunchedEffect(speed) { player.setPlaybackSpeed(speed) }
 
     // 进页面时读上次进度：**只提示，不跳**（用户要求点了才跳）。
-    // 共享播放器（从信息流交接过来的）已经有自己的位置，直接不提示。
+    //
+    // 注意：不能再用"播放器位置是否已经超过 2 秒"当门禁 —— 详情页一进来自动播放，
+    // 等这段逻辑拿到状态时播放器往往已经跑到 10 秒开外，提示会被自己吞掉
+    // （用户 2026-11-09 反馈"没有正常记录进度"就是这个）。改成每个作品**每次进入只判断一次**。
+    var resumeChecked by remember(noteId) { mutableStateOf(false) }
     LaunchedEffect(player, noteId) {
         val id = noteId ?: return@LaunchedEffect
+        if (resumeChecked) return@LaunchedEffect
+        resumeChecked = true
         val saved = com.thirdparty.xhs.data.VideoProgressStore.load(appContext, id)
             ?: return@LaunchedEffect
-        if (player.currentPosition > RESUME_SKIP_MS) return@LaunchedEffect
         resumePositionMs = saved.positionMs
         resumeBanner = true
         visible = true          // 横条挂在控制栏上方，控制栏得先出来
         interaction++
         if (BuildConfig.DEBUG) {
-            android.util.Log.i("XhsResume", "prompt note=" + id + " at=" + saved.positionMs)
+            android.util.Log.i(
+                "XhsResume",
+                "prompt note=" + id + " at=" + saved.positionMs + " now=" + player.currentPosition
+            )
         }
         delay(RESUME_BANNER_MS)
         resumeBanner = false
