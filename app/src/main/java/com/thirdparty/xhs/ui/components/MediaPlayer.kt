@@ -545,8 +545,9 @@ private fun AutoHideController(
     // drag or with the overflow menu open. Hiding `visible` removes the whole
     // control block including the DropdownMenu, so the menu would otherwise close
     // itself under the user's finger.
-    LaunchedEffect(visible, playing, interaction, dragging, menuOpen, waiting) {
-        if (visible && playing && !dragging && !menuOpen && !waiting && !ended) {
+    LaunchedEffect(visible, playing, interaction, dragging, menuOpen, waiting, resumeBanner) {
+        // 提示横条在时不要自动隐藏控制栏：横条挂在控制栏上方，控制栏一收它也跟着消失
+        if (visible && playing && !dragging && !menuOpen && !waiting && !ended && !resumeBanner) {
             delay(AUTO_HIDE_MS)
             visible = false
         }
