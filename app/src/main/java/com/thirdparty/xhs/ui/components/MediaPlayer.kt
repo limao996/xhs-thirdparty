@@ -37,20 +37,18 @@ import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.thirdparty.xhs.ui.theme.Scrim
 import com.thirdparty.xhs.ui.theme.Spacing
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -246,40 +244,12 @@ fun MediaPlayer(
                     }
             )
     ) {
-        // ── 长按加速：原生触摸观察者（2026-11-09 第五版，也是最后一版方案）──────────
-        // 挂在 TextureView 的 setOnTouchListener 上，永远 return false —— 只旁听、不消费，
-        // 所以单击（控制栏）、双击（暂停）、捏合缩放、拖动进度条全部照旧。
-        // Compose 侧的手势实现已全部停用（见下方 AutoHideController 里的空壳）。
-        // ── 长按加速：暂时关闭 ────────────────────────────────────────────
-        // 2026-11-09：连续 5 版实现（Compose awaitEachGesture / detectTapGestures.onPress /
-        // 独立观察者 pointerInput / 原生 View.OnTouchListener）在真机上都会"长按就卡死"，
-        // 而我在模拟器上既没法复现卡死、也没法造出真实长按（adb input motionevent / swipe
-        // 送不进持续按住），等于无法验证。
-        //
-        // 因此先整体关掉这个入口，避免用户付费看视频时踩到冻屏；等能拿到真机的 ANR/卡死堆栈
-        // （adb shell kill -3 <pid> 或 bugreport）再决定怎么实现。
-        // 想重新打开：把 BOOST_ENABLED 改成 true 即可，其余代码（SpeedBoostTouch、叠加层）
-        // 都还在，只是不接线。
-        var boostSpeed by remember(player) { mutableStateOf<Float?>(null) }
-        val boostTouch: android.view.View.OnTouchListener? = if (BOOST_ENABLED) {
-            val boostHaptics = rememberHaptics()
-            remember(player) {
-                SpeedBoostTouch(
-                    isFullscreen = { fullscreen },
-                    onHaptic = { boostHaptics.longPress() },
-                    onBoostSpeed = { boostSpeed = it }
-                )
-            }
-        } else {
-            null
-        }
         // TextureView-backed, not PlayerView: a SurfaceView would not fade with the
         // screen during a navigation transition and the last frame would stay
         // painted over the screen being returned to. See [VideoSurface].
         VideoSurface(
             player = player,
             videoAspect = videoAspect,
-            touchObserver = boostTouch,
             modifier = Modifier.fillMaxSize().graphicsLayer(
                 scaleX = scale,
                 scaleY = scale,
@@ -288,12 +258,12 @@ fun MediaPlayer(
             )
         )
         AutoHideController(
-            player, fullscreen, onToggleFullscreen, controlsHiddenInitially, title, noteId = noteId,
+            player, fullscreen, onToggleFullscreen, controlsHiddenInitially, title,
             topClearance = cutoutTop,
             onEnterPip = onEnterPip,
             onControlsVisibility = { controlsVisible = it },
             onControlBarHeight = { controlBarHeight = it },
-            externalBoostSpeed = boostSpeed
+            noteId = noteId
         )
         // Buffering feedback — but never together with the error panel: the
         // player keeps retrying in BUFFERING while the panel is up, so both
@@ -377,27 +347,18 @@ private fun AutoHideController(
     /** 控制栏实测高度（dp）报给外层，同上 */
     onControlBarHeight: (androidx.compose.ui.unit.Dp) -> Unit = {},
     /** 作品 id：非空则记录/恢复观看进度（见 MediaPlayer 的同名参数） */
-    noteId: Long? = null,
-    /** 长按加速的当前倍速（由外层的原生触摸观察者驱动；非空 = 加速中） */
-    externalBoostSpeed: Float? = null
+    noteId: Long? = null
 ) {
     var visible by remember(player) { mutableStateOf(!startHidden) }
     val appContext = LocalContext.current.applicationContext
 
-    // ── 上次看到哪了（用户 2026-11-09 要求）──────────────────────────────
+    // ── 上次看到哪了（2026-11-09 需求）────────────────────────────────────
     // 进详情页读本地进度，**不自动跳**（用户明确要求：点了横条才跳），
     // 在控制栏上方提示 5 秒；点横条 → 跳到上次位置，点 ✕ → 关掉。
     var resumeBanner by remember(noteId) { mutableStateOf(false) }
     var resumePositionMs by remember(noteId) { androidx.compose.runtime.mutableLongStateOf(0L) }
     // 控制栏实测高度（dp）：横条要显示在它**上方**，不是在它里面
     var barHeightDp by remember(player) { mutableStateOf(0.dp) }
-
-    // ── 长按加速（用户 2026-11-09 要求）──────────────────────────────────
-    // 按住画面中间 1.5 秒 → 振动 + 1.25x；保持按住向右滑继续加；松手回到 1x。
-    // 用独立的 boostSpeed 而不是改 speed：加速是"临时按压态"，松手要精确还原。
-    var boostSpeed by remember(player) { mutableStateOf<Float?>(null) }
-    // 加速前的控制栏可见性：松手要还原，而不是无条件显示/隐藏
-    var controlsBeforeBoost by remember(player) { mutableStateOf(false) }
     val density = LocalDensity.current
     androidx.compose.runtime.LaunchedEffect(visible) { onControlsVisibility(visible) }
     // 播放器控件也给系统触感反馈：它和页面其他按钮是同一层交互
@@ -435,42 +396,15 @@ private fun AutoHideController(
     // 更多菜单：微调步长、倍速都收在这里
     var menuOpen by remember(player) { mutableStateOf(false) }
 
-    // 长按加速：倍速由外层的原生触摸观察者决定（SpeedBoostTouch），这里只做本地镜像 +
-    // 界面反应：进入加速收起控制栏，松手回 1x 并保持隐藏。
-    LaunchedEffect(externalBoostSpeed) {
-        // 加速功能关闭时不接线：否则首次组合就会把控制栏隐藏掉
-        if (!BOOST_ENABLED) return@LaunchedEffect
-        boostSpeed = externalBoostSpeed
-        if (externalBoostSpeed == null) speed = DEFAULT_SPEED
-        visible = false
-        if (BuildConfig.DEBUG) {
-            android.util.Log.i("XhsBoost", "ui boost=" + externalBoostSpeed)
-        }
-    }
+    // keep the speed applied
+    LaunchedEffect(speed) { player.setPlaybackSpeed(speed) }
 
-    // keep the speed applied（按压加速优先于菜单里选的倍速）
-    LaunchedEffect(speed, boostSpeed) { player.setPlaybackSpeed(boostSpeed ?: speed) }
-
-    // 看门狗：手势的"抬手"事件有可能丢失（指针离开窗口、被上层消费），那样会一直卡在加速态，
-    // 表现为"叠加层又冒出来、速度一直不正常"。超过 BOOST_WATCHDOG_MS 就强制退出。
-    LaunchedEffect(boostSpeed) {
-        if (boostSpeed == null) return@LaunchedEffect
-        delay(BOOST_WATCHDOG_MS)
-        if (boostSpeed != null) {
-            boostSpeed = null
-            speed = DEFAULT_SPEED
-            visible = false
-            if (BuildConfig.DEBUG) {
-                android.util.Log.i("XhsBoost", "watchdog -> 1x")
-            }
-        }
-    }
-
-    // 进页面时读上次进度：**只提示，不跳**（用户 2026-11-09 明确要求点了才跳）。
+    // 进页面时读上次进度：**只提示，不跳**（用户要求点了才跳）。
     // 共享播放器（从信息流交接过来的）已经有自己的位置，直接不提示。
     LaunchedEffect(player, noteId) {
         val id = noteId ?: return@LaunchedEffect
-        val saved = com.thirdparty.xhs.data.VideoProgressStore.load(appContext, id) ?: return@LaunchedEffect
+        val saved = com.thirdparty.xhs.data.VideoProgressStore.load(appContext, id)
+            ?: return@LaunchedEffect
         if (player.currentPosition > RESUME_SKIP_MS) return@LaunchedEffect
         resumePositionMs = saved.positionMs
         resumeBanner = true
@@ -483,7 +417,7 @@ private fun AutoHideController(
         resumeBanner = false
     }
 
-    // 播放中每 2 秒落一次进度；离开页面时再落一次（够细，又不至于频繁写盘）
+    // 播放中每 2 秒落一次进度；离开页面时再落一次
     LaunchedEffect(player, noteId) {
         val id = noteId ?: return@LaunchedEffect
         while (true) {
@@ -603,11 +537,8 @@ private fun AutoHideController(
     // drag or with the overflow menu open. Hiding `visible` removes the whole
     // control block including the DropdownMenu, so the menu would otherwise close
     // itself under the user's finger.
-    LaunchedEffect(visible, playing, interaction, dragging, menuOpen, waiting, boostSpeed) {
-        // 长按加速期间不自动隐藏：用户正看着倍速数字，隐藏了就没有反馈了
-        if (visible && playing && !dragging && !menuOpen && !waiting && !ended &&
-            boostSpeed == null
-        ) {
+    LaunchedEffect(visible, playing, interaction, dragging, menuOpen, waiting) {
+        if (visible && playing && !dragging && !menuOpen && !waiting && !ended) {
             delay(AUTO_HIDE_MS)
             visible = false
         }
@@ -648,112 +579,7 @@ private fun AutoHideController(
                 }
             )
         }
-            // 全屏长按加速：**这条路径在用户设备上验证过可用**（2026-11-09 早先版本留下
-            // `XhsBoost: boost start 1.25x → boost end -> 1x` 日志）。之后改用 `detectTapGestures.onPress`
-            // 反而完全不响应，所以退回这里；同样的判定不要再挪进 tap 检测器。
-            //
-            // 热区：整宽 + 纵向 12%~80%（让开顶栏与底部控制栏）。1.5 秒内移动超过 2 个 touchSlop 就放弃
-            // （那是在拖动/缩放，不是长按）。
-            // 【已停用】旧的 Compose 手势长按实现：会和播放器既有的单击/双击/缩放抢事件流，
-            // 是"按住不触发 / 卡在加速态 / 触摸卡死"那一类问题的来源。
-            // 现在改由外层原生监听器 SpeedBoostTouch（挂在 TextureView 上、return false 只旁听）驱动，
-            // 这里保留立即返回的空壳以免大段删除出错；确认新实现稳定后可整段删掉。
-            .then(
-                if (!fullscreen) Modifier else Modifier.pointerInput(player) {
-                    awaitEachGesture {
-                        return@awaitEachGesture
-                        @Suppress("UNREACHABLE_CODE")
-                        val down = awaitFirstDown(requireUnconsumed = false)
-                        val w = size.width.toFloat()
-                        val h = size.height.toFloat()
-                        if (w <= 0f || h <= 0f) return@awaitEachGesture
-                        // 热区：**画面中间 40%×40%**（按播放器实测尺寸的百分比，横屏竖屏都成立）。
-                        // 用户 2026-11-09 反馈"触发热区太大"：之前是整宽 + 纵向 68%。
-                        if (down.position.x < w * 0.30f || down.position.x > w * 0.70f) {
-                            return@awaitEachGesture
-                        }
-                        if (down.position.y < h * 0.30f || down.position.y > h * 0.70f) {
-                            return@awaitEachGesture
-                        }
-                        val held = withTimeoutOrNull(BOOST_HOLD_MS) {
-                            while (true) {
-                                val ev = awaitPointerEvent()
-                                val ch = ev.changes.firstOrNull { it.id == down.id }
-                                    ?: return@withTimeoutOrNull false
-                                if (!ch.pressed) return@withTimeoutOrNull false
-                                if ((ch.position - down.position).getDistance() >
-                                    viewConfiguration.touchSlop * 2f
-                                ) return@withTimeoutOrNull false
-                            }
-                            @Suppress("UNREACHABLE_CODE")
-                            false
-                        } != null
-                        if (!held) return@awaitEachGesture
-                        // 触发：振动 + 默认 1.25x，并收起控制栏只留中央叠加层
-                        haptics.longPress()
-                        boostSpeed = BOOST_BASE_SPEED
-                        controlsBeforeBoost = visible
-                        visible = false
-                        if (BuildConfig.DEBUG) {
-                            android.util.Log.i("XhsBoost", "boost start 1.25x")
-                        }
-                        try {
-                            while (true) {
-                                val ev = awaitPointerEvent()
-                                val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
-                                if (!ch.pressed) break
-                                val target = boostedSpeed(
-                                    (ch.position.x - down.position.x) / w
-                                )
-                                if (target != boostSpeed) {
-                                    boostSpeed = target
-                                    haptics.segment()
-                                    if (BuildConfig.DEBUG) {
-                                        android.util.Log.i("XhsBoost", "boost to " + target + "x")
-                                    }
-                                }
-                                ch.consume()
-                            }
-                        } finally {
-                            // 松手：叠加层彻底消失、速度回 1x，**控制栏也不弹回来**
-                            // （用户 2026-11-09 明确要求「松手就彻底隐藏并恢复速度」）
-                            boostSpeed = null
-                            speed = DEFAULT_SPEED
-                            visible = false
-                            interaction++
-                            if (BuildConfig.DEBUG) {
-                                android.util.Log.i("XhsBoost", "boost end -> 1x")
-                            }
-                        }
-                    }
-                }
-            )
     ) {
-        // 长按加速的叠加层（用户 2026-11-09 要求：隐藏控制栏、中间显示倍率与提示）。
-        // 放大到显示倍率 + 操作提示，用户按住时一眼就知道发生了什么、松手会怎样。
-        val boosting = boostSpeed
-        if (boosting != null) {
-            Column(
-                modifier = Modifier.align(Alignment.Center)
-                    .clip(MaterialTheme.shapes.large)
-                    .background(Scrim.strong)
-                    .padding(horizontal = Spacing.xl, vertical = Spacing.l),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    formatSpeed(boosting) + "x",
-                    color = Scrim.onMedia,
-                    style = MaterialTheme.typography.displaySmall
-                )
-                Spacer(Modifier.height(Spacing.xs))
-                Text(
-                    "向右滑动加速 · 松开恢复 1x",
-                    color = Scrim.onMedia,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-        }
-
         // Replay button once the work has finished.
         //
         // The detail player does not loop, so this is the only way back to the
@@ -909,8 +735,8 @@ private fun AutoHideController(
             val dense = !fullscreen
             val btnSize = if (dense) 40.dp else 48.dp
             val iconSize = if (dense) 20.dp else 24.dp
-            // 「继续观看上次位置」横条：**独立一层**，贴在控制栏上方（用户明确要求：
-            // 不要塞进控制栏里面）。底边距 = 控制栏实测高度，控制栏隐藏时它也不显示。
+            // 「继续观看上次位置」横条：独立一层，贴在控制栏**上方**（用户明确要求：
+            // 不要塞进控制栏里面）。底边距 = 控制栏实测高度。
             if (resumeBanner) {
                 Row(
                     Modifier.align(Alignment.BottomCenter)
@@ -928,11 +754,15 @@ private fun AutoHideController(
                             resumeBanner = false
                             interaction++
                             if (BuildConfig.DEBUG) {
-                                android.util.Log.i("XhsResume", "tap -> seek " + resumePositionMs)
+                                android.util.Log.i(
+                                    "XhsResume", "tap -> seek " + resumePositionMs
+                                )
                             }
                         }
-                        .padding(start = Spacing.m, end = Spacing.xs, top = Spacing.xs,
-                            bottom = Spacing.xs),
+                        .padding(
+                            start = Spacing.m, end = Spacing.xs,
+                            top = Spacing.xs, bottom = Spacing.xs
+                        ),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
@@ -959,9 +789,7 @@ private fun AutoHideController(
                     // 量一下控制栏的真实高度：全屏时的「恢复」按钮要据此避让，
                     // 否则控制栏一显示就把它压在下面（用户反馈"没避让控制栏"）。
                     .onGloballyPositioned { coords ->
-                        val hDp = with(density) { coords.size.height.toDp() }
-                        barHeightDp = hDp
-                        onControlBarHeight(hDp)
+                        onControlBarHeight(with(density) { coords.size.height.toDp() })
                     }
                     .background(Scrim.strong).padding(vertical = if (dense) 1.dp else Spacing.xs)
             ) {
@@ -1026,10 +854,9 @@ private fun AutoHideController(
                         color = Scrim.onMedia, style = MaterialTheme.typography.labelSmall,
                         modifier = Modifier.padding(start = Spacing.xs))
                     Spacer(Modifier.weight(1f))
-                    // 当前倍速直接显示（含长按加速），否则用户在底栏看不出视频被改过速
-                    val shownSpeed = boostSpeed ?: speed
-                    if (shownSpeed != DEFAULT_SPEED) {
-                        Text("${formatSpeed(shownSpeed)}x",
+                    // 当前倍速直接显示，否则用户在底栏看不出视频被改过速
+                    if (speed != DEFAULT_SPEED) {
+                        Text("${formatSpeed(speed)}x",
                             color = MaterialTheme.colorScheme.primary,
                             style = MaterialTheme.typography.labelSmall,
                             modifier = Modifier.padding(end = Spacing.xs))
@@ -1072,36 +899,8 @@ private const val RESUME_BANNER_MS = 5_000L
 /** 播放进度落盘间隔。 */
 private const val PROGRESS_SAVE_MS = 2_000L
 
-/** 播放器当前位置超过这个值就认为"已经在播"，不再用本地进度打断（从信息流交接来的是这种情况）。 */
+/** 播放器当前位置超过这个值就认为"已经在播"，不再提示（从信息流交接来的是这种情况）。 */
 private const val RESUME_SKIP_MS = 2_000L
-
-/**
- * 长按加速的目标倍速（纯函数，带单测）。
- *
- * @param dxFraction 横向位移 ÷ 画面宽度。用**比例**而不是像素：横屏竖屏、不同分辨率表现一致。
- *   起始 [BOOST_BASE_SPEED]，每 [BOOST_STEP_FRACTION] 加 [BOOST_STEP] 一档，上限 [BOOST_MAX_SPEED]；
- *   向左滑只是收回加的那部分，不会低于起点（用户要的是"向右滑动增加"）。
- */
-internal fun boostedSpeed(dxFraction: Float): Float {
-    val steps = (dxFraction / BOOST_STEP_FRACTION).toInt().coerceAtLeast(0)
-    return (BOOST_BASE_SPEED + steps * BOOST_STEP).coerceAtMost(BOOST_MAX_SPEED)
-}
-
-/** 每向右滑过画面宽度的这个比例，加一档（0.1 = 10% 宽度）。 */
-private const val BOOST_STEP_FRACTION = 0.10f
-private const val BOOST_STEP = 0.25f
-private const val BOOST_MAX_SPEED = 3f
-
-/**
- * 长按加速总开关。
- *
- * **保持 false 直到拿到真机卡死栈**：这个功能连续 5 版实现（Compose 三种手势 + 原生 View）
- * 在真机上都是"长按就卡死"，而模拟器无法复现也无法造出真实长按，等于无法验证。
- */
-private const val BOOST_ENABLED = false
-
-/** 加速态最长持续时间（看门狗，防抬手事件丢失后卡住）。 */
-private const val BOOST_WATCHDOG_MS = 15_000L
 
 /** 倍速范围与默认值（拖动条用；步进 0.25 由 `steps = 10` 表达）。 */
 private const val MIN_SPEED = 0.25f

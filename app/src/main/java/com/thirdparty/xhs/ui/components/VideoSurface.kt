@@ -15,7 +15,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.viewinterop.AndroidView
-import android.view.View
 import androidx.media3.common.Player
 
 /**
@@ -45,14 +44,7 @@ fun VideoSurface(
     player: Player?,
     modifier: Modifier = Modifier,
     /** width / height of the video; null means fill the box */
-    videoAspect: Float? = null,
-    /**
-     * 可选的原生触摸观察者（`setOnTouchListener`）。
-     *
-     * 给「长按加速」用：Compose 的 `pointerInput` 会和播放器既有的单击/双击/缩放抢事件流，
-     * 而原生监听器 `return false` 时任何人都不会被打断。这里只挂上去，不参与布局与绘制。
-     */
-    touchObserver: View.OnTouchListener? = null
+    videoAspect: Float? = null
 ) {
     // `update` runs on every recomposition, and re-attaching a surface each time
     // would flicker, so the binding happens once per view via factory and only
@@ -75,16 +67,12 @@ fun VideoSurface(
                         ViewGroup.LayoutParams.MATCH_PARENT
                     )
                     runCatching { player?.setVideoTextureView(this) }
-                    // 长按加速用原生监听器旁听触摸（return false，谁都不受影响）
-                    touchObserver?.let { setOnTouchListener(it) }
                     createdView.set(this)
                 }
             },
             update = { view ->
                 // a no-op unless the player changed since the view was built
                 runCatching { currentPlayer?.setVideoTextureView(view) }
-                // 观察者可能换过实例（重组），这里保持最新
-                touchObserver?.let { view.setOnTouchListener(it) }
             },
             modifier = if (videoAspect != null && videoAspect > 0f) {
                 // NOT `.fillMaxSize().aspectRatio(...)`.
