@@ -407,6 +407,21 @@ private fun AutoHideController(
     // keep the speed applied（按压加速优先于菜单里选的倍速）
     LaunchedEffect(speed, boostSpeed) { player.setPlaybackSpeed(boostSpeed ?: speed) }
 
+    // 看门狗：手势的"抬手"事件有可能丢失（指针离开窗口、被上层消费），那样会一直卡在加速态，
+    // 表现为"叠加层又冒出来、速度一直不正常"。超过 BOOST_WATCHDOG_MS 就强制退出。
+    LaunchedEffect(boostSpeed) {
+        if (boostSpeed == null) return@LaunchedEffect
+        delay(BOOST_WATCHDOG_MS)
+        if (boostSpeed != null) {
+            boostSpeed = null
+            speed = DEFAULT_SPEED
+            visible = false
+            if (BuildConfig.DEBUG) {
+                android.util.Log.i("XhsBoost", "watchdog -> 1x")
+            }
+        }
+    }
+
     // 进页面时读上次进度：**只提示，不跳**（用户 2026-11-09 明确要求点了才跳）。
     // 共享播放器（从信息流交接过来的）已经有自己的位置，直接不提示。
     LaunchedEffect(player, noteId) {
@@ -602,7 +617,12 @@ private fun AutoHideController(
                         val w = size.width.toFloat()
                         val h = size.height.toFloat()
                         if (w <= 0f || h <= 0f) return@awaitEachGesture
-                        if (down.position.y < h * 0.12f || down.position.y > h * 0.80f) {
+                        // 热区：**画面中间 40%×40%**（按播放器实测尺寸的百分比，横屏竖屏都成立）。
+                        // 用户 2026-11-09 反馈"触发热区太大"：之前是整宽 + 纵向 68%。
+                        if (down.position.x < w * 0.30f || down.position.x > w * 0.70f) {
+                            return@awaitEachGesture
+                        }
+                        if (down.position.y < h * 0.30f || down.position.y > h * 0.70f) {
                             return@awaitEachGesture
                         }
                         val held = withTimeoutOrNull(BOOST_HOLD_MS) {
@@ -632,7 +652,9 @@ private fun AutoHideController(
                                 val ev = awaitPointerEvent()
                                 val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
                                 if (!ch.pressed) break
-                                val target = boostedSpeed(ch.position.x - down.position.x)
+                                val target = boostedSpeed(
+                                    (ch.position.x - down.position.x) / w
+                                )
                                 if (target != boostSpeed) {
                                     boostSpeed = target
                                     haptics.segment()
@@ -643,10 +665,12 @@ private fun AutoHideController(
                                 ch.consume()
                             }
                         } finally {
-                            // 松手回到 1x（用户要求），并恢复进入加速前的控制栏状态
+                            // 松手：叠加层彻底消失、速度回 1x，**控制栏也不弹回来**
+                            // （用户 2026-11-09 明确要求「松手就彻底隐藏并恢复速度」）
                             boostSpeed = null
                             speed = DEFAULT_SPEED
-                            visible = controlsBeforeBoost
+                            visible = false
+                            interaction++
                             if (BuildConfig.DEBUG) {
                                 android.util.Log.i("XhsBoost", "boost end -> 1x")
                             }
@@ -1006,17 +1030,22 @@ private const val RESUME_SKIP_MS = 2_000L
  * [BOOST_PX_PER_STEP] 像素加 [BOOST_STEP] 一档，上限 [BOOST_MAX_SPEED]。
  * 向左滑回退、低于起点一律夹到起点（"向右滑动增加"—— 往左只是收回加的那部分）。
  */
-internal fun boostedSpeed(dxPx: Float): Float {
-    val steps = (dxPx / BOOST_PX_PER_STEP).toInt().coerceAtLeast(0)
+internal fun boostedSpeed(dxFraction: Float): Float {
+    // dxFraction = 横向位移 / 画面宽度（按百分比，横竖屏一致）
+    val steps = (dxFraction / BOOST_STEP_FRACTION).toInt().coerceAtLeast(0)
     return (BOOST_BASE_SPEED + steps * BOOST_STEP).coerceAtMost(BOOST_MAX_SPEED)
 }
 
 /** 长按加速：触发时长、起始倍速、每滑多少像素加一档、档距、上限。 */
 private const val BOOST_HOLD_MS = 1_500L
 private const val BOOST_BASE_SPEED = 1.25f
-private const val BOOST_PX_PER_STEP = 120f
+/** 每向右滑过画面宽度的这个比例，加一档（0.1 = 10% 宽度）。 */
+private const val BOOST_STEP_FRACTION = 0.10f
 private const val BOOST_STEP = 0.25f
 private const val BOOST_MAX_SPEED = 3f
+
+/** 加速态最长持续时间（看门狗，防抬手事件丢失后卡住）。 */
+private const val BOOST_WATCHDOG_MS = 15_000L
 
 /** 倍速范围与默认值（拖动条用；步进 0.25 由 `steps = 10` 表达）。 */
 private const val MIN_SPEED = 0.25f
