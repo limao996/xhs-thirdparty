@@ -404,21 +404,6 @@ private fun AutoHideController(
     // 更多菜单：微调步长、倍速都收在这里
     var menuOpen by remember(player) { mutableStateOf(false) }
 
-    // 长按加速：独立的**观察者**手势（SpeedBoostGesture.kt）。它只旁听 `PointerEventPass.Initial`
-    // 上的指针事件、**从不 consume**，所以单击/双击/捏合缩放完全不受影响；
-    // 抬手事件一定能被看到（并另有看门狗兜底），不会卡在加速态。
-    val boostModifier = rememberSpeedBoostModifier(
-        player = player,
-        enabled = fullscreen,
-        haptics = haptics,
-        onBoostChange = { v ->
-            boostSpeed = v
-            // 进入加速 → 收起控制栏只看叠加层；松手 → 倍速回 1x、叠加层消失、控制栏保持隐藏
-            if (v == null) speed = DEFAULT_SPEED
-            visible = false
-        }
-    )
-
     // keep the speed applied（按压加速优先于菜单里选的倍速）
     LaunchedEffect(speed, boostSpeed) { player.setPlaybackSpeed(boostSpeed ?: speed) }
 
@@ -619,14 +604,15 @@ private fun AutoHideController(
                 }
             )
         }
-            // 【已停用】旧的长按实现（参与手势竞争，会互相干扰/卡住），2026-11-09 重写为
-            // SpeedBoostGesture.kt 的观察者实现，并在下面 .then(boostModifier) 挂载。
-            // 这里保留一个立即返回的空壳，只为避免大段删除出错；确认新实现稳定后可以整段删掉。
+            // 全屏长按加速：**这条路径在用户设备上验证过可用**（2026-11-09 早先版本留下
+            // `XhsBoost: boost start 1.25x → boost end -> 1x` 日志）。之后改用 `detectTapGestures.onPress`
+            // 反而完全不响应，所以退回这里；同样的判定不要再挪进 tap 检测器。
+            //
+            // 热区：整宽 + 纵向 12%~80%（让开顶栏与底部控制栏）。1.5 秒内移动超过 2 个 touchSlop 就放弃
+            // （那是在拖动/缩放，不是长按）。
             .then(
                 if (!fullscreen) Modifier else Modifier.pointerInput(player) {
                     awaitEachGesture {
-                        return@awaitEachGesture
-                        @Suppress("UNREACHABLE_CODE")
                         val down = awaitFirstDown(requireUnconsumed = false)
                         val w = size.width.toFloat()
                         val h = size.height.toFloat()
@@ -692,8 +678,6 @@ private fun AutoHideController(
                     }
                 }
             )
-            // 长按加速的观察者手势（只旁听、不消费事件）
-            .then(boostModifier)
     ) {
         // 长按加速的叠加层（用户 2026-11-09 要求：隐藏控制栏、中间显示倍率与提示）。
         // 放大到显示倍率 + 操作提示，用户按住时一眼就知道发生了什么、松手会怎样。
@@ -1042,9 +1026,23 @@ private const val PROGRESS_SAVE_MS = 2_000L
 private const val RESUME_SKIP_MS = 2_000L
 
 /**
- * 长按加速：触发时长、起始倍速、档距、上限都定义在 `SpeedBoostGesture.kt`
- * （连同 `boostedSpeed` 纯函数与手势本体）。这里只留看门狗时长。
+ * 长按加速的目标倍速（纯函数，带单测）：起始 [BOOST_BASE_SPEED]，按住后每向右滑
+ * [BOOST_PX_PER_STEP] 像素加 [BOOST_STEP] 一档，上限 [BOOST_MAX_SPEED]。
+ * 向左滑回退、低于起点一律夹到起点（"向右滑动增加"—— 往左只是收回加的那部分）。
  */
+internal fun boostedSpeed(dxFraction: Float): Float {
+    // dxFraction = 横向位移 / 画面宽度（按百分比，横竖屏一致）
+    val steps = (dxFraction / BOOST_STEP_FRACTION).toInt().coerceAtLeast(0)
+    return (BOOST_BASE_SPEED + steps * BOOST_STEP).coerceAtMost(BOOST_MAX_SPEED)
+}
+
+/** 长按加速：触发时长、起始倍速、每滑多少像素加一档、档距、上限。 */
+private const val BOOST_HOLD_MS = 1_500L
+private const val BOOST_BASE_SPEED = 1.25f
+/** 每向右滑过画面宽度的这个比例，加一档（0.1 = 10% 宽度）。 */
+private const val BOOST_STEP_FRACTION = 0.10f
+private const val BOOST_STEP = 0.25f
+private const val BOOST_MAX_SPEED = 3f
 
 /** 加速态最长持续时间（看门狗，防抬手事件丢失后卡住）。 */
 private const val BOOST_WATCHDOG_MS = 15_000L
