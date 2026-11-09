@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Pause
@@ -37,7 +36,6 @@ import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.WindowInsets
@@ -101,13 +99,10 @@ fun MediaPlayer(
     controlsHiddenInitially: Boolean = false,
     /** shown in the fullscreen top bar */
     title: String = "",
-    /**
-     * 作品 id；非空时这个播放器会记录/恢复观看进度（详情页传，信息流不传）。
-     *
-     * 为什么信息流不传：它是连续滑动的短视频，记进度没有意义；而且信息流会给相邻页
-     * 预载播放器，记进去只会污染数据。
-     */
+    /** 作品 id：非空则记录/提示观看进度（详情页传路由参数，信息流不传） */
     noteId: Long? = null,
+    /** 每次真正回到页面时由调用方递增，触发一次新的"继续观看"判断 */
+    resumeKey: Int = 0,
     /**
      * 「小窗播放」（画中画）入口；为 null 时不显示这一项。
      *
@@ -263,7 +258,8 @@ fun MediaPlayer(
             onEnterPip = onEnterPip,
             onControlsVisibility = { controlsVisible = it },
             onControlBarHeight = { controlBarHeight = it },
-            noteId = noteId
+            noteId = noteId,
+            resumeKey = resumeKey
         )
         // Buffering feedback — but never together with the error panel: the
         // player keeps retrying in BUFFERING while the panel is up, so both
@@ -346,18 +342,13 @@ private fun AutoHideController(
     onControlsVisibility: (Boolean) -> Unit = {},
     /** 控制栏实测高度（dp）报给外层，同上 */
     onControlBarHeight: (androidx.compose.ui.unit.Dp) -> Unit = {},
-    /** 作品 id：非空则记录/恢复观看进度（见 MediaPlayer 的同名参数） */
-    noteId: Long? = null
+    /** 作品 id：非空则记录/提示观看进度（见 MediaPlayer 的同名参数） */
+    noteId: Long? = null,
+    /** 每次真正回到页面时递增（见 MediaPlayer 的同名参数） */
+    resumeKey: Int = 0
 ) {
     var visible by remember(player) { mutableStateOf(!startHidden) }
-    val appContext = LocalContext.current.applicationContext
-
-    // ── 上次看到哪了（2026-11-09 需求）────────────────────────────────────
-    // 进详情页读本地进度，**不自动跳**（用户明确要求：点了横条才跳），
-    // 在控制栏上方提示 5 秒；点横条 → 跳到上次位置，点 ✕ → 关掉。
-    var resumeBanner by remember(noteId) { mutableStateOf(false) }
-    var resumePositionMs by remember(noteId) { androidx.compose.runtime.mutableLongStateOf(0L) }
-    // 控制栏实测高度（dp）：横条要显示在它**上方**，不是在它里面
+    // 控制栏实测高度：横条的底边距靠它，保证显示在控制栏**上方**
     var barHeightDp by remember(player) { mutableStateOf(0.dp) }
     val density = LocalDensity.current
     androidx.compose.runtime.LaunchedEffect(visible) { onControlsVisibility(visible) }
@@ -398,55 +389,6 @@ private fun AutoHideController(
 
     // keep the speed applied
     LaunchedEffect(speed) { player.setPlaybackSpeed(speed) }
-
-    // 进页面时读上次进度：**只提示，不跳**（用户要求点了才跳）。
-    //
-    // 注意：不能再用"播放器位置是否已经超过 2 秒"当门禁 —— 详情页一进来自动播放，
-    // 等这段逻辑拿到状态时播放器往往已经跑到 10 秒开外，提示会被自己吞掉
-    // （用户 2026-11-09 反馈"没有正常记录进度"就是这个）。改成每个作品**每次进入只判断一次**。
-    var resumeChecked by remember(noteId) { mutableStateOf(false) }
-    LaunchedEffect(player, noteId) {
-        val id = noteId ?: return@LaunchedEffect
-        if (resumeChecked) return@LaunchedEffect
-        resumeChecked = true
-        val saved = com.thirdparty.xhs.data.VideoProgressStore.load(appContext, id)
-            ?: return@LaunchedEffect
-        resumePositionMs = saved.positionMs
-        resumeBanner = true
-        visible = true          // 横条挂在控制栏上方，控制栏得先出来
-        interaction++
-        if (BuildConfig.DEBUG) {
-            android.util.Log.i(
-                "XhsResume",
-                "prompt note=" + id + " at=" + saved.positionMs + " now=" + player.currentPosition
-            )
-        }
-        delay(RESUME_BANNER_MS)
-        resumeBanner = false
-    }
-
-    // 播放中每 2 秒落一次进度；离开页面时再落一次
-    LaunchedEffect(player, noteId) {
-        val id = noteId ?: return@LaunchedEffect
-        while (true) {
-            if (player.isPlaying) {
-                com.thirdparty.xhs.data.VideoProgressStore.save(
-                    appContext, id, player.currentPosition, effectiveDurationMs(player)
-                )
-            }
-            delay(PROGRESS_SAVE_MS)
-        }
-    }
-    DisposableEffect(player, noteId) {
-        onDispose {
-            val id = noteId
-            if (id != null) {
-                com.thirdparty.xhs.data.VideoProgressStore.save(
-                    appContext, id, player.currentPosition, effectiveDurationMs(player)
-                )
-            }
-        }
-    }
 
     fun seekBy(deltaMs: Long) {
         val d = player.duration
@@ -545,9 +487,8 @@ private fun AutoHideController(
     // drag or with the overflow menu open. Hiding `visible` removes the whole
     // control block including the DropdownMenu, so the menu would otherwise close
     // itself under the user's finger.
-    LaunchedEffect(visible, playing, interaction, dragging, menuOpen, waiting, resumeBanner) {
-        // 提示横条在时不要自动隐藏控制栏：横条挂在控制栏上方，控制栏一收它也跟着消失
-        if (visible && playing && !dragging && !menuOpen && !waiting && !ended && !resumeBanner) {
+    LaunchedEffect(visible, playing, interaction, dragging, menuOpen, waiting) {
+        if (visible && playing && !dragging && !menuOpen && !waiting && !ended) {
             delay(AUTO_HIDE_MS)
             visible = false
         }
@@ -609,6 +550,15 @@ private fun AutoHideController(
         // was removed: it sat in the middle of the left edge where it was easy to
         // hit by accident, and a locked player with no visible way out reads as a
         // frozen app.
+        // 「继续观看」横条：独立组件，自带记录/判断/显示逻辑（见 ResumePlayback.kt）。
+        // 放在 if (visible) 之外 —— 否则控制栏自动隐藏时横条会跟着消失（踩过）。
+        ResumePlaybackBanner(
+            player = player,
+            noteId = noteId,
+            entryKey = resumeKey,
+            barHeight = barHeightDp
+        )
+
         if (visible) {
             // ── 顶栏: 退出全屏 + 标题 + 更多菜单 ──────────────────────────
             // Everything that is not an everyday action lives in the menu, so the
@@ -744,65 +694,13 @@ private fun AutoHideController(
             val dense = !fullscreen
             val btnSize = if (dense) 40.dp else 48.dp
             val iconSize = if (dense) 20.dp else 24.dp
-            // 「继续观看上次位置」横条：独立一层，贴在控制栏**上方**（用户明确要求：
-            // 不要塞进控制栏里面）。底边距 = 控制栏实测高度。
-            if (resumeBanner) {
-                Row(
-                    Modifier.align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .padding(
-                            start = Spacing.m, end = Spacing.s,
-                            bottom = barHeightDp + Spacing.xs
-                        )
-                        .clip(MaterialTheme.shapes.small)
-                        .background(Scrim.strong)
-                        .clickable {
-                            haptics.confirm()
-                            player.seekTo(resumePositionMs)
-                            position = resumePositionMs.toFloat()
-                            resumeBanner = false
-                            interaction++
-                            if (BuildConfig.DEBUG) {
-                                android.util.Log.i(
-                                    "XhsResume", "tap -> seek " + resumePositionMs
-                                )
-                            }
-                        }
-                        .padding(
-                            start = Spacing.m, end = Spacing.xs,
-                            top = Spacing.xs, bottom = Spacing.xs
-                        ),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        "继续观看上次位置",
-                        color = Scrim.onMedia,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.weight(1f)
-                    )
-                    IconButton(
-                        onClick = { haptics.tick(); resumeBanner = false },
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            Icons.Filled.Close,
-                            contentDescription = "关闭",
-                            tint = Scrim.onMedia,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-            }
             Column(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                     // 量一下控制栏的真实高度：全屏时的「恢复」按钮要据此避让，
                     // 否则控制栏一显示就把它压在下面（用户反馈"没避让控制栏"）。
                     .onGloballyPositioned { coords ->
-                        // 横条要贴在控制栏**上方**：这里把实测高度存下来给它当底边距。
-                        // （之前漏了这行，barHeightDp 恒为 0 → 横条被画到控制栏下面、被遮住。）
-                        val hDp = with(density) { coords.size.height.toDp() }
-                        barHeightDp = hDp
-                        onControlBarHeight(hDp)
+                        barHeightDp = with(density) { coords.size.height.toDp() }
+                        onControlBarHeight(with(density) { coords.size.height.toDp() })
                     }
                     .background(Scrim.strong).padding(vertical = if (dense) 1.dp else Spacing.xs)
             ) {
@@ -905,15 +803,6 @@ private fun PlayerMenuRow(label: String, highlighted: Boolean = false, onClick: 
         )
     }
 }
-
-/** 「继续观看上次位置」横条停留时长（用户要求 5 秒）。 */
-private const val RESUME_BANNER_MS = 5_000L
-
-/** 播放进度落盘间隔。 */
-private const val PROGRESS_SAVE_MS = 2_000L
-
-/** 播放器当前位置超过这个值就认为"已经在播"，不再提示（从信息流交接来的是这种情况）。 */
-private const val RESUME_SKIP_MS = 2_000L
 
 /** 倍速范围与默认值（拖动条用；步进 0.25 由 `steps = 10` 表达）。 */
 private const val MIN_SPEED = 0.25f

@@ -123,6 +123,18 @@ fun DetailScreen(
     )
 ) {
     val state by viewModel.ui.collectAsStateWithLifecycle()
+
+    // 「又进入本页了」的信号：每次 ON_RESUME 递增，播放器据此重新判断要不要提示"继续观看"。
+    // 不能只靠播放器内部状态：返回详情页时这份组合不一定被销毁，布尔标记会一直为 true。
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    var resumeKey by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) resumeKey++
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     var fullscreen by rememberSaveable { mutableStateOf(false) }
     // Hoisted here (not in DetailContent) so the app bar can open the image
     // viewer for image posts — see the 全屏 action below.
@@ -463,6 +475,8 @@ fun DetailScreen(
                 // the composition and only its size changes, so the surface — and the
                 // last frame on it — survives the toggle.
                 DetailContent(
+                    noteId = noteId,
+                    resumeKey = resumeKey,
                     state = state,
                     viewModel = viewModel,
                     onOpenAuthor = onOpenAuthor,
@@ -698,6 +712,10 @@ private fun MenuRow(
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun DetailContent(
+    /** 作品 id（**路由参数**，各入口都一定有值）：进度记录靠它 */
+    noteId: Long? = null,
+    /** 每次真正回到页面时递增 */
+    resumeKey: Int = 0,
     state: com.thirdparty.xhs.ui.viewmodel.DetailUiState,
     viewModel: DetailViewModel,
     onOpenAuthor: (Int) -> Unit,
@@ -808,8 +826,9 @@ private fun DetailContent(
                     externalPlayer = sharedPlayer,
                     fullscreen = fullscreen,
                     title = item?.title.orEmpty(),
-                    // 传作品 id → 播放器会记录/恢复观看进度（用户 2026-11-09 要求）
-                    noteId = item?.noteId,
+                    // 路由参数：从列表/推荐流进来时 item 可能还没加载完，item?.noteId 会是 null
+                    noteId = noteId,
+                    resumeKey = resumeKey,
                     // without this the in-player fullscreen button is inert:
                     // MediaPlayer defaults the callback to a no-op
                     onToggleFullscreen = onToggleFullscreen,
