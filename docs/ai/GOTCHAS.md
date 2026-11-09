@@ -854,6 +854,19 @@ CPU 打满。此时前台服务只保证进程不被杀，**不保证 CPU 不休
   2. 删之前把"要删哪一条"的 **noteId** 从库里查出来记着，别靠屏幕位置猜；
   3. 删完立刻用同一个 noteId 深链回去复原（本项目"打开作品就记浏览"），并核对总数回到原值。
 
+**J5 · `setWakeMode` 不等于"不息屏"；多个播放器会互相清 `keepScreenOn`**
+
+- `ExoPlayer.setWakeMode(C.WAKE_MODE_LOCAL)` 只保住 **CPU 与网络**，屏幕照样按系统超时熄灭 ——
+  要"看视频不息屏"必须另外给窗口加 `KEEP_SCREEN_ON`（Compose 里最省事的是 `LocalView.current.keepScreenOn = true`，
+  随组合自动还原）。2026-11-09 用户报「有视频播放器的界面不要息屏」时，项目里一条 `keepScreenOn` 都没有。
+- **信息流那种"相邻页预载播放器"的页面**：只能给**当前页**设常亮，相邻页必须传 false（或干脆不调用）。
+  否则暂停的邻页 `onDispose`/重组时会把标志写成 false，和正在播的那页互相覆盖，表现为"有时候亮有时候不亮"。
+- **画中画**：小窗时导航内容不参与组合（硬约束 17），播放器那边的 `keepScreenOn` 不在场 →
+  要在 Activity 上按 `pipActive` 加/清 `FLAG_KEEP_SCREEN_ON`。
+- 取证方式：`adb shell dumpsys window windows | grep -A30 <包名> | grep KEEP_SCREEN_ON`
+  配合把 `settings put system screen_off_timeout` 调到 15 秒，等 30 秒看 `dumpsys power` 的 `mWakefulness`。
+  用完记得复原超时设置。
+
 **J4 · 「选中」是发请求的触发点时，别把选中绑在滚动停稳上**
 
 - 触发：用户报「发现页滑动切换有延迟，松手之后停一会儿才加载出来，上面的标签栏也慢半拍」。

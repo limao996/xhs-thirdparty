@@ -244,6 +244,9 @@ private fun VideoPage(
     // derive "paused" from the player itself, not from the last double-tap, so an
     // externally caused pause (audio focus loss, codec stall) is reflected too
     val playing = rememberIsPlaying(player)
+    // 正在播的这一页保持屏幕常亮；相邻预载页（暂停/缓冲）传 active=false，
+    // 否则它们会把标志清掉，和当前页互相覆盖
+    com.thirdparty.xhs.ui.components.KeepScreenOnWhilePlaying(player, active)
     val paused = active && player != null && !playing &&
         player.playbackState == Player.STATE_READY
     var decoderStuck by remember(player) { mutableStateOf(false) }

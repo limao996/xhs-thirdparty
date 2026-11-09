@@ -518,6 +518,16 @@ open class MainActivity : androidx.fragment.app.FragmentActivity() {
                             .collectAsStateWithLifecycle()
                     // Activity 层面的对话框（剪贴板回流 / 更新提示）也要有触感（硬约束 19）
                     val haptics = com.thirdparty.xhs.ui.components.rememberHaptics()
+                    // 小窗播放期间同样保持屏幕常亮（用户 2026-11-09：「有视频播放器的界面不要息屏！」）。
+                    // 小窗时导航内容不参与组合（硬约束 17），MediaPlayer 里的 keepScreenOn 不在场，
+                    // 所以这里直接给窗口加 KEEP_SCREEN_ON。
+                    androidx.compose.runtime.LaunchedEffect(pipActive) {
+                        if (pipActive) {
+                            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        } else {
+                            window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        }
+                    }
                     androidx.compose.runtime.DisposableEffect(owner) {
                         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
                             if (com.thirdparty.xhs.BuildConfig.DEBUG &&

@@ -38,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -523,6 +524,29 @@ fun VideoProgress(
  * only, so an externally caused pause (another app taking audio focus, a codec
  * stall) left the UI claiming the video was running.
  */
+/**
+ * 播放期间保持屏幕常亮（用户 2026-11-09：「有视频播放器的界面不要息屏！」）。
+ *
+ * 播放器上的 `setWakeMode(C.WAKE_MODE_LOCAL)` **只保住 CPU 与网络**，屏幕照样按系统超时熄灭 ——
+ * 看视频看到一半黑屏，用户会以为卡住了。这里改的是 Window 的 `KEEP_SCREEN_ON`：Compose 里最省事的
+ * 写法是给宿主 View 设 `keepScreenOn`（会带到所在窗口），随组合自动还原。
+ *
+ * 只在**真正播放中**才常亮：暂停时立刻撤销，否则放着不播也一直亮屏，是纯粹费电。
+ *
+ * @param active 这个播放器是不是"当前可见的那个"。信息流会为相邻页预留播放器（缓冲/暂停），
+ *   它们必须传 false —— 否则暂停的邻页会把标志清掉，和正在播的那页互相覆盖（后写的赢）。
+ */
+@Composable
+fun KeepScreenOnWhilePlaying(player: Player?, active: Boolean = true) {
+    val playing = rememberIsPlaying(player)
+    val view = LocalView.current
+    DisposableEffect(view, playing, active) {
+        val previous = view.keepScreenOn
+        view.keepScreenOn = active && playing
+        onDispose { view.keepScreenOn = previous }
+    }
+}
+
 @Composable
 fun rememberIsPlaying(player: Player?): Boolean {
     var playing by remember(player) { mutableStateOf(player?.isPlaying == true) }

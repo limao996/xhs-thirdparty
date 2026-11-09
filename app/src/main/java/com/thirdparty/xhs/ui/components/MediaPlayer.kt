@@ -115,6 +115,8 @@ fun MediaPlayer(
     // rememberSaveable is what carries it across the configuration change.
     var resumeMs by rememberSaveable(url) { androidx.compose.runtime.mutableLongStateOf(0L) }
     val player = externalPlayer ?: remember(url) { buildVideoPlayer(context, url, longForm = true) }
+    // 有视频在播就别让屏幕熄灭（详情页 / 全屏观看都走这里）
+    KeepScreenOnWhilePlaying(player)
 
     // 摄像头挖孔的安全区。这是"避开摄像头"的正牌 API，而且**全屏时依然有效** ——
     // 挖孔不是系统栏，隐藏状态栏不会让它变成 0（statusBars 会变 0，所以不能用它）。
