@@ -365,6 +365,11 @@ private fun AutoHideController(
     var boostSpeed by remember(player) { mutableStateOf<Float?>(null) }
     // 加速前的控制栏可见性：松手要还原，而不是无条件显示/隐藏
     var controlsBeforeBoost by remember(player) { mutableStateOf(false) }
+    // 按下时的横坐标（按"向右滑了多少"换算倍率）与"吞掉下一次点击"标记
+    val boostDownX = remember(player) { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    var suppressNextTap by remember(player) { mutableStateOf(false) }
+    val boostActiveState = androidx.compose.runtime.rememberUpdatedState(boostSpeed != null)
+    val boostSpeedState = androidx.compose.runtime.rememberUpdatedState(boostSpeed)
     val density = LocalDensity.current
     androidx.compose.runtime.LaunchedEffect(visible) { onControlsVisibility(visible) }
     // 播放器控件也给系统触感反馈：它和页面其他按钮是同一层交互
@@ -567,16 +572,79 @@ private fun AutoHideController(
     }
 
     Box(
-        Modifier.fillMaxSize().pointerInput(Unit) {
+        Modifier.fillMaxSize()
+            // 加速期间的横向拖动跟踪：常驻一个**只读** pointerInput（不消费事件，不影响单击/双击/
+            // 缩放），只在 boostSpeed 非空时按"当前 x − 按下时 x"换算倍率。
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val ev = awaitPointerEvent()
+                        if (boostActiveState.value) {
+                            val ch = ev.changes.firstOrNull()
+                            if (ch != null) {
+                                val cur = boostSpeedState.value
+                                val target = boostedSpeed(ch.position.x - boostDownX.floatValue)
+                                if (target != cur) {
+                                    boostSpeed = target
+                                    haptics.segment()
+                                    if (BuildConfig.DEBUG) {
+                                        android.util.Log.i("XhsBoost", "boost to " + target + "x")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .pointerInput(Unit) {
             // pointerInput (not clickable) on purpose: no ripple, and it gives us
             // a double-tap for free. Ripples over video look like artifacts.
             detectTapGestures(
+                // 长按加速（用户 2026-11-09 要求）：按住 1.5 秒进入变速态，并显示中央叠加层。
+                //
+                // 为什么放在 `onPress`：之前用并列的第二个 pointerInput 判长按，同一节点上两个手势
+                // 解析器会互相干扰 —— 实机表现为"按住有时不触发"，所以叠加层根本不出现。
+                // `onPress` 是官方给"按住某时长"用的：`tryAwaitRelease` 超时未返回 = 手指还按着。
+                onPress = { down ->
+                    if (fullscreen) {
+                        val hh = size.height.toFloat()
+                        if (hh > 0f && down.y >= hh * 0.12f && down.y <= hh * 0.80f) {
+                            val released = withTimeoutOrNull(BOOST_HOLD_MS) { tryAwaitRelease() }
+                            if (released == null) {
+                                haptics.longPress()
+                                boostDownX.floatValue = down.x
+                                controlsBeforeBoost = visible
+                                boostSpeed = BOOST_BASE_SPEED
+                                visible = false
+                                // 长按后抬手会被判成一次点击 → 吞掉，免得又弹出控制栏
+                                suppressNextTap = true
+                                if (BuildConfig.DEBUG) {
+                                    android.util.Log.i("XhsBoost", "boost start 1.25x")
+                                }
+                                try {
+                                    awaitRelease()
+                                } finally {
+                                    boostSpeed = null
+                                    speed = DEFAULT_SPEED
+                                    visible = controlsBeforeBoost
+                                    if (BuildConfig.DEBUG) {
+                                        android.util.Log.i("XhsBoost", "boost end -> 1x")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
                 onTap = {
-                    // No timer here: the LaunchedEffect above owns auto-hide and
-                    // restarts with every interaction. A timer started here could
-                    // not be reset by later touches.
-                    visible = !visible
-                    if (visible) interaction++
+                    if (suppressNextTap) {
+                        suppressNextTap = false
+                    } else {
+                        // No timer here: the LaunchedEffect above owns auto-hide and
+                        // restarts with every interaction. A timer started here could
+                        // not be reset by later touches.
+                        visible = !visible
+                        if (visible) interaction++
+                    }
                 },
                 onDoubleTap = {
                     // 双击暂停/继续：轻点反馈（用户反馈这里没有触感）
@@ -587,74 +655,6 @@ private fun AutoHideController(
                 }
             )
         }
-            // 全屏长按加速。为什么自己写 pointerInput：`detectTapGestures(onLongPress=…)`
-            // 固定 500ms 触发、改不了 1.5 秒，而且按住期间还要跟踪横向位移。
-            //
-            // 只在**中间区域**（左右/上下各留 25%）认，避免和底部进度条、两侧边缘手势打架；
-            // 1.5 秒内手指移动超过 2 个 touchSlop 就放弃（那是在拖动/缩放，不是在长按）。
-            .then(
-                if (!fullscreen) Modifier else Modifier.pointerInput(player) {
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false)
-                        val w = size.width.toFloat()
-                        val h = size.height.toFloat()
-                        if (w <= 0f || h <= 0f) return@awaitEachGesture
-                        // 热区：整宽 + 纵向 12%~80%（让开顶栏与底部控制栏）。
-                        // 用户反馈"热区太小"，原来是中间 50%×50%，现在 100%×68%。
-                        if (down.position.y < h * 0.12f || down.position.y > h * 0.80f) {
-                            return@awaitEachGesture
-                        }
-                        val held = withTimeoutOrNull(BOOST_HOLD_MS) {
-                            while (true) {
-                                val ev = awaitPointerEvent()
-                                val ch = ev.changes.firstOrNull { it.id == down.id }
-                                    ?: return@withTimeoutOrNull false
-                                if (!ch.pressed) return@withTimeoutOrNull false
-                                if ((ch.position - down.position).getDistance() >
-                                    viewConfiguration.touchSlop * 2f
-                                ) return@withTimeoutOrNull false
-                            }
-                            @Suppress("UNREACHABLE_CODE")
-                            false
-                        } != null
-                        if (!held) return@awaitEachGesture
-                        // 触发：振动 + 默认 1.25x
-                        haptics.longPress()
-                        boostSpeed = BOOST_BASE_SPEED
-                        // 进加速态就**收起控制栏**，只留中间的加速叠加层（用户要求）
-                        controlsBeforeBoost = visible
-                        visible = false
-                        if (BuildConfig.DEBUG) {
-                            android.util.Log.i("XhsBoost", "boost start 1.25x")
-                        }
-                        try {
-                            while (true) {
-                                val ev = awaitPointerEvent()
-                                val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
-                                if (!ch.pressed) break
-                                val dx = ch.position.x - down.position.x
-                                val target = boostedSpeed(dx)
-                                if (target != boostSpeed) {
-                                    boostSpeed = target
-                                    haptics.segment()
-                                    if (BuildConfig.DEBUG) {
-                                        android.util.Log.i("XhsBoost", "boost to " + target + "x dx=" + dx)
-                                    }
-                                }
-                                ch.consume()
-                            }
-                        } finally {
-                            // 松手回到 1x（用户明确要求），并恢复进入加速前的控制栏状态
-                            boostSpeed = null
-                            speed = DEFAULT_SPEED
-                            visible = controlsBeforeBoost
-                            if (BuildConfig.DEBUG) {
-                                android.util.Log.i("XhsBoost", "boost end -> 1x")
-                            }
-                        }
-                    }
-                }
-            )
     ) {
         // 长按加速的叠加层（用户 2026-11-09 要求：隐藏控制栏、中间显示倍率与提示）。
         // 放大到显示倍率 + 操作提示，用户按住时一眼就知道发生了什么、松手会怎样。
