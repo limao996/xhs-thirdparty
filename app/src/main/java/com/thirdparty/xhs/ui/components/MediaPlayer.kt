@@ -246,12 +246,32 @@ fun MediaPlayer(
                     }
             )
     ) {
+        // ── 长按加速：原生触摸观察者（2026-11-09 第五版，也是最后一版方案）──────────
+        // 挂在 TextureView 的 setOnTouchListener 上，永远 return false —— 只旁听、不消费，
+        // 所以单击（控制栏）、双击（暂停）、捏合缩放、拖动进度条全部照旧。
+        // Compose 侧的手势实现已全部停用（见下方 AutoHideController 里的空壳）。
+        var boostSpeed by remember(player) { mutableStateOf<Float?>(null) }
+        val boostHaptics = rememberHaptics()
+        val boostTouch = remember(player) {
+            SpeedBoostTouch(
+                isFullscreen = { fullscreen },
+                onHaptic = { boostHaptics.longPress() },
+                onBoostSpeed = { boostSpeed = it }
+            )
+        }
+        DisposableEffect(boostTouch) { onDispose { boostTouch.release() } }
+        if (BuildConfig.DEBUG) {
+            LaunchedEffect(boostSpeed) {
+                android.util.Log.i("XhsBoostState", "boostSpeed=" + boostSpeed)
+            }
+        }
         // TextureView-backed, not PlayerView: a SurfaceView would not fade with the
         // screen during a navigation transition and the last frame would stay
         // painted over the screen being returned to. See [VideoSurface].
         VideoSurface(
             player = player,
             videoAspect = videoAspect,
+            touchObserver = boostTouch,
             modifier = Modifier.fillMaxSize().graphicsLayer(
                 scaleX = scale,
                 scaleY = scale,
@@ -264,7 +284,8 @@ fun MediaPlayer(
             topClearance = cutoutTop,
             onEnterPip = onEnterPip,
             onControlsVisibility = { controlsVisible = it },
-            onControlBarHeight = { controlBarHeight = it }
+            onControlBarHeight = { controlBarHeight = it },
+            externalBoostSpeed = boostSpeed
         )
         // Buffering feedback — but never together with the error panel: the
         // player keeps retrying in BUFFERING while the panel is up, so both
@@ -348,7 +369,9 @@ private fun AutoHideController(
     /** 控制栏实测高度（dp）报给外层，同上 */
     onControlBarHeight: (androidx.compose.ui.unit.Dp) -> Unit = {},
     /** 作品 id：非空则记录/恢复观看进度（见 MediaPlayer 的同名参数） */
-    noteId: Long? = null
+    noteId: Long? = null,
+    /** 长按加速的当前倍速（由外层的原生触摸观察者驱动；非空 = 加速中） */
+    externalBoostSpeed: Float? = null
 ) {
     var visible by remember(player) { mutableStateOf(!startHidden) }
     val appContext = LocalContext.current.applicationContext
@@ -403,6 +426,17 @@ private fun AutoHideController(
     var fineStep by remember(player) { mutableStateOf(false) }
     // 更多菜单：微调步长、倍速都收在这里
     var menuOpen by remember(player) { mutableStateOf(false) }
+
+    // 长按加速：倍速由外层的原生触摸观察者决定（SpeedBoostTouch），这里只做本地镜像 +
+    // 界面反应：进入加速收起控制栏，松手回 1x 并保持隐藏。
+    LaunchedEffect(externalBoostSpeed) {
+        boostSpeed = externalBoostSpeed
+        if (externalBoostSpeed == null) speed = DEFAULT_SPEED
+        visible = false
+        if (BuildConfig.DEBUG) {
+            android.util.Log.i("XhsBoost", "ui boost=" + externalBoostSpeed)
+        }
+    }
 
     // keep the speed applied（按压加速优先于菜单里选的倍速）
     LaunchedEffect(speed, boostSpeed) { player.setPlaybackSpeed(boostSpeed ?: speed) }
@@ -610,9 +644,15 @@ private fun AutoHideController(
             //
             // 热区：整宽 + 纵向 12%~80%（让开顶栏与底部控制栏）。1.5 秒内移动超过 2 个 touchSlop 就放弃
             // （那是在拖动/缩放，不是长按）。
+            // 【已停用】旧的 Compose 手势长按实现：会和播放器既有的单击/双击/缩放抢事件流，
+            // 是"按住不触发 / 卡在加速态 / 触摸卡死"那一类问题的来源。
+            // 现在改由外层原生监听器 SpeedBoostTouch（挂在 TextureView 上、return false 只旁听）驱动，
+            // 这里保留立即返回的空壳以免大段删除出错；确认新实现稳定后可整段删掉。
             .then(
                 if (!fullscreen) Modifier else Modifier.pointerInput(player) {
                     awaitEachGesture {
+                        return@awaitEachGesture
+                        @Suppress("UNREACHABLE_CODE")
                         val down = awaitFirstDown(requireUnconsumed = false)
                         val w = size.width.toFloat()
                         val h = size.height.toFloat()
@@ -1026,19 +1066,17 @@ private const val PROGRESS_SAVE_MS = 2_000L
 private const val RESUME_SKIP_MS = 2_000L
 
 /**
- * 长按加速的目标倍速（纯函数，带单测）：起始 [BOOST_BASE_SPEED]，按住后每向右滑
- * [BOOST_PX_PER_STEP] 像素加 [BOOST_STEP] 一档，上限 [BOOST_MAX_SPEED]。
- * 向左滑回退、低于起点一律夹到起点（"向右滑动增加"—— 往左只是收回加的那部分）。
+ * 长按加速的目标倍速（纯函数，带单测）。
+ *
+ * @param dxFraction 横向位移 ÷ 画面宽度。用**比例**而不是像素：横屏竖屏、不同分辨率表现一致。
+ *   起始 [BOOST_BASE_SPEED]，每 [BOOST_STEP_FRACTION] 加 [BOOST_STEP] 一档，上限 [BOOST_MAX_SPEED]；
+ *   向左滑只是收回加的那部分，不会低于起点（用户要的是"向右滑动增加"）。
  */
 internal fun boostedSpeed(dxFraction: Float): Float {
-    // dxFraction = 横向位移 / 画面宽度（按百分比，横竖屏一致）
     val steps = (dxFraction / BOOST_STEP_FRACTION).toInt().coerceAtLeast(0)
     return (BOOST_BASE_SPEED + steps * BOOST_STEP).coerceAtMost(BOOST_MAX_SPEED)
 }
 
-/** 长按加速：触发时长、起始倍速、每滑多少像素加一档、档距、上限。 */
-private const val BOOST_HOLD_MS = 1_500L
-private const val BOOST_BASE_SPEED = 1.25f
 /** 每向右滑过画面宽度的这个比例，加一档（0.1 = 10% 宽度）。 */
 private const val BOOST_STEP_FRACTION = 0.10f
 private const val BOOST_STEP = 0.25f

@@ -631,6 +631,43 @@ v1.2.0 的正式包还是旧行为（缓存只有一个「清」按钮、不会�
 
 
 
+### 阶段九十三 · 长按加速改走原生 View 路径（2026-11-09，用户选定方案）
+
+用户反馈上一版「一触摸 UI 就卡死」，并选定方案 2：**改用完全不经 Compose 手势系统的原生路径**。
+
+**处置顺序**
+
+1. 先 `git revert` 掉引入卡死的"观察者手势"提交（`d0a915b`），恢复可用状态；
+2. 再按方案 2 重做。
+
+**新实现**
+
+- 新增 `ui/components/SpeedBoostTouch.kt`：`View.OnTouchListener`，**永远 `return false`**（只旁听、不消费）。
+  按下 → 判定是否在画面正中 40%×40%（按视图实测尺寸百分比，横竖屏一致）→ `Handler.postDelayed(1500ms)`
+  触发 1.25x + 振动；按住期间 `ACTION_MOVE` 按「位移 ÷ 画面宽度」换算倍速（每 10% 宽度 +0.25x，上限 3x）；
+  `ACTION_UP/CANCEL` 立即结束（无等待循环，所以不会卡住）；
+- `VideoSurface` 新增可选 `touchObserver: View.OnTouchListener?`，在 `factory`/`update` 里挂到画面 TextureView 上；
+- `MediaPlayer` 外层创建 `SpeedBoostTouch` 并把 `boostSpeed` 传给 `AutoHideController`：
+  进入加速收起控制栏只看叠加层，松手回 1x、保持隐藏；
+- **旧的 Compose 手势实现全部停用**（`awaitEachGesture` 块改为立即 return 的空壳），
+  避免两套手势同时生效。
+
+**已验证**
+
+- 编译通过、**84 例单测全绿**、lint 6 项（无新增代码类问题）；
+- 新代码确实在运行：启动日志 `XhsBoostState: boostSpeed=null` / `XhsBoost: ui boost=null`；
+- 触摸不卡死：连续 3 次点击各 1 秒返回，进程存活，**无 ANR、无崩溃**。
+
+**未验证（如实）**
+
+- **长按触发本身未验证**：本环境 `adb shell input swipe X Y X Y 3500`（起止同点 = 真实按住）
+  没能触发，也没抓到 `XhsBoost: start`；同时 dump 显示"全屏后找不到全屏按钮"，
+  说明连"是否真的进了全屏"都无法确定。需要真机确认。
+
+**下一步（若真机仍不触发）**：用 `adb logcat -s XhsBoost` 一条日志即可判定是"事件没到 View"
+还是"到了但判定未通过"，据此再改，不再盲猜。
+
+
 ### 阶段九十二 · 加速：热区缩小、距离按百分比、松手彻底隐藏（2026-11-09，用户反馈）
 
 用户：「目前是只要向右拖动就会加速，而且之后单击隐藏控制栏后变速叠加层会重新出现，但我要的是
