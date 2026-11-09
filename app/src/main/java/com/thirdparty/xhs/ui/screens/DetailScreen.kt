@@ -808,6 +808,8 @@ private fun DetailContent(
                     externalPlayer = sharedPlayer,
                     fullscreen = fullscreen,
                     title = item?.title.orEmpty(),
+                    // 传作品 id → 播放器会记录/恢复观看进度（用户 2026-11-09 要求）
+                    noteId = item?.noteId,
                     // without this the in-player fullscreen button is inert:
                     // MediaPlayer defaults the callback to a no-op
                     onToggleFullscreen = onToggleFullscreen,

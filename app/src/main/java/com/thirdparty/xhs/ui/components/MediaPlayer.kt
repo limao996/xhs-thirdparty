@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Pause
@@ -42,11 +43,14 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.thirdparty.xhs.ui.theme.Scrim
 import com.thirdparty.xhs.ui.theme.Spacing
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -99,6 +103,13 @@ fun MediaPlayer(
     controlsHiddenInitially: Boolean = false,
     /** shown in the fullscreen top bar */
     title: String = "",
+    /**
+     * 作品 id；非空时这个播放器会记录/恢复观看进度（详情页传，信息流不传）。
+     *
+     * 为什么信息流不传：它是连续滑动的短视频，记进度没有意义；而且信息流会给相邻页
+     * 预载播放器，记进去只会污染数据。
+     */
+    noteId: Long? = null,
     /**
      * 「小窗播放」（画中画）入口；为 null 时不显示这一项。
      *
@@ -249,7 +260,7 @@ fun MediaPlayer(
             )
         )
         AutoHideController(
-            player, fullscreen, onToggleFullscreen, controlsHiddenInitially, title,
+            player, fullscreen, onToggleFullscreen, controlsHiddenInitially, title, noteId = noteId,
             topClearance = cutoutTop,
             onEnterPip = onEnterPip,
             onControlsVisibility = { controlsVisible = it },
@@ -335,9 +346,21 @@ private fun AutoHideController(
     /** 控制栏显示/隐藏要报给外层：全屏的「恢复」按钮要据此决定避让多少 */
     onControlsVisibility: (Boolean) -> Unit = {},
     /** 控制栏实测高度（dp）报给外层，同上 */
-    onControlBarHeight: (androidx.compose.ui.unit.Dp) -> Unit = {}
+    onControlBarHeight: (androidx.compose.ui.unit.Dp) -> Unit = {},
+    /** 作品 id：非空则记录/恢复观看进度（见 MediaPlayer 的同名参数） */
+    noteId: Long? = null
 ) {
     var visible by remember(player) { mutableStateOf(!startHidden) }
+    val appContext = LocalContext.current.applicationContext
+
+    // ── 上次看到哪了（用户 2026-11-09 要求）──────────────────────────────
+    // 进详情页读本地进度：没看完就跳过去继续，并在控制栏上方提示 5 秒。
+    var resumeBanner by remember(noteId) { mutableStateOf(false) }
+
+    // ── 长按加速（用户 2026-11-09 要求）──────────────────────────────────
+    // 按住画面中间 1.5 秒 → 振动 + 1.25x；保持按住向右滑继续加；松手回到 1x。
+    // 用独立的 boostSpeed 而不是改 speed：加速是"临时按压态"，松手要精确还原。
+    var boostSpeed by remember(player) { mutableStateOf<Float?>(null) }
     val density = LocalDensity.current
     androidx.compose.runtime.LaunchedEffect(visible) { onControlsVisibility(visible) }
     // 播放器控件也给系统触感反馈：它和页面其他按钮是同一层交互
@@ -375,8 +398,48 @@ private fun AutoHideController(
     // 更多菜单：微调步长、倍速都收在这里
     var menuOpen by remember(player) { mutableStateOf(false) }
 
-    // keep the speed applied
-    LaunchedEffect(speed) { player.setPlaybackSpeed(speed) }
+    // keep the speed applied（按压加速优先于菜单里选的倍速）
+    LaunchedEffect(speed, boostSpeed) { player.setPlaybackSpeed(boostSpeed ?: speed) }
+
+    // 进页面时恢复上次进度。共享播放器（从信息流交接过来的）已经在自己播，不要打断。
+    LaunchedEffect(player, noteId) {
+        val id = noteId ?: return@LaunchedEffect
+        val saved = com.thirdparty.xhs.data.VideoProgressStore.load(appContext, id) ?: return@LaunchedEffect
+        if (player.currentPosition > RESUME_SKIP_MS) return@LaunchedEffect
+        player.seekTo(saved.positionMs)
+        position = saved.positionMs.toFloat()
+        resumeBanner = true
+        visible = true
+        interaction++
+        if (BuildConfig.DEBUG) {
+            android.util.Log.i("XhsResume", "resume note=" + id + " at=" + saved.positionMs)
+        }
+        delay(RESUME_BANNER_MS)
+        resumeBanner = false
+    }
+
+    // 播放中每 2 秒落一次进度；离开页面时再落一次（够细，又不至于频繁写盘）
+    LaunchedEffect(player, noteId) {
+        val id = noteId ?: return@LaunchedEffect
+        while (true) {
+            if (player.isPlaying) {
+                com.thirdparty.xhs.data.VideoProgressStore.save(
+                    appContext, id, player.currentPosition, effectiveDurationMs(player)
+                )
+            }
+            delay(PROGRESS_SAVE_MS)
+        }
+    }
+    DisposableEffect(player, noteId) {
+        onDispose {
+            val id = noteId
+            if (id != null) {
+                com.thirdparty.xhs.data.VideoProgressStore.save(
+                    appContext, id, player.currentPosition, effectiveDurationMs(player)
+                )
+            }
+        }
+    }
 
     fun seekBy(deltaMs: Long) {
         val d = player.duration
@@ -475,8 +538,11 @@ private fun AutoHideController(
     // drag or with the overflow menu open. Hiding `visible` removes the whole
     // control block including the DropdownMenu, so the menu would otherwise close
     // itself under the user's finger.
-    LaunchedEffect(visible, playing, interaction, dragging, menuOpen, waiting) {
-        if (visible && playing && !dragging && !menuOpen && !waiting && !ended) {
+    LaunchedEffect(visible, playing, interaction, dragging, menuOpen, waiting, boostSpeed) {
+        // 长按加速期间不自动隐藏：用户正看着倍速数字，隐藏了就没有反馈了
+        if (visible && playing && !dragging && !menuOpen && !waiting && !ended &&
+            boostSpeed == null
+        ) {
             delay(AUTO_HIDE_MS)
             visible = false
         }
@@ -517,6 +583,70 @@ private fun AutoHideController(
                 }
             )
         }
+            // 全屏长按加速。为什么自己写 pointerInput：`detectTapGestures(onLongPress=…)`
+            // 固定 500ms 触发、改不了 1.5 秒，而且按住期间还要跟踪横向位移。
+            //
+            // 只在**中间区域**（左右/上下各留 25%）认，避免和底部进度条、两侧边缘手势打架；
+            // 1.5 秒内手指移动超过 2 个 touchSlop 就放弃（那是在拖动/缩放，不是在长按）。
+            .then(
+                if (!fullscreen) Modifier else Modifier.pointerInput(player) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val w = size.width.toFloat()
+                        val h = size.height.toFloat()
+                        if (w <= 0f || h <= 0f) return@awaitEachGesture
+                        if (down.position.x < w * 0.25f || down.position.x > w * 0.75f ||
+                            down.position.y < h * 0.25f || down.position.y > h * 0.75f
+                        ) return@awaitEachGesture
+                        val held = withTimeoutOrNull(BOOST_HOLD_MS) {
+                            while (true) {
+                                val ev = awaitPointerEvent()
+                                val ch = ev.changes.firstOrNull { it.id == down.id }
+                                    ?: return@withTimeoutOrNull false
+                                if (!ch.pressed) return@withTimeoutOrNull false
+                                if ((ch.position - down.position).getDistance() >
+                                    viewConfiguration.touchSlop * 2f
+                                ) return@withTimeoutOrNull false
+                            }
+                            @Suppress("UNREACHABLE_CODE")
+                            false
+                        } != null
+                        if (!held) return@awaitEachGesture
+                        // 触发：振动 + 默认 1.25x
+                        haptics.longPress()
+                        boostSpeed = BOOST_BASE_SPEED
+                        visible = true
+                        interaction++
+                        if (BuildConfig.DEBUG) {
+                            android.util.Log.i("XhsBoost", "boost start 1.25x")
+                        }
+                        try {
+                            while (true) {
+                                val ev = awaitPointerEvent()
+                                val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
+                                if (!ch.pressed) break
+                                val dx = ch.position.x - down.position.x
+                                val target = boostedSpeed(dx)
+                                if (target != boostSpeed) {
+                                    boostSpeed = target
+                                    haptics.segment()
+                                    if (BuildConfig.DEBUG) {
+                                        android.util.Log.i("XhsBoost", "boost to " + target + "x dx=" + dx)
+                                    }
+                                }
+                                ch.consume()
+                            }
+                        } finally {
+                            // 松手回到 1x（用户明确要求），并同步底栏显示
+                            boostSpeed = null
+                            speed = DEFAULT_SPEED
+                            if (BuildConfig.DEBUG) {
+                                android.util.Log.i("XhsBoost", "boost end -> 1x")
+                            }
+                        }
+                    }
+                }
+            )
     ) {
         // Replay button once the work has finished.
         //
@@ -682,6 +812,35 @@ private fun AutoHideController(
                     }
                     .background(Scrim.strong).padding(vertical = if (dense) 1.dp else Spacing.xs)
             ) {
+                // 上次没看完 → 控制栏上方提示，5 秒后自己消失（用户要求）
+                if (resumeBanner) {
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .padding(start = Spacing.s, end = Spacing.xs, top = Spacing.xs)
+                            .clip(MaterialTheme.shapes.small)
+                            .background(Scrim.strong)
+                            .padding(start = Spacing.m, end = Spacing.xs),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "继续观看上次位置",
+                            color = Scrim.onMedia,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(
+                            onClick = { haptics.tick(); resumeBanner = false },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                Icons.Filled.Close,
+                                contentDescription = "关闭",
+                                tint = Scrim.onMedia,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
                 val fraction = if (duration > 0f) (position / duration).coerceIn(0f, 1f) else 0f
                 // BufferedSlider, not Slider: it draws the already-buffered span as
                 // a third segment, so a stalled stream (buffer ahead of the
@@ -743,9 +902,10 @@ private fun AutoHideController(
                         color = Scrim.onMedia, style = MaterialTheme.typography.labelSmall,
                         modifier = Modifier.padding(start = Spacing.xs))
                     Spacer(Modifier.weight(1f))
-                    // 当前倍速直接显示，否则用户在底栏看不出视频被改过速
-                    if (speed != DEFAULT_SPEED) {
-                        Text("${formatSpeed(speed)}x",
+                    // 当前倍速直接显示（含长按加速），否则用户在底栏看不出视频被改过速
+                    val shownSpeed = boostSpeed ?: speed
+                    if (shownSpeed != DEFAULT_SPEED) {
+                        Text("${formatSpeed(shownSpeed)}x",
                             color = MaterialTheme.colorScheme.primary,
                             style = MaterialTheme.typography.labelSmall,
                             modifier = Modifier.padding(end = Spacing.xs))
@@ -781,6 +941,32 @@ private fun PlayerMenuRow(label: String, highlighted: Boolean = false, onClick: 
         )
     }
 }
+
+/** 「继续观看上次位置」横条停留时长（用户要求 5 秒）。 */
+private const val RESUME_BANNER_MS = 5_000L
+
+/** 播放进度落盘间隔。 */
+private const val PROGRESS_SAVE_MS = 2_000L
+
+/** 播放器当前位置超过这个值就认为"已经在播"，不再用本地进度打断（从信息流交接来的是这种情况）。 */
+private const val RESUME_SKIP_MS = 2_000L
+
+/**
+ * 长按加速的目标倍速（纯函数，带单测）：起始 [BOOST_BASE_SPEED]，按住后每向右滑
+ * [BOOST_PX_PER_STEP] 像素加 [BOOST_STEP] 一档，上限 [BOOST_MAX_SPEED]。
+ * 向左滑回退、低于起点一律夹到起点（"向右滑动增加"—— 往左只是收回加的那部分）。
+ */
+internal fun boostedSpeed(dxPx: Float): Float {
+    val steps = (dxPx / BOOST_PX_PER_STEP).toInt().coerceAtLeast(0)
+    return (BOOST_BASE_SPEED + steps * BOOST_STEP).coerceAtMost(BOOST_MAX_SPEED)
+}
+
+/** 长按加速：触发时长、起始倍速、每滑多少像素加一档、档距、上限。 */
+private const val BOOST_HOLD_MS = 1_500L
+private const val BOOST_BASE_SPEED = 1.25f
+private const val BOOST_PX_PER_STEP = 120f
+private const val BOOST_STEP = 0.25f
+private const val BOOST_MAX_SPEED = 3f
 
 /** 倍速范围与默认值（拖动条用；步进 0.25 由 `steps = 10` 表达）。 */
 private const val MIN_SPEED = 0.25f
