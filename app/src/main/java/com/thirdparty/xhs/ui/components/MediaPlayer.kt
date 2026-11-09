@@ -250,20 +250,28 @@ fun MediaPlayer(
         // 挂在 TextureView 的 setOnTouchListener 上，永远 return false —— 只旁听、不消费，
         // 所以单击（控制栏）、双击（暂停）、捏合缩放、拖动进度条全部照旧。
         // Compose 侧的手势实现已全部停用（见下方 AutoHideController 里的空壳）。
+        // ── 长按加速：暂时关闭 ────────────────────────────────────────────
+        // 2026-11-09：连续 5 版实现（Compose awaitEachGesture / detectTapGestures.onPress /
+        // 独立观察者 pointerInput / 原生 View.OnTouchListener）在真机上都会"长按就卡死"，
+        // 而我在模拟器上既没法复现卡死、也没法造出真实长按（adb input motionevent / swipe
+        // 送不进持续按住），等于无法验证。
+        //
+        // 因此先整体关掉这个入口，避免用户付费看视频时踩到冻屏；等能拿到真机的 ANR/卡死堆栈
+        // （adb shell kill -3 <pid> 或 bugreport）再决定怎么实现。
+        // 想重新打开：把 BOOST_ENABLED 改成 true 即可，其余代码（SpeedBoostTouch、叠加层）
+        // 都还在，只是不接线。
         var boostSpeed by remember(player) { mutableStateOf<Float?>(null) }
-        val boostHaptics = rememberHaptics()
-        val boostTouch = remember(player) {
-            SpeedBoostTouch(
-                isFullscreen = { fullscreen },
-                onHaptic = { boostHaptics.longPress() },
-                onBoostSpeed = { boostSpeed = it }
-            )
-        }
-        DisposableEffect(boostTouch) { onDispose { boostTouch.release() } }
-        if (BuildConfig.DEBUG) {
-            LaunchedEffect(boostSpeed) {
-                android.util.Log.i("XhsBoostState", "boostSpeed=" + boostSpeed)
+        val boostTouch: android.view.View.OnTouchListener? = if (BOOST_ENABLED) {
+            val boostHaptics = rememberHaptics()
+            remember(player) {
+                SpeedBoostTouch(
+                    isFullscreen = { fullscreen },
+                    onHaptic = { boostHaptics.longPress() },
+                    onBoostSpeed = { boostSpeed = it }
+                )
             }
+        } else {
+            null
         }
         // TextureView-backed, not PlayerView: a SurfaceView would not fade with the
         // screen during a navigation transition and the last frame would stay
@@ -430,6 +438,8 @@ private fun AutoHideController(
     // 长按加速：倍速由外层的原生触摸观察者决定（SpeedBoostTouch），这里只做本地镜像 +
     // 界面反应：进入加速收起控制栏，松手回 1x 并保持隐藏。
     LaunchedEffect(externalBoostSpeed) {
+        // 加速功能关闭时不接线：否则首次组合就会把控制栏隐藏掉
+        if (!BOOST_ENABLED) return@LaunchedEffect
         boostSpeed = externalBoostSpeed
         if (externalBoostSpeed == null) speed = DEFAULT_SPEED
         visible = false
@@ -1081,6 +1091,14 @@ internal fun boostedSpeed(dxFraction: Float): Float {
 private const val BOOST_STEP_FRACTION = 0.10f
 private const val BOOST_STEP = 0.25f
 private const val BOOST_MAX_SPEED = 3f
+
+/**
+ * 长按加速总开关。
+ *
+ * **保持 false 直到拿到真机卡死栈**：这个功能连续 5 版实现（Compose 三种手势 + 原生 View）
+ * 在真机上都是"长按就卡死"，而模拟器无法复现也无法造出真实长按，等于无法验证。
+ */
+private const val BOOST_ENABLED = false
 
 /** 加速态最长持续时间（看门狗，防抬手事件丢失后卡住）。 */
 private const val BOOST_WATCHDOG_MS = 15_000L
