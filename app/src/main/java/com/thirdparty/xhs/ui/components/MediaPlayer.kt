@@ -789,7 +789,11 @@ private fun AutoHideController(
                     // 量一下控制栏的真实高度：全屏时的「恢复」按钮要据此避让，
                     // 否则控制栏一显示就把它压在下面（用户反馈"没避让控制栏"）。
                     .onGloballyPositioned { coords ->
-                        onControlBarHeight(with(density) { coords.size.height.toDp() })
+                        // 横条要贴在控制栏**上方**：这里把实测高度存下来给它当底边距。
+                        // （之前漏了这行，barHeightDp 恒为 0 → 横条被画到控制栏下面、被遮住。）
+                        val hDp = with(density) { coords.size.height.toDp() }
+                        barHeightDp = hDp
+                        onControlBarHeight(hDp)
                     }
                     .background(Scrim.strong).padding(vertical = if (dense) 1.dp else Spacing.xs)
             ) {
